@@ -1,3 +1,2 @@
 def say_hello():
-    return "Hello, World!"
-
+    return "Welcome to FORKTEX!"
