@@ -1,6 +1,6 @@
 [project]
 name = "forktex"
-version = "0.1.2"
+version = "0.1.3"
 description = "Official Python library to interact with Forktex API"
 authors = [
     {name = "Alex Doc",email = "alexandru.dochian@forktex.com"}
