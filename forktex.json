@@ -1,0 +1,31 @@
+{
+  "manifestVersion": "1.0.0",
+  "name": "forktex-py",
+  "description": "ForkTex Python repo — the CLI, agent, architecture discovery, FSD audit, and orchestration toolkit (single-package repo)",
+  "version": "0.5.0",
+  "fsd": {
+    "version": "1.0.0",
+    "profiles": [
+      "workspace/python-monorepo"
+    ],
+    "targetLevel": "L3",
+    "atoms": {
+      "test": {
+        "commands": [
+          "pytest tests/ --ignore=tests/test_cloud_client.py -q"
+        ]
+      }
+    }
+  },
+  "packages": [
+    {
+      "name": "forktex",
+      "path": ".",
+      "version": "0.5.0",
+      "publishable": true,
+      "language": "python",
+      "registry": "https://pypi.org",
+      "description": "CLI, agent, MCP-style orchestrator, architecture discovery, and audit toolkit for ForkTex"
+    }
+  ]
+}
