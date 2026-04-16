@@ -1,9 +1,4 @@
-"""forktex.agent.fsd - canonical FSD CLI command group.
-
-Compatibility note:
-- ``forktex fsd`` is the canonical command surface.
-- ``forktex fsq`` remains available as a legacy alias.
-"""
+"""forktex.agent.fsd - FSD CLI command group."""
 
 from __future__ import annotations
 

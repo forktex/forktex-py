@@ -217,16 +217,6 @@ class SoftwareSystem:
     def element_type(self) -> ElementType:
         return ElementType.SOFTWARE_SYSTEM
 
-    @property
-    def fsq_level(self) -> str:
-        """Backward-compatible alias for the legacy field name."""
-
-        return self.fsd_level
-
-    @fsq_level.setter
-    def fsq_level(self, value: str) -> None:
-        self.fsd_level = value
-
     def container_by_id(self, cid: str) -> Optional[Container]:
         return next((c for c in self.containers if c.id == cid), None)
 
@@ -326,7 +316,6 @@ class Workspace:
                     "level": 2,
                     "data": {
                         "fsd_level": sys.fsd_level,
-                        "fsq_level": sys.fsd_level,
                         "provider": sys.provider,
                         "region": sys.region,
                         "deploy_strategy": sys.deploy_strategy,
@@ -376,7 +365,6 @@ def _system_dict(sys: SoftwareSystem) -> dict:
     return {
         "id": sys.id, "name": sys.name, "description": sys.description,
         "fsd_level": sys.fsd_level,
-        "fsq_level": sys.fsd_level,
         "api_version": sys.api_version, "provider": sys.provider,
         "region": sys.region, "deploy_strategy": sys.deploy_strategy,
         "domains": sys.domains,

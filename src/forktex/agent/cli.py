@@ -165,9 +165,7 @@ cli.add_command(scrape)
 # =============================================================================
 
 from forktex.agent.fsd import fsd
-from forktex.agent.fsq import fsq
 cli.add_command(fsd)
-cli.add_command(fsq)
 
 
 # =============================================================================

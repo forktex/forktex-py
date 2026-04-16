@@ -65,7 +65,7 @@ def _load_architecture(root: Path) -> str:
         summary_lines = [f"Architecture snapshot ({data.get('generated_at', 'unknown')}):"]
         for sys in systems:
             name = sys.get("name", "?")
-            level = sys.get("fsd_level", sys.get("fsq_level", "?"))
+            level = sys.get("fsd_level", "?")
             containers = len(sys.get("containers", []))
             summary_lines.append(f"  - {name}: {level}, {containers} containers")
         return "\n".join(summary_lines)

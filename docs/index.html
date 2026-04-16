@@ -339,11 +339,7 @@ forktex-core             pip install forktex-core (PostgreSQL/Redis primitives â
   <pre>src/forktex/
   agent/
     cli.py                 # Main CLI entry point
-    fsd/                   # Canonical FSD command surface
-    fsq/                   # Legacy compatibility alias
-      standard.py          # Atoms, facets, levels (legacy source module)
-      check.py / report.py # CLI commands
-      templates/           # Jinja2 HTML report templates
+    fsd/                   # FSD command surface (check, report, makefile)
     cloud/                 # Cloud CLI commands
     commands/git_cli.py    # Multi-repo git CLI
     tools/                 # 25+ agent tools

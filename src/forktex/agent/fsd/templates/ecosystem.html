@@ -27,7 +27,7 @@
   td code{font-family:'JetBrains Mono',monospace;font-size:.85em;color:var(--g);background:var(--s2);padding:.1em .3em;border-radius:3px}
   .pass{color:var(--g);font-weight:600}.fail{color:var(--r);font-weight:600}.partial{color:var(--w);font-weight:600}
   .badge{display:inline-block;padding:.15rem .5rem;border-radius:999px;font-size:.75rem;font-weight:600;border:1px solid;margin-right:.25rem}
-  .badge.iso{color:var(--p);border-color:var(--p)}.badge.fsq{color:var(--g);border-color:var(--g)}.badge.tech{color:var(--a);border-color:var(--a)}
+  .badge.iso{color:var(--p);border-color:var(--p)}.badge.fsd{color:var(--g);border-color:var(--g)}.badge.tech{color:var(--a);border-color:var(--a)}
 
   .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;margin:1.5rem 0}
   .grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem;margin:1.5rem 0}
@@ -70,7 +70,7 @@
   <div style="margin-top:1.5rem">
     <span class="badge iso">ISO 27001:2022</span>
     <span class="badge iso">ISO 9001:2015</span>
-    <span class="badge fsq">FSD v{{ fsd_version }}</span>
+    <span class="badge fsd">FSD v{{ fsd_version }}</span>
   </div>
   <p class="small" style="margin-top:3rem">Auto-generated {{ generated_at }} &mdash; Confidential</p>
 </div>
@@ -88,7 +88,7 @@
   <div class="grid-3">
     {% for sys in systems %}
     <div class="card platform p-{{ sys.id }}">
-      <h3>{{ sys.system.name }} <span class="badge fsq" style="float:right">{{ sys.system.fsd_level }}</span></h3>
+      <h3>{{ sys.system.name }} <span class="badge fsd" style="float:right">{{ sys.system.fsd_level }}</span></h3>
       <p style="font-size:.9rem">{{ sys.system.containers | length }} services{% if sys.system.domains %} &mdash; {{ sys.system.domains[0] }}{% endif %}</p>
       <div class="svc-list">
         {% for c in sys.system.containers %}
