@@ -1,0 +1,967 @@
+{
+  "$schema": "https://forktex.com/schemas/fsd/v1/standard.json",
+  "version": "1.0.0",
+
+  "domains": [
+    {
+      "id": "code",
+      "name": "Code Quality",
+      "description": "Source code correctness, style, type safety, and verification",
+      "scope": "service"
+    },
+    {
+      "id": "data",
+      "name": "Data",
+      "description": "Persistence lifecycle, migrations, reset, and seed flows",
+      "scope": "service"
+    },
+    {
+      "id": "infra",
+      "name": "Runtime",
+      "description": "Runtime control, build surfaces, cleanup, and operator ergonomics",
+      "scope": "project"
+    },
+    {
+      "id": "ops",
+      "name": "Operations",
+      "description": "Deployment, recovery, monitoring, and continuity controls",
+      "scope": "project"
+    },
+    {
+      "id": "governance",
+      "name": "Governance",
+      "description": "Policies, registers, ownership, and organizational structure",
+      "scope": "organization"
+    },
+    {
+      "id": "process",
+      "name": "Process",
+      "description": "Procedures, workflows, and management-system process definitions",
+      "scope": "organization"
+    },
+    {
+      "id": "compliance",
+      "name": "Compliance",
+      "description": "Standards mapping, audit evidence, legal controls, and certification state",
+      "scope": "organization"
+    },
+    {
+      "id": "supply-chain",
+      "name": "Supply Chain",
+      "description": "Third-party providers, supplier assessment, and external obligations",
+      "scope": "organization"
+    },
+    {
+      "id": "financial",
+      "name": "Financial",
+      "description": "Cashflow modeling, pricing, cost management, and revenue tracking",
+      "scope": "organization"
+    }
+  ],
+
+  "resolve_strategies": {
+    "make": {
+      "description": "Atom satisfied when at least one listed Make target exists in project Makefile(s)",
+      "checker": "makefile"
+    },
+    "path": {
+      "description": "Atom satisfied when all listed paths exist (files or directories) relative to docs root",
+      "checker": "filesystem"
+    },
+    "file-content": {
+      "description": "Atom satisfied when file exists and contains required content markers",
+      "checker": "filesystem"
+    },
+    "field": {
+      "description": "Atom satisfied when a JSON/YAML file contains a non-null value at the given path",
+      "checker": "manifest"
+    }
+  },
+
+  "atoms": [
+
+    {"_comment": "═══════════════════════ DOMAIN: code ═══════════════════════"},
+
+    {
+      "id": "format",
+      "name": "Format",
+      "domain": "code",
+      "description": "Source code conforms to a consistent, auto-enforced style",
+      "resolve": [
+        {"strategy": "make", "any_of": ["format", "format-check"]}
+      ],
+      "iso": ["9001:8.3.4"],
+      "evidence": "Formatter output (zero diff on check)"
+    },
+    {
+      "id": "lint",
+      "name": "Lint",
+      "domain": "code",
+      "description": "Static analysis catches bugs, anti-patterns, and security issues",
+      "resolve": [
+        {"strategy": "make", "any_of": ["lint", "lint-fix"]}
+      ],
+      "iso": ["27001:A.8.26", "27001:A.8.28"],
+      "evidence": "Linter output (zero errors)"
+    },
+    {
+      "id": "typecheck",
+      "name": "Type Check",
+      "domain": "code",
+      "description": "Static type system verifies interface correctness",
+      "resolve": [
+        {"strategy": "make", "any_of": ["typecheck"]}
+      ],
+      "iso": ["27001:A.8.27"],
+      "evidence": "Type checker output (zero errors)"
+    },
+    {
+      "id": "test",
+      "name": "Test",
+      "domain": "code",
+      "description": "Automated tests verify behavior against real infrastructure",
+      "resolve": [
+        {"strategy": "make", "any_of": ["test", "test-cov"]}
+      ],
+      "iso": ["27001:A.8.29", "9001:8.6", "9001:9.1.1"],
+      "evidence": "Test results + coverage report"
+    },
+    {
+      "id": "security-audit",
+      "name": "Security Audit",
+      "domain": "code",
+      "description": "Dependencies scanned for known vulnerabilities",
+      "resolve": [
+        {"strategy": "make", "any_of": ["audit"]}
+      ],
+      "iso": ["27001:A.8.8"],
+      "evidence": "Dependency vulnerability scan (zero critical/high)"
+    },
+    {
+      "id": "license",
+      "name": "License Compliance",
+      "domain": "code",
+      "description": "Source headers and dependency licenses verified",
+      "resolve": [
+        {"strategy": "make", "any_of": ["license-check", "license-fix"]}
+      ],
+      "iso": ["27001:A.5.32"],
+      "evidence": "License scan output"
+    },
+    {
+      "id": "deps",
+      "name": "Dependencies",
+      "domain": "code",
+      "description": "Project dependencies installed and locked to reproducible versions",
+      "resolve": [
+        {"strategy": "make", "any_of": ["deps", "deps-lock"]}
+      ],
+      "iso": ["27001:A.8.9", "9001:7.1"],
+      "evidence": "Lockfile (poetry.lock, pnpm-lock.yaml)"
+    },
+    {
+      "id": "codegen",
+      "name": "Code Generation",
+      "domain": "code",
+      "description": "Typed API clients or other artifacts generated from schemas",
+      "resolve": [
+        {"strategy": "make", "any_of": ["codegen", "api-client", "openapi", "py-client"]}
+      ],
+      "iso": ["9001:8.5.1"],
+      "evidence": "Generated client matches schema"
+    },
+    {
+      "id": "codegen-check",
+      "name": "Codegen Drift Check",
+      "domain": "code",
+      "description": "Generated artifacts are in sync with their source schemas (CI gate)",
+      "resolve": [
+        {"strategy": "make", "any_of": ["codegen-check", "sync-check"]}
+      ],
+      "iso": ["9001:8.5.1", "9001:8.7"],
+      "evidence": "CI fails when committed generated files diverge from regeneration"
+    },
+    {
+      "id": "ci",
+      "name": "CI Gate",
+      "domain": "code",
+      "description": "Aggregate quality gate: format + lint + test + audit",
+      "resolve": [
+        {"strategy": "make", "any_of": ["ci"]}
+      ],
+      "iso": ["27001:A.8.25", "9001:8.7"],
+      "evidence": "CI pipeline pass/fail log"
+    },
+
+    {"_comment": "═══════════════════════ DOMAIN: data ═══════════════════════"},
+
+    {
+      "id": "db-migrate",
+      "name": "DB Migrate",
+      "domain": "data",
+      "description": "Database schema versioned and migrations applied",
+      "resolve": [
+        {"strategy": "make", "any_of": ["migrate", "alembic-auto", "alembic-check"]}
+      ],
+      "iso": ["27001:A.8.32"],
+      "evidence": "Alembic version history"
+    },
+    {
+      "id": "db-reset",
+      "name": "DB Reset",
+      "domain": "data",
+      "description": "Database can be dropped and recreated from scratch",
+      "resolve": [
+        {"strategy": "make", "any_of": ["db-reset"]}
+      ],
+      "iso": [],
+      "evidence": "Clean DB from migrations"
+    },
+    {
+      "id": "seed",
+      "name": "Seed",
+      "domain": "data",
+      "description": "Development data populated for local testing",
+      "resolve": [
+        {"strategy": "make", "any_of": ["seed", "seed-reset"]}
+      ],
+      "iso": [],
+      "evidence": "Seed script execution"
+    },
+
+    {"_comment": "═══════════════════════ DOMAIN: infra ══════════════════════"},
+
+    {
+      "id": "start",
+      "name": "Start",
+      "domain": "infra",
+      "description": "Project runtime starts with one command",
+      "resolve": [
+        {"strategy": "make", "any_of": ["start", "local", "dev"]}
+      ],
+      "iso": ["9001:7.1.3"],
+      "evidence": "Runtime startup output + healthcheck pass"
+    },
+    {
+      "id": "stop",
+      "name": "Stop",
+      "domain": "infra",
+      "description": "Project runtime stops cleanly",
+      "resolve": [
+        {"strategy": "make", "any_of": ["stop", "local-down", "dev-down"]}
+      ],
+      "iso": [],
+      "evidence": "All runtime processes stopped cleanly"
+    },
+    {
+      "id": "logs",
+      "name": "Logs",
+      "domain": "infra",
+      "description": "Runtime logs observable through one command",
+      "resolve": [
+        {"strategy": "make", "any_of": ["logs", "local-logs", "dev-logs"]}
+      ],
+      "iso": [],
+      "evidence": "Log stream"
+    },
+    {
+      "id": "build",
+      "name": "Build",
+      "domain": "infra",
+      "description": "Software artifacts built (Docker image, bundle, binary)",
+      "resolve": [
+        {"strategy": "make", "any_of": ["build"]}
+      ],
+      "iso": ["9001:8.5.1"],
+      "evidence": "Build artifact (image SHA, bundle hash)"
+    },
+    {
+      "id": "publish",
+      "name": "Publish",
+      "domain": "infra",
+      "description": "Artifacts published to registry, CDN, or store",
+      "resolve": [
+        {"strategy": "make", "any_of": ["publish"]}
+      ],
+      "iso": ["9001:8.6"],
+      "evidence": "Registry record"
+    },
+    {
+      "id": "clean",
+      "name": "Clean",
+      "domain": "infra",
+      "description": "Build artifacts and caches removable",
+      "resolve": [
+        {"strategy": "make", "any_of": ["clean"]}
+      ],
+      "iso": [],
+      "evidence": "Clean working directory"
+    },
+    {
+      "id": "help",
+      "name": "Help",
+      "domain": "infra",
+      "description": "Available targets self-documented",
+      "resolve": [
+        {"strategy": "make", "any_of": ["help"]}
+      ],
+      "iso": [],
+      "evidence": "make help output"
+    },
+
+    {"_comment": "═══════════════════════ DOMAIN: ops ════════════════════════"},
+
+    {
+      "id": "deploy",
+      "name": "Deploy",
+      "domain": "ops",
+      "description": "Services deployed to target environment with zero-downtime strategy",
+      "resolve": [
+        {"strategy": "make", "any_of": ["deploy", "deploy-staging", "deploy-prod"]},
+        {"strategy": "field", "file": "forktex.json", "path": "cloud.deployment.strategy"}
+      ],
+      "iso": ["27001:A.8.32"],
+      "evidence": "Deployment log + health check pass"
+    },
+    {
+      "id": "backup",
+      "name": "Backup",
+      "domain": "ops",
+      "description": "Database and volume backups automated and tested",
+      "resolve": [
+        {"strategy": "make", "any_of": ["backup", "backup-db"]}
+      ],
+      "iso": ["27001:A.8.13"],
+      "evidence": "Backup execution log + restore test record"
+    },
+    {
+      "id": "rollback",
+      "name": "Rollback",
+      "domain": "ops",
+      "description": "Previous deployment restorable",
+      "resolve": [
+        {"strategy": "make", "any_of": ["rollback"]}
+      ],
+      "iso": ["27001:A.8.32"],
+      "evidence": "Rollback log"
+    },
+    {
+      "id": "monitoring",
+      "name": "Monitoring",
+      "domain": "ops",
+      "description": "Health checks, metrics, and alerting operational",
+      "resolve": [
+        {"strategy": "make", "any_of": ["health", "status"]},
+        {"strategy": "field", "file": "forktex.json", "path": "cloud.observability.enabled"}
+      ],
+      "iso": ["27001:A.8.15", "27001:A.8.16"],
+      "evidence": "Health endpoint response + dashboard"
+    },
+
+    {"_comment": "═══════════════════════ DOMAIN: governance ═════════════════"},
+
+    {
+      "id": "org-description",
+      "name": "Organization Description",
+      "domain": "governance",
+      "description": "Company identity, scope, activities, and context documented",
+      "resolve": [
+        {"strategy": "path", "all_of": ["company/organization/description.md"]}
+      ],
+      "iso": ["27001:4.1", "9001:4.1"],
+      "evidence": "Organization description document"
+    },
+    {
+      "id": "org-structure",
+      "name": "Organizational Structure",
+      "domain": "governance",
+      "description": "Org chart and reporting lines defined",
+      "resolve": [
+        {"strategy": "path", "all_of": ["company/organization/org-chart.md"]}
+      ],
+      "iso": ["27001:5.3", "9001:5.3"],
+      "evidence": "Org chart document"
+    },
+    {
+      "id": "roles",
+      "name": "Roles & Responsibilities",
+      "domain": "governance",
+      "description": "RACI matrix and role descriptions defined",
+      "resolve": [
+        {"strategy": "path", "all_of": ["company/organization/roles.md"]}
+      ],
+      "iso": ["27001:5.3", "9001:5.3"],
+      "evidence": "Roles document with RACI matrix"
+    },
+    {
+      "id": "policy-infosec",
+      "name": "Information Security Policy",
+      "domain": "governance",
+      "description": "Signed top-management commitment to information security",
+      "resolve": [
+        {"strategy": "path", "all_of": ["company/policies/information-security.md"]}
+      ],
+      "iso": ["27001:5.2"],
+      "evidence": "Signed policy document"
+    },
+    {
+      "id": "policy-quality",
+      "name": "Quality Policy",
+      "domain": "governance",
+      "description": "Signed top-management commitment to quality",
+      "resolve": [
+        {"strategy": "path", "all_of": ["company/policies/quality.md"]}
+      ],
+      "iso": ["9001:5.2"],
+      "evidence": "Signed policy document"
+    },
+    {
+      "id": "asset-register",
+      "name": "Asset Register",
+      "domain": "governance",
+      "description": "Information assets inventoried with owners and classification",
+      "resolve": [
+        {"strategy": "path", "all_of": ["company/registers/asset-register.md"]}
+      ],
+      "iso": ["27001:A.5.9"],
+      "evidence": "Asset register document"
+    },
+    {
+      "id": "risk-register",
+      "name": "Risk Register",
+      "domain": "governance",
+      "description": "Information security risks identified, analyzed, and tracked",
+      "resolve": [
+        {"strategy": "path", "all_of": ["company/registers/risk-register.md"]}
+      ],
+      "iso": ["27001:6.1.2"],
+      "evidence": "Risk register with treatment plan"
+    },
+    {
+      "id": "interested-parties",
+      "name": "Interested Parties",
+      "domain": "governance",
+      "description": "Stakeholders and their requirements identified",
+      "resolve": [
+        {"strategy": "path", "all_of": ["company/registers/interested-parties.md"]}
+      ],
+      "iso": ["27001:4.2", "9001:4.2"],
+      "evidence": "Interested parties register"
+    },
+
+    {"_comment": "═══════════════════════ DOMAIN: process ════════════════════"},
+
+    {
+      "id": "proc-sdlc",
+      "name": "SDLC Procedure",
+      "domain": "process",
+      "description": "Software development lifecycle defined end-to-end",
+      "resolve": [
+        {"strategy": "path", "all_of": ["processes/core/sdlc.md"]}
+      ],
+      "iso": ["27001:A.8.25", "9001:8.3"],
+      "evidence": "SDLC procedure document"
+    },
+    {
+      "id": "proc-risk",
+      "name": "Risk Assessment Procedure",
+      "domain": "process",
+      "description": "Risk identification, analysis, and treatment methodology defined",
+      "resolve": [
+        {"strategy": "path", "all_of": ["processes/core/risk-assessment.md"]}
+      ],
+      "iso": ["27001:6.1.2", "27001:8.2"],
+      "evidence": "Risk assessment procedure document"
+    },
+    {
+      "id": "proc-incident",
+      "name": "Incident Response Procedure",
+      "domain": "process",
+      "description": "Security incident detection, response, and reporting workflow defined",
+      "resolve": [
+        {"strategy": "path", "all_of": ["processes/core/incident-response.md"]}
+      ],
+      "iso": ["27001:A.5.24", "27001:A.5.25", "27001:A.5.26"],
+      "evidence": "Incident response procedure document"
+    },
+    {
+      "id": "proc-audit",
+      "name": "Internal Audit Procedure",
+      "domain": "process",
+      "description": "Internal audit program and methodology defined",
+      "resolve": [
+        {"strategy": "path", "all_of": ["processes/management/internal-audit.md"]}
+      ],
+      "iso": ["27001:9.2", "9001:9.2"],
+      "evidence": "Internal audit procedure + plan"
+    },
+    {
+      "id": "proc-corrective",
+      "name": "Corrective Action Procedure",
+      "domain": "process",
+      "description": "Nonconformity handling and root cause analysis defined",
+      "resolve": [
+        {"strategy": "path", "all_of": ["processes/management/corrective-action.md"]}
+      ],
+      "iso": ["27001:10.1", "9001:10.2"],
+      "evidence": "Corrective action procedure document"
+    },
+    {
+      "id": "proc-change",
+      "name": "Change Management Procedure",
+      "domain": "process",
+      "description": "Change control process for systems and infrastructure",
+      "resolve": [
+        {"strategy": "path", "all_of": ["processes/core/change-management.md"]}
+      ],
+      "iso": ["27001:A.8.32", "9001:8.5.6"],
+      "evidence": "Change management procedure document"
+    },
+    {
+      "id": "proc-bcp",
+      "name": "Business Continuity Procedure",
+      "domain": "process",
+      "description": "Business continuity and disaster recovery planning",
+      "resolve": [
+        {"strategy": "path", "all_of": ["processes/support/business-continuity.md"]}
+      ],
+      "iso": ["27001:A.5.29", "27001:A.5.30"],
+      "evidence": "BCP/DRP documents + test records"
+    },
+    {
+      "id": "proc-supplier",
+      "name": "Supplier Evaluation Procedure",
+      "domain": "process",
+      "description": "Third-party assessment and monitoring process",
+      "resolve": [
+        {"strategy": "path", "all_of": ["processes/support/supplier-evaluation.md"]}
+      ],
+      "iso": ["27001:A.5.19", "9001:8.4"],
+      "evidence": "Supplier evaluation procedure document"
+    },
+    {
+      "id": "proc-document-control",
+      "name": "Document Control Procedure",
+      "domain": "process",
+      "description": "Document creation, review, approval, and retention lifecycle",
+      "resolve": [
+        {"strategy": "path", "all_of": ["processes/management/document-control.md"]}
+      ],
+      "iso": ["27001:7.5", "9001:7.5"],
+      "evidence": "Document control procedure"
+    },
+
+    {"_comment": "═══════════════════════ DOMAIN: compliance ═════════════════"},
+
+    {
+      "id": "soa",
+      "name": "Statement of Applicability",
+      "domain": "compliance",
+      "description": "All 93 Annex A controls assessed for applicability",
+      "resolve": [
+        {"strategy": "path", "all_of": ["compliance/iso-27001/statement-of-applicability.md"]}
+      ],
+      "iso": ["27001:6.1.3d"],
+      "evidence": "SoA document"
+    },
+    {
+      "id": "isms-scope",
+      "name": "ISMS Scope",
+      "domain": "compliance",
+      "description": "ISMS boundaries defined (locations, systems, processes)",
+      "resolve": [
+        {"strategy": "path", "all_of": ["compliance/iso-27001/scope.md"]}
+      ],
+      "iso": ["27001:4.3"],
+      "evidence": "ISMS scope statement"
+    },
+    {
+      "id": "legal-register",
+      "name": "Legal Requirements",
+      "domain": "compliance",
+      "description": "Applicable laws and regulations identified and tracked",
+      "resolve": [
+        {"strategy": "path", "all_of": ["compliance/legal/README.md"]}
+      ],
+      "iso": ["27001:A.5.31"],
+      "evidence": "Legal requirements register"
+    },
+    {
+      "id": "fsd-compliance-matrix",
+      "name": "FSD Compliance Matrix",
+      "domain": "compliance",
+      "description": "FSD atoms mapped to ISO controls with evidence artifacts",
+      "resolve": [
+        {"strategy": "path", "all_of": ["compliance/fsd/COMPLIANCE.md"]}
+      ],
+      "iso": ["9001:9.1", "27001:A.18.2"],
+      "evidence": "COMPLIANCE.md traceability matrix"
+    },
+    {
+      "id": "compliance-evidence",
+      "name": "Compliance Evidence",
+      "domain": "compliance",
+      "description": "ISO audit artifacts generated automatically",
+      "resolve": [
+        {"strategy": "make", "any_of": ["compliance-report"]}
+      ],
+      "iso": ["9001:9.1", "27001:A.18.2"],
+      "evidence": "forktex fsd report output"
+    },
+
+    {"_comment": "═══════════════════════ DOMAIN: supply-chain ═══════════════"},
+
+    {
+      "id": "supplier-register",
+      "name": "Supplier Register",
+      "domain": "supply-chain",
+      "description": "External providers inventoried with DPA and certification status",
+      "resolve": [
+        {"strategy": "path", "all_of": ["third-parties/README.md"]}
+      ],
+      "iso": ["27001:A.5.19", "9001:8.4"],
+      "evidence": "Third-party register with DPA status"
+    },
+    {
+      "id": "supplier-assessment",
+      "name": "Supplier Assessments",
+      "domain": "supply-chain",
+      "description": "Each critical supplier assessed for security and reliability",
+      "resolve": [
+        {"strategy": "path", "any_of": [
+          "third-parties/hetzner.md",
+          "third-parties/cloudflare.md",
+          "third-parties/anthropic.md"
+        ]}
+      ],
+      "iso": ["27001:A.5.21", "27001:A.5.22"],
+      "evidence": "Per-supplier assessment documents"
+    },
+
+    {"_comment": "═══════════════════════ DOMAIN: financial ══════════════════"},
+
+    {
+      "id": "cashflow-model",
+      "name": "Cashflow Model",
+      "domain": "financial",
+      "description": "Revenue and cost structure modeled per platform",
+      "resolve": [
+        {"strategy": "path", "all_of": ["financial/cashflow-model.md"]}
+      ],
+      "iso": [],
+      "evidence": "Cashflow model document"
+    },
+    {
+      "id": "pricing-model",
+      "name": "Pricing Model",
+      "domain": "financial",
+      "description": "Per-platform pricing strategy defined",
+      "resolve": [
+        {"strategy": "path", "all_of": ["financial/pricing/README.md"]}
+      ],
+      "iso": [],
+      "evidence": "Pricing strategy documents"
+    },
+    {
+      "id": "document-engine",
+      "name": "Document Engine",
+      "domain": "process",
+      "description": "Composable document generation system operational (contracts, policies, reports)",
+      "resolve": [
+        {"strategy": "path", "any_of": ["../contracts/forktex_contracts/engine.py"]}
+      ],
+      "iso": [],
+      "evidence": "Document engine source + generated outputs"
+    }
+  ],
+
+  "facets": [
+
+    {"_comment": "═══ Code & Build (service-scoped) ═══"},
+
+    {
+      "id": "code-quality",
+      "name": "Code Quality",
+      "domain": "code",
+      "question": "Is the code clean?",
+      "atoms": [
+        {"ref": "lint", "required": true},
+        {"ref": "format", "required": false},
+        {"ref": "typecheck", "required": false}
+      ]
+    },
+    {
+      "id": "verification",
+      "name": "Verification",
+      "domain": "code",
+      "question": "Is the code correct and safe?",
+      "atoms": [
+        {"ref": "test", "required": true},
+        {"ref": "security-audit", "required": false},
+        {"ref": "license", "required": false}
+      ]
+    },
+    {
+      "id": "runtime-control",
+      "name": "Runtime Control",
+      "domain": "infra",
+      "question": "Can I start, stop, and inspect the runtime?",
+      "atoms": [
+        {"ref": "start", "required": true},
+        {"ref": "stop", "required": false},
+        {"ref": "logs", "required": false},
+        {"ref": "db-migrate", "required": false},
+        {"ref": "db-reset", "required": false},
+        {"ref": "seed", "required": false},
+        {"ref": "help", "required": false}
+      ]
+    },
+    {
+      "id": "codegen",
+      "name": "Code Generation",
+      "domain": "code",
+      "question": "Are generated artifacts current?",
+      "atoms": [
+        {"ref": "deps", "required": true},
+        {"ref": "codegen", "required": false}
+      ]
+    },
+    {
+      "id": "ci-gate",
+      "name": "CI Gate",
+      "domain": "code",
+      "question": "Can this merge?",
+      "composesFrom": ["code-quality", "verification"]
+    },
+    {
+      "id": "build-lifecycle",
+      "name": "Build Lifecycle",
+      "domain": "infra",
+      "question": "Can I ship it?",
+      "atoms": [
+        {"ref": "build", "required": true},
+        {"ref": "publish", "required": false},
+        {"ref": "clean", "required": false}
+      ]
+    },
+
+    {"_comment": "═══ Operations (project-scoped) ═══"},
+
+    {
+      "id": "deployment",
+      "name": "Deployment",
+      "domain": "ops",
+      "question": "Is it running safely?",
+      "atoms": [
+        {"ref": "deploy", "required": true},
+        {"ref": "backup", "required": false},
+        {"ref": "rollback", "required": false},
+        {"ref": "monitoring", "required": false}
+      ]
+    },
+
+    {"_comment": "═══ Governance (organization-scoped) ═══"},
+
+    {
+      "id": "org-foundation",
+      "name": "Organizational Foundation",
+      "domain": "governance",
+      "question": "Is the organization described?",
+      "atoms": [
+        {"ref": "org-description", "required": true},
+        {"ref": "org-structure", "required": true},
+        {"ref": "roles", "required": true}
+      ]
+    },
+    {
+      "id": "policy-framework",
+      "name": "Policy Framework",
+      "domain": "governance",
+      "question": "Are commitments formalized?",
+      "atoms": [
+        {"ref": "policy-infosec", "required": true},
+        {"ref": "policy-quality", "required": true}
+      ]
+    },
+    {
+      "id": "register-framework",
+      "name": "Register Framework",
+      "domain": "governance",
+      "question": "Is organizational state tracked?",
+      "atoms": [
+        {"ref": "asset-register", "required": true},
+        {"ref": "risk-register", "required": true},
+        {"ref": "interested-parties", "required": true}
+      ]
+    },
+
+    {"_comment": "═══ Process (organization-scoped) ═══"},
+
+    {
+      "id": "core-procedures",
+      "name": "Core Procedures",
+      "domain": "process",
+      "question": "Are core workflows defined?",
+      "atoms": [
+        {"ref": "proc-sdlc", "required": true},
+        {"ref": "proc-risk", "required": true},
+        {"ref": "proc-incident", "required": true},
+        {"ref": "proc-change", "required": false}
+      ]
+    },
+    {
+      "id": "management-procedures",
+      "name": "Management Procedures",
+      "domain": "process",
+      "question": "Is the management system operational?",
+      "atoms": [
+        {"ref": "proc-audit", "required": true},
+        {"ref": "proc-corrective", "required": true},
+        {"ref": "proc-document-control", "required": false}
+      ]
+    },
+    {
+      "id": "support-procedures",
+      "name": "Support Procedures",
+      "domain": "process",
+      "question": "Are support processes defined?",
+      "atoms": [
+        {"ref": "proc-bcp", "required": true},
+        {"ref": "proc-supplier", "required": true}
+      ]
+    },
+
+    {"_comment": "═══ Compliance (organization-scoped) ═══"},
+
+    {
+      "id": "iso-framework",
+      "name": "ISO Framework",
+      "domain": "compliance",
+      "question": "Are ISO foundations in place?",
+      "atoms": [
+        {"ref": "soa", "required": true},
+        {"ref": "isms-scope", "required": true},
+        {"ref": "legal-register", "required": true},
+        {"ref": "fsd-compliance-matrix", "required": true}
+      ]
+    },
+    {
+      "id": "supply-chain-mgmt",
+      "name": "Supply Chain Management",
+      "domain": "supply-chain",
+      "question": "Are suppliers managed?",
+      "atoms": [
+        {"ref": "supplier-register", "required": true},
+        {"ref": "supplier-assessment", "required": false}
+      ]
+    },
+
+    {"_comment": "═══ Composite facets ═══"},
+
+    {
+      "id": "full-dev-lifecycle",
+      "name": "Full Development Lifecycle",
+      "domain": "code",
+      "question": "Everything a developer needs?",
+      "composesFrom": ["runtime-control", "codegen", "ci-gate"]
+    },
+    {
+      "id": "full-governance",
+      "name": "Full Governance",
+      "domain": "governance",
+      "question": "Is organizational governance complete?",
+      "composesFrom": ["org-foundation", "policy-framework", "register-framework"]
+    },
+    {
+      "id": "full-process",
+      "name": "Full Process Framework",
+      "domain": "process",
+      "question": "Are all procedures defined?",
+      "composesFrom": ["core-procedures", "management-procedures", "support-procedures"]
+    },
+    {
+      "id": "full-compliance",
+      "name": "Full Compliance",
+      "domain": "compliance",
+      "question": "Is the compliance framework complete?",
+      "atoms": [
+        {"ref": "compliance-evidence", "required": true}
+      ],
+      "composesFrom": ["iso-framework", "supply-chain-mgmt"]
+    },
+    {
+      "id": "full-automation",
+      "name": "Full Automation",
+      "domain": "ops",
+      "question": "Is delivery fully automated?",
+      "composesFrom": ["full-dev-lifecycle", "build-lifecycle", "deployment"]
+    },
+    {
+      "id": "financial-foundation",
+      "name": "Financial Foundation",
+      "domain": "financial",
+      "question": "Is the business financially modeled?",
+      "atoms": [
+        {"ref": "cashflow-model", "required": true},
+        {"ref": "pricing-model", "required": true}
+      ]
+    }
+  ],
+
+  "levels": [
+    {
+      "id": "L0",
+      "name": "Bootstrap",
+      "description": "New project or organization, nothing yet",
+      "facets": []
+    },
+    {
+      "id": "L1",
+      "name": "Runnable",
+      "description": "Can start, stop, and inspect the project runtime",
+      "facets": ["runtime-control"]
+    },
+    {
+      "id": "L2",
+      "name": "Quality",
+      "description": "CI quality gates enforced",
+      "facets": ["runtime-control", "code-quality", "verification"]
+    },
+    {
+      "id": "L3",
+      "name": "Shippable",
+      "description": "Artifacts buildable and publishable",
+      "facets": ["runtime-control", "code-quality", "verification", "codegen", "build-lifecycle"]
+    },
+    {
+      "id": "L4",
+      "name": "Operational",
+      "description": "Deployment and operational recovery controls are in place",
+      "facets": ["runtime-control", "code-quality", "verification", "codegen", "build-lifecycle", "deployment"]
+    },
+    {
+      "id": "L5",
+      "name": "Governed",
+      "description": "Organizational governance framework in place",
+      "facets": ["runtime-control", "code-quality", "verification", "codegen", "build-lifecycle", "deployment", "full-governance"]
+    },
+    {
+      "id": "L6",
+      "name": "Managed",
+      "description": "All management system procedures defined",
+      "facets": ["runtime-control", "code-quality", "verification", "codegen", "build-lifecycle", "deployment", "full-governance", "full-process"]
+    },
+    {
+      "id": "L7",
+      "name": "Auditable",
+      "description": "ISO-ready with full compliance evidence",
+      "facets": ["runtime-control", "code-quality", "verification", "codegen", "build-lifecycle", "deployment", "full-governance", "full-process", "full-compliance"]
+    },
+    {
+      "id": "L8",
+      "name": "Sustainable",
+      "description": "Financially modeled with cashflow and pricing",
+      "facets": ["runtime-control", "code-quality", "verification", "codegen", "build-lifecycle", "deployment", "full-governance", "full-process", "full-compliance", "financial-foundation"]
+    }
+  ]
+}

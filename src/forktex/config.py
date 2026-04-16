@@ -1,0 +1,141 @@
+"""
+forktex.config - Application configuration using Pydantic.
+
+Base settings for the forktex package. LLM-specific configuration
+has moved to forktex.intelligence.config.
+
+Supports:
+- Environment variables with FORKTEX_ prefix
+- ~/.forktex/config.toml file
+- .forktex/config.json (project-level)
+- Programmatic overrides
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+from pydantic import BaseModel
+
+from forktex.core.paths import get_global_config_dir, get_project_config_dir
+
+
+def _load_toml_config() -> Dict[str, Any]:
+    """Load configuration from ~/.forktex/config.toml if it exists."""
+    config_path = get_global_config_dir() / "config.toml"
+    if not config_path.exists():
+        return {}
+    try:
+        import tomllib
+    except ImportError:
+        try:
+            import tomli as tomllib  # type: ignore[no-redef]
+        except ImportError:
+            return {}
+    try:
+        with open(config_path, "rb") as f:
+            return tomllib.load(f)
+    except Exception:
+        return {}
+
+
+def _load_project_config(project_root: Optional[str]) -> Dict[str, Any]:
+    """Load .forktex/config.json from the project root if it exists."""
+    if not project_root:
+        return {}
+    config_path = get_project_config_dir(project_root) / "config.json"
+    if not config_path.exists():
+        return {}
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+class Settings(BaseModel):
+    """Main application settings.
+
+    This is the lightweight base configuration. LLM-specific settings
+    (provider, model, api_key) are in forktex.intelligence.config.
+
+    Resolution order:
+    1. Explicit constructor args
+    2. Environment variables (FORKTEX_ prefix)
+    3. ~/.forktex/config.toml (global)
+    4. .forktex/config.json (project-level)
+    5. Defaults
+    """
+
+    # Debug mode
+    debug: bool = False
+
+    @classmethod
+    def load(cls, project_root: Optional[str] = None, **overrides: Any) -> "Settings":
+        """Load settings from all sources."""
+        # Start with project-level config (lowest priority)
+        project_cfg = _load_project_config(project_root)
+
+        # Then global TOML config
+        toml = _load_toml_config()
+
+        # Build values dict: project -> toml -> env -> overrides
+        values: Dict[str, Any] = {}
+
+        # Project-level config values
+        for key in cls.model_fields:
+            if key in project_cfg:
+                values[key] = project_cfg[key]
+
+        # TOML values (override project config)
+        for key in cls.model_fields:
+            if key in toml:
+                values[key] = toml[key]
+
+        # Environment variables
+        env_map = {
+            "debug": ["FORKTEX_DEBUG"],
+        }
+        for field_name, env_names in env_map.items():
+            for env_name in env_names:
+                val = os.environ.get(env_name)
+                if val is not None:
+                    field_info = cls.model_fields[field_name]
+                    if field_info.annotation is float:
+                        values[field_name] = float(val)
+                    elif field_info.annotation is int:
+                        values[field_name] = int(val)
+                    elif field_info.annotation is bool:
+                        values[field_name] = val.lower() in ("1", "true", "yes")
+                    else:
+                        values[field_name] = val
+                    break
+
+        # Explicit overrides take precedence
+        for k, v in overrides.items():
+            if v is not None:
+                values[k] = v
+
+        return cls(**values)
+
+
+# Cached global settings
+_settings: Optional[Settings] = None
+
+
+def get_settings(project_root: Optional[str] = None, **overrides: Any) -> Settings:
+    """Get or create cached settings."""
+    global _settings
+    if _settings is None or overrides or project_root:
+        _settings = Settings.load(project_root=project_root, **overrides)
+    return _settings
+
+
+def reset_settings() -> None:
+    """Reset cached settings (for testing)."""
+    global _settings
+    _settings = None

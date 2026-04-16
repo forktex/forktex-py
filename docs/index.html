@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forktex — Documentation</title>
+<style>
+  :root {
+    --bg:#0d1117; --s:#161b22; --s2:#1c2333; --b:#30363d;
+    --t:#e6edf3; --tm:#8b949e; --a:#58a6ff; --g:#3fb950; --p:#d2a8ff; --w:#d29922; --r:#f85149;
+    --sidebar-w: 260px;
+    --font: 'Inter', -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--t); font-family:var(--font); line-height:1.6; }
+
+  /* Sidebar */
+  nav { position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh; background:var(--s);
+        border-right:1px solid var(--b); overflow-y:auto; padding:1.5rem 0; z-index:10; }
+  nav .logo { padding:0 1.25rem 1rem; font-size:1.3rem; font-weight:700; }
+  nav .logo span { color:var(--a); }
+  nav .version { padding:0 1.25rem .75rem; font-size:.75rem; color:var(--tm); }
+  nav .section { padding:.5rem 1.25rem .25rem; font-size:.7rem; text-transform:uppercase;
+                 letter-spacing:.1em; color:var(--tm); font-weight:600; }
+  nav a { display:block; padding:.3rem 1.25rem; color:var(--tm); text-decoration:none;
+          font-size:.9rem; transition: all .15s; border-left:2px solid transparent; }
+  nav a:hover { color:var(--t); background:var(--s2); }
+  nav a.active { color:var(--a); border-left-color:var(--a); background:rgba(88,166,255,.08); }
+
+  /* Main */
+  main { margin-left:var(--sidebar-w); padding:2rem 3rem; max-width:900px; }
+  h1 { font-size:2rem; margin-bottom:.5rem; }
+  h1 span { color:var(--a); }
+  h2 { font-size:1.4rem; color:var(--a); margin:2.5rem 0 .75rem; padding-bottom:.25rem; border-bottom:1px solid var(--b); }
+  h3 { font-size:1.1rem; margin:1.5rem 0 .5rem; color:var(--t); }
+  p { margin-bottom:.75rem; color:var(--tm); }
+  strong { color:var(--t); }
+  a { color:var(--a); }
+
+  /* Cards */
+  .pillars { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin:1.5rem 0; }
+  .pillar { background:var(--s); border:1px solid var(--b); border-radius:8px; padding:1.25rem; border-top:3px solid; }
+  .pillar.intel { border-top-color:var(--p); }
+  .pillar.cloud { border-top-color:var(--a); }
+  .pillar.fsd { border-top-color:var(--g); }
+  .pillar h4 { margin-bottom:.5rem; }
+  .pillar p { font-size:.9rem; }
+  .pillar code { font-family:var(--mono); font-size:.85em; color:var(--a); }
+
+  /* Code */
+  pre { background:var(--s); border:1px solid var(--b); border-radius:6px; padding:1rem;
+        overflow-x:auto; margin:.75rem 0; font-family:var(--mono); font-size:.85rem; color:var(--tm); }
+  code { font-family:var(--mono); font-size:.9em; }
+  p code, li code { background:var(--s2); padding:.1em .3em; border-radius:3px; color:var(--g); }
+
+  /* Tables */
+  table { width:100%; border-collapse:collapse; margin:.75rem 0; font-size:.9rem; }
+  th { background:var(--s2); color:var(--a); text-align:left; padding:.5rem .75rem; font-weight:600; border-bottom:2px solid var(--b); }
+  td { padding:.4rem .75rem; border-bottom:1px solid var(--b); color:var(--tm); }
+  tr:hover td { background:var(--s); }
+
+  /* Command tree */
+  .tree { background:var(--s); border:1px solid var(--b); border-radius:8px; padding:1.25rem;
+          font-family:var(--mono); font-size:.85rem; line-height:1.8; color:var(--tm); }
+  .tree .cmd { color:var(--a); font-weight:600; }
+  .tree .desc { color:var(--tm); }
+
+  /* Interaction patterns */
+  .pattern { background:var(--s); border-radius:8px; padding:1rem; margin:.75rem 0; border-left:3px solid var(--a); }
+  .pattern h4 { font-size:.9rem; color:var(--t); margin-bottom:.5rem; }
+  .pattern pre { background:var(--s2); border:none; margin:0; }
+
+  /* Section anchors */
+  section { scroll-margin-top: 1rem; }
+
+  @media (max-width:768px) {
+    nav { display:none; }
+    main { margin-left:0; padding:1rem; }
+    .pillars { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo"><span>forktex</span></div>
+  <div class="version">v0.5.0</div>
+
+  <div class="section">Overview</div>
+  <a href="#overview" class="active">What is Forktex</a>
+  <a href="#pillars">Three Pillars</a>
+  <a href="#install">Installation</a>
+
+  <div class="section">CLI Reference</div>
+  <a href="#cli-tree">Command Tree</a>
+  <a href="#intelligence">Intelligence (AI)</a>
+  <a href="#cloud">Cloud (Infra)</a>
+  <a href="#fsd">FSD (Delivery)</a>
+  <a href="#git">Git (Multi-repo)</a>
+  <a href="#scrape">Scrape (Web)</a>
+
+  <div class="section">Concepts</div>
+  <a href="#patterns">Interaction Patterns</a>
+  <a href="#forktex-dir">.forktex/ Directory</a>
+  <a href="#tools">Agent Tools</a>
+
+  <div class="section">Development</div>
+  <a href="#architecture">Architecture</a>
+  <a href="#setup">Local Setup</a>
+  <a href="#testing">Testing</a>
+  <a href="#config">Configuration</a>
+
+  <div class="section">Links</div>
+  <a href="https://github.com/forktex/forktex-python">GitHub</a>
+  <a href="https://pypi.org/project/forktex/">PyPI</a>
+</nav>
+
+<main>
+
+<!-- Overview -->
+<section id="overview">
+  <h1><span>Forktex</span> Documentation</h1>
+  <p>Your development companion — from ideation to production. Forktex combines an AI agent framework, cloud infrastructure management, and delivery standard enforcement into a single <code>forktex</code> command.</p>
+</section>
+
+<!-- Three Pillars -->
+<section id="pillars">
+  <h2>Three Pillars</h2>
+  <div class="pillars">
+    <div class="pillar intel">
+      <h4>Intelligence</h4>
+      <p>AI-powered agent with tool calling. Reads code, runs commands, applies patches.</p>
+      <p><code>forktex chat</code> <code>forktex ask</code> <code>forktex run</code></p>
+    </div>
+    <div class="pillar cloud">
+      <h4>Cloud</h4>
+      <p>Deploy and manage infrastructure. Blue-green deploys from <code>forktex.json</code> manifests.</p>
+      <p><code>forktex cloud up</code> <code>forktex cloud deploy</code></p>
+    </div>
+    <div class="pillar fsd">
+      <h4>FSD</h4>
+      <p>Delivery standard. Verify compliance, generate ISO audit evidence.</p>
+      <p><code>forktex fsd check</code> <code>forktex fsd report</code></p>
+    </div>
+  </div>
+</section>
+
+<!-- Installation -->
+<section id="install">
+  <h2>Installation</h2>
+  <pre>pip install forktex
+
+# For web browsing (optional)
+pip install forktex[web]
+playwright install</pre>
+</section>
+
+<!-- CLI Tree -->
+<section id="cli-tree">
+  <h2>Command Tree</h2>
+  <div class="tree">
+    <span class="cmd">forktex</span> <span class="desc">Interactive AI chat (default)</span><br>
+    <span class="cmd">forktex ask</span> <span class="desc">"..." — single question</span><br>
+    <span class="cmd">forktex run</span> <span class="desc">"..." — orchestrated task</span><br>
+    <span class="cmd">forktex info</span> <span class="desc">Show project context</span><br>
+    <br>
+    <span class="cmd">forktex intelligence</span><br>
+    &nbsp;&nbsp;<span class="cmd">init</span> <span class="desc">Setup wizard</span><br>
+    &nbsp;&nbsp;<span class="cmd">status</span> <span class="desc">Check connection</span><br>
+    <br>
+    <span class="cmd">forktex cloud</span><br>
+    &nbsp;&nbsp;<span class="cmd">login</span> <span class="desc">Configure controller</span>
+    &nbsp;&nbsp;<span class="cmd">init</span> <span class="desc">Scaffold forktex.json</span>
+    &nbsp;&nbsp;<span class="cmd">up / down</span> <span class="desc">Start/stop stack</span>
+    &nbsp;&nbsp;<span class="cmd">deploy</span> <span class="desc">Blue-green deployment</span>
+    &nbsp;&nbsp;<span class="cmd">server</span> <span class="desc">Server management</span>
+    &nbsp;&nbsp;<span class="cmd">project</span> <span class="desc">Project management</span>
+    &nbsp;&nbsp;<span class="cmd">vault</span> <span class="desc">Secret management</span>
+    &nbsp;&nbsp;<span class="cmd">status</span> <span class="desc">Server health</span>
+    &nbsp;&nbsp;<span class="cmd">logs</span> <span class="desc">Service logs</span>
+    &nbsp;&nbsp;<span class="cmd">events</span> <span class="desc">Deployment history</span>
+    &nbsp;&nbsp;<span class="cmd">dns</span> <span class="desc">DNS management</span>
+    &nbsp;&nbsp;<span class="cmd">ssl</span> <span class="desc">Certificate management</span><br>
+    <br>
+    <span class="cmd">forktex fsd</span><br>
+    &nbsp;&nbsp;<span class="cmd">check</span> <span class="desc">Verify FSD compliance (atoms, levels, ISO)</span><br>
+    &nbsp;&nbsp;<span class="cmd">report</span> <span class="desc">Run gates, generate ISO evidence (JSON + HTML)</span><br>
+    <br>
+    <span class="cmd">forktex git</span><br>
+    &nbsp;&nbsp;<span class="cmd">status-all</span> <span class="desc">Status across repos</span><br>
+    &nbsp;&nbsp;<span class="cmd">branch-all</span> <span class="desc">Create branch across repos</span><br>
+    &nbsp;&nbsp;<span class="cmd">checkout-all</span> <span class="desc">Switch branch across repos</span><br>
+    <br>
+    <span class="cmd">forktex scrape</span> <span class="desc">&lt;url&gt; --goal "..." — AI-driven web scraping</span><br>
+    <span class="cmd">forktex agents</span> <span class="desc">Manage agent processes</span>
+  </div>
+</section>
+
+<!-- Intelligence -->
+<section id="intelligence">
+  <h2>Intelligence (AI Agent)</h2>
+  <p>Tool-calling LLM loop with full project awareness, powered by the Forktex Intelligence API.</p>
+  <pre>forktex                              # Interactive chat
+forktex ask "What does main.py do?"  # Single question
+forktex run "Fix the auth bug"       # Full orchestration</pre>
+  <p><strong>Slash commands</strong> in interactive mode: <code>/status</code> <code>/tools</code> <code>/model</code> <code>/clear</code> <code>/help</code></p>
+</section>
+
+<!-- Cloud -->
+<section id="cloud">
+  <h2>Cloud (Infrastructure)</h2>
+  <p>Deploy from <code>forktex.json</code> manifests. Blue-green deployments, DNS, SSL, vault secrets.</p>
+  <pre>forktex cloud login                  # Connect to controller
+forktex cloud up --env dev --build   # Start local stack
+forktex cloud deploy &lt;server-id&gt;     # Deploy to production
+forktex cloud logs &lt;server-id&gt;       # View logs
+forktex cloud server list            # List servers</pre>
+</section>
+
+<!-- FSD -->
+<section id="fsd">
+  <h2>FSD (Delivery Standard)</h2>
+  <p>Verify and enforce the <strong>ForkTex Standard for Delivery</strong>. Atoms, domains, levels, and ISO traceability live behind one portable standard surface.</p>
+  <pre>forktex fsd check                    # Check compliance
+forktex fsd check --level L2         # Require L2 (CI gate)
+forktex fsd report                   # Run gates, generate evidence</pre>
+  <p>Outputs both <strong>JSON</strong> (machine-readable) and <strong>HTML</strong> (business/audit) to <code>.forktex/fsd/evidence/</code>.</p>
+
+  <h3>Maturity Levels</h3>
+  <table>
+    <tr><th>Level</th><th>Name</th><th>What it means</th></tr>
+    <tr><td>L0</td><td>Bootstrap</td><td>New project, nothing yet</td></tr>
+    <tr><td>L1</td><td>Local Dev</td><td>Can <code>make local</code> and start coding</td></tr>
+    <tr><td>L2</td><td>Quality</td><td>Has CI quality gates (lint + test)</td></tr>
+    <tr><td>L3</td><td>Shippable</td><td>Can build and publish artifacts</td></tr>
+    <tr><td>L4</td><td>Production</td><td>Automated deploy pipeline</td></tr>
+    <tr><td>L5</td><td>Auditable</td><td>ISO-ready with evidence</td></tr>
+  </table>
+</section>
+
+<!-- Git -->
+<section id="git">
+  <h2>Git (Multi-repo)</h2>
+  <p>Operate across multiple repositories at once.</p>
+  <pre>forktex git status-all                         # All sibling repos
+forktex git branch-all forktex-standard        # Branch all repos
+forktex git checkout-all master                # Switch all to master
+forktex git status-all -p docs -p cloud -p net # Specific repos</pre>
+</section>
+
+<!-- Scrape -->
+<section id="scrape">
+  <h2>Scrape (Web)</h2>
+  <p>Persistent Playwright browser + AI agent. Navigates, extracts data, remembers selectors via "truths".</p>
+  <pre>forktex scrape "https://example.com" --goal "Extract products"</pre>
+</section>
+
+<!-- Interaction Patterns -->
+<section id="patterns">
+  <h2>Interaction Patterns</h2>
+
+  <div class="pattern">
+    <h4>Developer Daily Workflow</h4>
+    <pre>forktex              # Ask AI about code
+make local           # Start local stack
+make test            # Run tests
+make ci              # Full quality gate
+forktex fsd check    # Verify compliance</pre>
+  </div>
+
+  <div class="pattern">
+    <h4>Deployment</h4>
+    <pre>forktex cloud login
+forktex cloud deploy &lt;server&gt;
+forktex cloud status &lt;server&gt;
+forktex cloud logs &lt;server&gt;</pre>
+  </div>
+
+  <div class="pattern">
+    <h4>Multi-project Standard Rollout</h4>
+    <pre>forktex git branch-all forktex-standard -p docs -p cloud -p network
+# ... implement changes on each ...
+forktex fsd check --project-dir ~/cloud
+forktex fsd check --project-dir ~/network
+forktex git status-all</pre>
+  </div>
+</section>
+
+<!-- .forktex/ -->
+<section id="forktex-dir">
+  <h2>.forktex/ Directory</h2>
+  <p>All forktex-managed project state lives here:</p>
+  <pre>.forktex/
+  config.json              # Project configuration
+  standard.json            # Standard config (services, overrides)
+  fsd/evidence/            # ISO audit evidence (gitignored)
+  agents/history/          # Agent session state
+  scraper/truths/          # Per-domain selectors
+  scraper/screenshots/     # Browser captures
+  scraper/output/          # Extracted data</pre>
+  <p>Global config: <code>~/.forktex/config.toml</code>, <code>~/.forktex/intelligence.json</code>, <code>~/.forktex/cloud.json</code></p>
+</section>
+
+<!-- Tools -->
+<section id="tools">
+  <h2>Agent Tools (25+)</h2>
+  <table>
+    <tr><th>Category</th><th>Tool</th><th>Description</th></tr>
+    <tr><td>Filesystem</td><td><code>read_file</code></td><td>Read file contents</td></tr>
+    <tr><td></td><td><code>write_file</code></td><td>Create or overwrite</td></tr>
+    <tr><td></td><td><code>patch_file</code></td><td>Find-and-replace</td></tr>
+    <tr><td></td><td><code>glob_search</code></td><td>Search by pattern</td></tr>
+    <tr><td></td><td><code>grep_search</code></td><td>Search by regex</td></tr>
+    <tr><td>Shell</td><td><code>bash_execute</code></td><td>Run commands</td></tr>
+    <tr><td>Git</td><td><code>git_status</code></td><td>Branch + changes</td></tr>
+    <tr><td></td><td><code>git_diff</code></td><td>Show diffs</td></tr>
+    <tr><td></td><td><code>git_commit</code></td><td>Stage + commit</td></tr>
+    <tr><td></td><td><code>git_branch</code></td><td>Create branch</td></tr>
+    <tr><td></td><td><code>git_checkout</code></td><td>Switch branches</td></tr>
+    <tr><td>Web</td><td><code>web_search</code></td><td>Search the web</td></tr>
+    <tr><td></td><td><code>web_fetch</code></td><td>Fetch page content</td></tr>
+    <tr><td>Browser</td><td><code>scraper_navigate</code></td><td>Go to URL</td></tr>
+    <tr><td></td><td><code>scraper_click</code></td><td>Click element</td></tr>
+    <tr><td></td><td><code>scraper_fill</code></td><td>Fill form field</td></tr>
+    <tr><td></td><td><code>scraper_extract</code></td><td>Extract data</td></tr>
+    <tr><td></td><td><code>scraper_screenshot</code></td><td>Capture page</td></tr>
+  </table>
+</section>
+
+<!-- Architecture -->
+<section id="architecture">
+  <h2>Architecture</h2>
+  <pre>forktex                  pip install forktex (CLI + agents + FSD — this repo)
+forktex-intelligence     pip install forktex-intelligence (AI SDK — own repo)
+forktex-cloud            pip install forktex-cloud (Cloud SDK — own repo)
+forktex-core             pip install forktex-core (PostgreSQL/Redis primitives — own repo)
+(forktex-documents has been retired)</pre>
+  <pre>src/forktex/
+  agent/
+    cli.py                 # Main CLI entry point
+    fsd/                   # Canonical FSD command surface
+    fsq/                   # Legacy compatibility alias
+      standard.py          # Atoms, facets, levels (legacy source module)
+      check.py / report.py # CLI commands
+      templates/           # Jinja2 HTML report templates
+    cloud/                 # Cloud CLI commands
+    commands/git_cli.py    # Multi-repo git CLI
+    tools/                 # 25+ agent tools
+    scraper/               # Agentic web scraping
+  intelligence/            # SDK re-export shim
+  cloud/                   # SDK re-export shim
+  core/                    # Paths, state, utilities</pre>
+</section>
+
+<!-- Setup -->
+<section id="setup">
+  <h2>Local Setup</h2>
+  <pre># Editable install (forktex-py only — pulls SDKs from PyPI)
+cd forktex-py
+python -m venv .venv && source .venv/bin/activate
+pip install -e .[dev]
+
+# Full ecosystem dev (one-time, sibling-layout):
+pip install -e ../intelligence/sdk \
+            -e ../cloud/sdk \
+            -e ../core-py \
+            -e ../forktex-documents \
+            -e .[dev]</pre>
+</section>
+
+<!-- Testing -->
+<section id="testing">
+  <h2>Testing</h2>
+  <pre>pytest tests/ -v                    # forktex-py test suite (188+ tests)
+# SDK tests live in their own repos:
+#   pytest ../intelligence/sdk/tests/
+#   pytest ../cloud/sdk/tests/</pre>
+</section>
+
+<!-- Config -->
+<section id="config">
+  <h2>Configuration</h2>
+  <table>
+    <tr><th>Variable</th><th>Description</th><th>Default</th></tr>
+    <tr><td><code>FORKTEX_INTELLIGENCE_ENDPOINT</code></td><td>Intelligence API endpoint</td><td><code>https://intelligence.forktex.com/api</code></td></tr>
+    <tr><td><code>FORKTEX_INTELLIGENCE_API_KEY</code></td><td>Intelligence API key</td><td><em>required for AI</em></td></tr>
+    <tr><td><code>FORKTEX_DEBUG</code></td><td>Debug output</td><td>false</td></tr>
+  </table>
+  <p>Also reads <code>~/.forktex/config.toml</code> and <code>.forktex/config.json</code>.</p>
+</section>
+
+<footer style="text-align:center;padding:2rem 0;color:var(--tm);font-size:.8rem;border-top:1px solid var(--b);margin-top:2rem">
+  Forktex v0.5.0 &mdash; FORKTEX S.R.L. &mdash; 2026
+</footer>
+
+</main>
+</body>
+</html>

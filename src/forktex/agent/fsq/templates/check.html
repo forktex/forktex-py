@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FSD Compliance Check — {{ project }}</title>
+<style>
+  :root { --bg:#0d1117; --s:#161b22; --s2:#1c2333; --b:#30363d; --t:#e6edf3; --tm:#8b949e; --a:#58a6ff; --g:#3fb950; --p:#d2a8ff; --w:#d29922; --r:#f85149; }
+  *{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--t);font-family:Inter,-apple-system,sans-serif;line-height:1.6;padding:2rem}
+  .container{max-width:960px;margin:0 auto}
+  h1{font-size:1.8rem;margin-bottom:.25rem}h1 span{color:var(--a)}
+  .meta{color:var(--tm);margin-bottom:2rem;font-size:.9rem}
+  .badge{display:inline-block;padding:.15rem .5rem;border-radius:999px;font-size:.75rem;font-weight:600;border:1px solid}
+  .badge.pass{color:var(--g);border-color:var(--g)}.badge.fail{color:var(--r);border-color:var(--r)}
+  .badge.level{color:var(--p);border-color:var(--p);font-size:.85rem}
+  h2{font-size:1.2rem;color:var(--a);margin:1.5rem 0 .75rem;padding-bottom:.25rem;border-bottom:1px solid var(--b)}
+  table{width:100%;border-collapse:collapse;margin:.75rem 0;font-size:.9rem}
+  th{background:var(--s2);color:var(--a);text-align:left;padding:.5rem .75rem;font-weight:600;border-bottom:2px solid var(--b)}
+  td{padding:.4rem .75rem;border-bottom:1px solid var(--b);color:var(--tm)}
+  tr:hover td{background:var(--s)}
+  td code{font-family:'JetBrains Mono',monospace;font-size:.85em;color:var(--g);background:var(--s2);padding:.1em .3em;border-radius:3px}
+  .pass-cell{color:var(--g);font-weight:600}.fail-cell{color:var(--r);font-weight:600}
+  .level-bar{display:flex;gap:0;margin:1rem 0}
+  .lv{flex:1;padding:.75rem;text-align:center;border:1px solid var(--b);font-size:.8rem}
+  .lv:first-child{border-radius:6px 0 0 6px}.lv:last-child{border-radius:0 6px 6px 0}
+  .lv.achieved{background:rgba(63,185,80,.15);border-color:var(--g)}.lv.achieved .num{color:var(--g)}
+  .lv .num{font-size:1.3rem;font-weight:800;color:var(--tm)}.lv .label{font-size:.75rem;color:var(--tm)}
+  .services{display:flex;gap:.75rem;flex-wrap:wrap;margin:.5rem 0}
+  .svc{background:var(--s);border:1px solid var(--b);border-radius:6px;padding:.5rem .75rem;font-family:monospace;font-size:.85rem;color:var(--a)}
+  .iso-map{margin-top:.25rem;font-size:.8rem;color:var(--p)}
+  footer{text-align:center;padding:2rem 0;color:var(--tm);font-size:.8rem;border-top:1px solid var(--b);margin-top:2rem}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1><span>FSD</span> Compliance Check</h1>
+  <div class="meta">
+    Project: <strong>{{ project }}</strong> &mdash;
+    Generated: {{ generated_at }} &mdash;
+    FSD v{{ fsd_version }} &mdash;
+    <span class="badge level">{{ level }}</span>
+  </div>
+
+  <h2>Maturity Level</h2>
+  <div class="level-bar">
+    {% for lv in levels %}
+    <div class="lv {% if lv.achieved %}achieved{% endif %}">
+      <div class="num">{{ lv.id }}</div>
+      <div class="label">{{ lv.name }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <h2>Services Detected</h2>
+  <div class="services">
+    {% for svc in services %}
+    <div class="svc">{{ svc.name }} <span style="color:var(--tm)">({{ svc.target_count }} targets)</span></div>
+    {% endfor %}
+    {% if not services %}<p style="color:var(--tm)">No service Makefiles detected</p>{% endif %}
+  </div>
+
+  <h2>Atom Results</h2>
+  <table>
+    <tr><th>Status</th><th>Atom</th><th>Description</th><th>Required Targets</th><th>ISO Clauses</th></tr>
+    {% for atom in atoms %}
+    <tr>
+      <td class="{{ 'pass' if atom.satisfied else 'fail' }}-cell">{{ "PASS" if atom.satisfied else "FAIL" }}</td>
+      <td><strong>{{ atom.name }}</strong></td>
+      <td>{{ atom.description }}</td>
+      <td>{% for t in atom.targets %}<code>{{ t }}</code> {% endfor %}</td>
+      <td class="iso-map">{% for m in atom.iso %}{{ m.standard }}:{{ m.clause }}{% if not loop.last %}, {% endif %}{% endfor %}{% if not atom.iso %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h2>ISO Coverage Summary</h2>
+  <table>
+    <tr><th>Standard</th><th>Clause</th><th>Control</th><th>Covered By</th><th>Status</th></tr>
+    {% for mapping in iso_mappings %}
+    <tr>
+      <td><strong>ISO {{ mapping.standard }}</strong></td>
+      <td>{{ mapping.clause }}</td>
+      <td>{{ mapping.control }}</td>
+      <td>{{ mapping.atom_name }}</td>
+      <td class="{{ 'pass' if mapping.satisfied else 'fail' }}-cell">{{ "COVERED" if mapping.satisfied else "MISSING" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <footer>FSD v{{ fsd_version }} &mdash; ForkTex Standard for Delivery &mdash; FORKTEX S.R.L.</footer>
+</div>
+</body>
+</html>
