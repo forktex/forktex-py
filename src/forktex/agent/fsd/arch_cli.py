@@ -341,7 +341,6 @@ async def serve_cmd(base_dir, port, host, static_dir):
         name: str
         description: str
         fsd_level: str = "L0"
-        fsq_level: str = "L0"
         provider: str | None = None
         region: str | None = None
         deploy_strategy: str | None = None

@@ -186,7 +186,6 @@ async def overview(base_dir, projects, output_dir, name):
             {
                 "id": s["id"], "name": s["system"].name,
                 "fsd_level": s["system"].fsd_level,
-                "fsq_level": s["system"].fsd_level,
                 "containers": len(s["system"].containers),
                 "atoms_passing": len(s["passing_atoms"]),
                 "atoms_total": s["total_atoms"],
