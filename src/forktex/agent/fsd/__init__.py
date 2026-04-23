@@ -11,7 +11,9 @@ from forktex.core.paths import resolve_path
 
 
 @click.group()
-@click.option("--project-dir", default=None, help="Project root directory (default: cwd)")
+@click.option(
+    "--project-dir", default=None, help="Project root directory (default: cwd)"
+)
 @click.pass_context
 async def fsd(ctx, project_dir):
     """FSD - ForkTex Standard for Delivery verification and compliance."""

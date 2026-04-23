@@ -151,7 +151,7 @@
   <h2>Installation</h2>
   <pre>pip install forktex
 
-# For web browsing (optional)
+# Optional: web scraping support (Playwright)
 pip install forktex[web]
 playwright install</pre>
 </section>
@@ -292,13 +292,15 @@ forktex git status-all</pre>
   <h2>.forktex/ Directory</h2>
   <p>All forktex-managed project state lives here:</p>
   <pre>.forktex/
-  config.json              # Project configuration
-  standard.json            # Standard config (services, overrides)
-  fsd/evidence/            # ISO audit evidence (gitignored)
-  agents/history/          # Agent session state
-  scraper/truths/          # Per-domain selectors
-  scraper/screenshots/     # Browser captures
-  scraper/output/          # Extracted data</pre>
+  config.json                # Project configuration
+  cloud.json                 # Cloud context (project, server, env)
+  intelligence.json          # Intelligence API settings
+  docker-compose.dev.yml     # Generated dev compose
+  fsd/evidence/              # ISO audit evidence (gitignored)
+  architecture/              # C4 architecture snapshots
+  agents/history/            # Agent session state
+  vault/{env}/secrets.enc    # Encrypted secrets
+  scraper/truths/            # Per-domain selectors</pre>
   <p>Global config: <code>~/.forktex/config.toml</code>, <code>~/.forktex/intelligence.json</code>, <code>~/.forktex/cloud.json</code></p>
 </section>
 
@@ -334,19 +336,21 @@ forktex git status-all</pre>
   <pre>forktex                  pip install forktex (CLI + agents + FSD — this repo)
 forktex-intelligence     pip install forktex-intelligence (AI SDK — own repo)
 forktex-cloud            pip install forktex-cloud (Cloud SDK — own repo)
-forktex-core             pip install forktex-core (PostgreSQL/Redis primitives — own repo)
-(forktex-documents has been retired)</pre>
+forktex-core             pip install forktex-core (PostgreSQL/Redis primitives — own repo)</pre>
   <pre>src/forktex/
   agent/
     cli.py                 # Main CLI entry point
     fsd/                   # FSD command surface (check, report, makefile)
-    cloud/                 # Cloud CLI commands
+    cloud/                 # Cloud CLI commands + config persistence
+    intelligence/          # Intelligence CLI + config persistence
     commands/git_cli.py    # Multi-repo git CLI
     tools/                 # 25+ agent tools
     scraper/               # Agentic web scraping
   intelligence/            # SDK re-export shim
   cloud/                   # SDK re-export shim
-  core/                    # Paths, state, utilities</pre>
+  core/                    # Paths, state, utilities
+  fsd/                     # FSD evaluation engine
+  models/                  # Shared data models</pre>
 </section>
 
 <!-- Setup -->
@@ -361,7 +365,6 @@ pip install -e .[dev]
 pip install -e ../intelligence/sdk \
             -e ../cloud/sdk \
             -e ../core-py \
-            -e ../forktex-documents \
             -e .[dev]</pre>
 </section>
 

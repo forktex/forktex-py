@@ -6,10 +6,15 @@ import asyncclick as click
 
 
 @click.command()
-@click.option("--kind", type=click.Choice(
-    ["ProjectDeployment", "StaticSite", "SingleContainer", "NativeBuild"],
-    case_sensitive=True,
-), default="ProjectDeployment", help="Manifest kind")
+@click.option(
+    "--kind",
+    type=click.Choice(
+        ["ProjectDeployment", "StaticSite", "SingleContainer", "NativeBuild"],
+        case_sensitive=True,
+    ),
+    default="ProjectDeployment",
+    help="Manifest kind",
+)
 @click.option("--name", default=None, help="Project name (default: directory name)")
 @click.option("--force", is_flag=True, help="Overwrite existing forktex.json")
 @click.pass_context

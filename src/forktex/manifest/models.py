@@ -221,7 +221,16 @@ class ForktexManifest(ForkTexModel):
         raw.setdefault("manifestVersion", MANIFEST_VERSION)
         cloud_raw = raw.get("cloud")
         if cloud_raw is None:
-            cloud_keys = ("apiVersion", "kind", "metadata", "infrastructure", "deployment", "gateway", "services", "observability")
+            cloud_keys = (
+                "apiVersion",
+                "kind",
+                "metadata",
+                "infrastructure",
+                "deployment",
+                "gateway",
+                "services",
+                "observability",
+            )
             if any(key in raw for key in cloud_keys):
                 cloud_raw = {key: raw.pop(key) for key in cloud_keys if key in raw}
                 raw["cloud"] = cloud_raw

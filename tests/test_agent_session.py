@@ -26,6 +26,7 @@ class TestSession:
 class TestAgentProcess:
     def test_create(self):
         from unittest.mock import MagicMock
+
         loop = MagicMock()
         session = Session.create()
 
@@ -45,6 +46,7 @@ class TestAgentProcess:
 
     def test_to_dict(self):
         from unittest.mock import MagicMock
+
         loop = MagicMock()
         session = Session.create()
 
@@ -63,6 +65,7 @@ class TestAgentProcess:
 
     def test_cancel(self):
         from unittest.mock import MagicMock
+
         loop = MagicMock()
         session = Session.create()
 
@@ -78,6 +81,7 @@ class TestAgentProcess:
 
     def test_duration_none_before_start(self):
         from unittest.mock import MagicMock
+
         loop = MagicMock()
         session = Session.create()
 
@@ -90,6 +94,7 @@ class TestAgentProcess:
 
     def test_session_tracks_processes(self):
         from unittest.mock import MagicMock
+
         loop = MagicMock()
         session = Session.create()
 
@@ -109,6 +114,7 @@ class TestAgentProcess:
 
     def test_session_get_process(self):
         from unittest.mock import MagicMock
+
         loop = MagicMock()
         session = Session.create()
 

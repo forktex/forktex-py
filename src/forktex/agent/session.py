@@ -41,7 +41,8 @@ class Session:
         if not self.processes:
             return True
         return all(
-            p.status in (AgentStatus.COMPLETED, AgentStatus.FAILED, AgentStatus.CANCELLED)
+            p.status
+            in (AgentStatus.COMPLETED, AgentStatus.FAILED, AgentStatus.CANCELLED)
             for p in self.processes
         )
 

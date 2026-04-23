@@ -28,6 +28,7 @@ def _get_project_root() -> str:
 # CLI Root
 # =============================================================================
 
+
 @click.group(invoke_without_command=True)
 @click.version_option(version=CLI_VERSION, prog_name="forktex")
 @click.option("--project", "-d", default=None, help="Project directory")
@@ -42,12 +43,14 @@ async def cli(ctx, project):
     """
     if ctx.invoked_subcommand is None:
         from forktex.agent.intelligence.cli.chat import chat as _chat_fn
+
         await ctx.invoke(_chat_fn, project=project)
 
 
 # =============================================================================
 # Core Commands
 # =============================================================================
+
 
 @cli.command(name="init")
 @click.option("--project", "-d", default=None, help="Project directory")
@@ -58,12 +61,14 @@ async def init_cmd(project):
     """
     project_root = project or _get_project_root()
 
-    console.print(Panel.fit(
-        "[bold]Forktex Setup[/bold]\n\n"
-        "Configure Forktex for this project.\n"
-        f"Project root: [cyan]{project_root}[/cyan]",
-        border_style="blue",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold]Forktex Setup[/bold]\n\n"
+            "Configure Forktex for this project.\n"
+            f"Project root: [cyan]{project_root}[/cyan]",
+            border_style="blue",
+        )
+    )
     console.print()
 
     choice = Prompt.ask(
@@ -75,12 +80,14 @@ async def init_cmd(project):
     if choice in ("intelligence", "both"):
         info("Setting up Intelligence API...")
         from forktex.agent.intelligence.cli.init import init_cmd as intel_init
+
         ctx = click.get_current_context()
         await ctx.invoke(intel_init, project=project_root, save_global=False)
 
     if choice in ("cloud", "both"):
         info("Setting up Cloud...")
         from forktex.agent.cloud.login import login
+
         ctx = click.get_current_context()
         await ctx.invoke(login)
 
@@ -99,22 +106,28 @@ async def info_cmd():
         "Installed modules: intelligence, cloud, agent",
     ]
 
-    console.print(Panel.fit(
-        "\n".join(lines),
-        title="Info",
-        border_style="blue",
-    ))
+    console.print(
+        Panel.fit(
+            "\n".join(lines),
+            title="Info",
+            border_style="blue",
+        )
+    )
 
     # Show intelligence config
-    from forktex_intelligence.config import get_intelligence_settings
+    from forktex.agent.intelligence.settings import get_intelligence_settings
+
     settings = get_intelligence_settings(project_root=project_root)
     console.print("\n[bold]Intelligence API:[/bold]")
     console.print(f"  Endpoint: {settings.endpoint}")
-    console.print(f"  API Key: {'***' + settings.api_key[-4:] if settings.api_key else 'not set'}")
+    console.print(
+        f"  API Key: {'***' + settings.api_key[-4:] if settings.api_key else 'not set'}"
+    )
 
     # Show cloud config
-    from forktex_cloud.config import CloudContext
-    cloud_ctx = CloudContext.load(Path(project_root))
+    from forktex.agent.cloud.settings import load_cloud_context
+
+    cloud_ctx = load_cloud_context(Path(project_root))
     console.print("\n[bold]Cloud:[/bold]")
     console.print(f"  Controller: {cloud_ctx.controller or 'not set'}")
     console.print(f"  Connected: {cloud_ctx.is_connected}")
@@ -129,6 +142,7 @@ info_cmd.name = "info"
 # =============================================================================
 
 from forktex.agent.intelligence.cli import register_intelligence_commands
+
 register_intelligence_commands(cli)
 
 
@@ -137,6 +151,7 @@ register_intelligence_commands(cli)
 # =============================================================================
 
 from forktex.agent.cloud import cloud
+
 cli.add_command(cloud)
 
 
@@ -147,6 +162,7 @@ cli.add_command(cloud)
 from forktex.agent.commands.agents import agents
 from forktex.agent.commands.ground import ground
 from forktex.agent.commands.root_agent import root_agent
+
 agents.add_command(ground)
 agents.add_command(root_agent)
 cli.add_command(agents)
@@ -157,6 +173,7 @@ cli.add_command(agents)
 # =============================================================================
 
 from forktex.agent.scraper.cli import scrape
+
 cli.add_command(scrape)
 
 
@@ -165,6 +182,7 @@ cli.add_command(scrape)
 # =============================================================================
 
 from forktex.agent.fsd import fsd
+
 cli.add_command(fsd)
 
 
@@ -173,6 +191,7 @@ cli.add_command(fsd)
 # =============================================================================
 
 from forktex.agent.commands.git_cli import git
+
 cli.add_command(git)
 
 
@@ -181,12 +200,15 @@ cli.add_command(git)
 # =============================================================================
 
 from forktex.agent.fsd.arch_cli import arch
+
 cli.add_command(arch)
 
 from forktex.agent.fsd.overview import overview
+
 cli.add_command(overview)
 
 from forktex.agent.fsd.present import present
+
 cli.add_command(present)
 
 
@@ -195,12 +217,14 @@ cli.add_command(present)
 # =============================================================================
 
 from forktex.agent.commands.local_cli import local
+
 cli.add_command(local)
 
 
 # =============================================================================
 # Entry Point
 # =============================================================================
+
 
 def main():
     """Main entry point for the CLI."""

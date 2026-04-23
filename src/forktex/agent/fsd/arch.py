@@ -23,8 +23,10 @@ from typing import Optional
 
 # ── Enums ────────────────────────────────────────────────────────────────────
 
+
 class ElementType(str, Enum):
     """C4 element types."""
+
     PERSON = "person"
     SOFTWARE_SYSTEM = "softwareSystem"
     CONTAINER = "container"
@@ -53,6 +55,7 @@ class TechCategory(str, Enum):
 
 
 # ── Value Objects ────────────────────────────────────────────────────────────
+
 
 @dataclass
 class Technology:
@@ -84,6 +87,7 @@ class HealthCheck:
 @dataclass
 class Relationship:
     """A directed relationship between two elements."""
+
     source_id: str
     target_id: str
     description: str
@@ -94,6 +98,7 @@ class Relationship:
 @dataclass
 class GitInfo:
     """Git metadata for a project."""
+
     branch: str = ""
     last_commit_hash: str = ""
     last_commit_msg: str = ""
@@ -105,6 +110,7 @@ class GitInfo:
 @dataclass
 class PackageInfo:
     """A publishable library artifact (from forktex.json packages[])."""
+
     name: str
     path: str
     version: str = ""
@@ -117,19 +123,22 @@ class PackageInfo:
 @dataclass
 class FileNode:
     """A node in the filesystem tree for deep component inspection."""
+
     name: str
     path: str
     is_dir: bool = False
     size: int = 0
-    children: list['FileNode'] = field(default_factory=list)
+    children: list["FileNode"] = field(default_factory=list)
     line_count: int = 0
 
 
 # ── C4 Elements (hierarchical) ──────────────────────────────────────────────
 
+
 @dataclass
 class Component:
     """C4 Level 4 — a module/package within a container (e.g., api/app/engine/)."""
+
     id: str
     name: str
     description: str
@@ -151,6 +160,7 @@ class Component:
 @dataclass
 class Container:
     """C4 Level 3 — a service within a system (maps to forktex.json services[])."""
+
     id: str
     name: str
     description: str
@@ -173,7 +183,9 @@ class Container:
 
     @property
     def tech_summary(self) -> str:
-        return ", ".join(t.name for t in self.technology) if self.technology else "unknown"
+        return (
+            ", ".join(t.name for t in self.technology) if self.technology else "unknown"
+        )
 
     @property
     def is_database(self) -> bool:
@@ -190,6 +202,7 @@ class Container:
 @dataclass
 class SoftwareSystem:
     """C4 Level 2 — a project/platform (maps to one forktex.json)."""
+
     id: str
     name: str
     description: str
@@ -232,6 +245,7 @@ class SoftwareSystem:
 @dataclass
 class ExternalSystem:
     """An external dependency (e.g., OpenAI, Stripe, Cloudflare)."""
+
     id: str
     name: str
     description: str
@@ -245,6 +259,7 @@ class ExternalSystem:
 @dataclass
 class Person:
     """A user/actor in the system context."""
+
     id: str
     name: str
     description: str
@@ -258,6 +273,7 @@ class Person:
 @dataclass
 class Workspace:
     """C4 Level 1 — the full context view. Root of the hierarchy."""
+
     name: str
     description: str
     systems: list[SoftwareSystem] = field(default_factory=list)
@@ -274,11 +290,16 @@ class Workspace:
         for sys in self.systems:
             for c in sys.containers:
                 for p in c.ports:
-                    result.append({
-                        "system": sys.name, "system_id": sys.id,
-                        "service": c.id, "host_port": p.host,
-                        "container_port": p.container, "type": c.service_type.value,
-                    })
+                    result.append(
+                        {
+                            "system": sys.name,
+                            "system_id": sys.id,
+                            "service": c.id,
+                            "host_port": p.host,
+                            "container_port": p.container,
+                            "type": c.service_type.value,
+                        }
+                    )
         return sorted(result, key=lambda x: x["host_port"])
 
     # ── Serialization ────────────────────────────────────────────────────
@@ -289,8 +310,14 @@ class Workspace:
             "name": self.name,
             "description": self.description,
             "systems": [_system_dict(s) for s in self.systems],
-            "external_systems": [{"id": e.id, "name": e.name, "description": e.description} for e in self.external_systems],
-            "persons": [{"id": p.id, "name": p.name, "description": p.description} for p in self.persons],
+            "external_systems": [
+                {"id": e.id, "name": e.name, "description": e.description}
+                for e in self.external_systems
+            ],
+            "persons": [
+                {"id": p.id, "name": p.name, "description": p.description}
+                for p in self.persons
+            ],
             "relationships": [_rel_dict(r) for r in self.relationships],
             "port_allocation": self.all_ports,
         }
@@ -329,8 +356,18 @@ class Workspace:
                             "level": 3,
                             "data": {
                                 "service_type": c.service_type.value,
-                                "technology": [{"name": t.name, "version": t.version, "category": t.category.value} for t in c.technology],
-                                "ports": [{"host": p.host, "container": p.container} for p in c.ports],
+                                "technology": [
+                                    {
+                                        "name": t.name,
+                                        "version": t.version,
+                                        "category": t.category.value,
+                                    }
+                                    for t in c.technology
+                                ],
+                                "ports": [
+                                    {"host": p.host, "container": p.container}
+                                    for p in c.ports
+                                ],
                                 "image": c.image,
                                 "health_path": c.health.path if c.health else None,
                                 "dep_count": len(c.dependencies),
@@ -361,12 +398,17 @@ class Workspace:
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def _system_dict(sys: SoftwareSystem) -> dict:
     return {
-        "id": sys.id, "name": sys.name, "description": sys.description,
+        "id": sys.id,
+        "name": sys.name,
+        "description": sys.description,
         "fsd_level": sys.fsd_level,
-        "api_version": sys.api_version, "provider": sys.provider,
-        "region": sys.region, "deploy_strategy": sys.deploy_strategy,
+        "api_version": sys.api_version,
+        "provider": sys.provider,
+        "region": sys.region,
+        "deploy_strategy": sys.deploy_strategy,
         "domains": sys.domains,
         "git": _git_dict(sys.git) if sys.git else None,
         "packages": [_package_dict(p) for p in sys.packages],
@@ -377,17 +419,24 @@ def _system_dict(sys: SoftwareSystem) -> dict:
 
 def _git_dict(g: GitInfo) -> dict:
     return {
-        "branch": g.branch, "last_commit": g.last_commit_hash,
-        "message": g.last_commit_msg, "date": g.last_commit_date,
-        "dirty": g.dirty, "remote": g.remote_url,
+        "branch": g.branch,
+        "last_commit": g.last_commit_hash,
+        "message": g.last_commit_msg,
+        "date": g.last_commit_date,
+        "dirty": g.dirty,
+        "remote": g.remote_url,
     }
 
 
 def _package_dict(p: PackageInfo) -> dict:
     return {
-        "name": p.name, "path": p.path, "version": p.version,
-        "language": p.language, "publishable": p.publishable,
-        "description": p.description, "manifest_path": p.manifest_path,
+        "name": p.name,
+        "path": p.path,
+        "version": p.version,
+        "language": p.language,
+        "publishable": p.publishable,
+        "description": p.description,
+        "manifest_path": p.manifest_path,
     }
 
 
@@ -403,13 +452,20 @@ def _file_tree_dict(node: FileNode) -> dict:
 
 def _container_dict(c: Container) -> dict:
     return {
-        "id": c.id, "name": c.name, "description": c.description,
+        "id": c.id,
+        "name": c.name,
+        "description": c.description,
         "service_type": c.service_type.value,
-        "technology": [{"name": t.name, "version": t.version, "category": t.category.value} for t in c.technology],
+        "technology": [
+            {"name": t.name, "version": t.version, "category": t.category.value}
+            for t in c.technology
+        ],
         "ports": [{"host": p.host, "container": p.container} for p in c.ports],
         "image": c.image,
         "health_path": c.health.path if c.health else None,
-        "dependencies": [{"name": d.name, "version": d.version} for d in c.dependencies],
+        "dependencies": [
+            {"name": d.name, "version": d.version} for d in c.dependencies
+        ],
         "components": [_component_dict(comp) for comp in c.components],
         "tags": c.tags,
     }
@@ -417,7 +473,9 @@ def _container_dict(c: Container) -> dict:
 
 def _component_dict(comp: Component) -> dict:
     d: dict = {
-        "id": comp.id, "name": comp.name, "description": comp.description,
+        "id": comp.id,
+        "name": comp.name,
+        "description": comp.description,
         "technology": comp.tech_summary,
         "files": comp.files,
         "line_count": comp.line_count,
@@ -428,16 +486,25 @@ def _component_dict(comp: Component) -> dict:
 
 
 def _rel_dict(r: Relationship) -> dict:
-    return {"source": r.source_id, "target": r.target_id, "description": r.description, "protocol": r.protocol}
+    return {
+        "source": r.source_id,
+        "target": r.target_id,
+        "description": r.description,
+        "protocol": r.protocol,
+    }
 
 
 # ── Structurizr DSL Generator ────────────────────────────────────────────────
+
 
 def to_structurizr_dsl(workspace: Workspace) -> str:
     """Generate Structurizr DSL from the typed workspace model."""
     lines = [
         f'workspace "{workspace.name}" "{workspace.description}" {{',
-        "", "    model {", "        !identifiers hierarchical", "",
+        "",
+        "    model {",
+        "        !identifiers hierarchical",
+        "",
     ]
 
     # Persons
@@ -449,26 +516,34 @@ def to_structurizr_dsl(workspace: Workspace) -> str:
     # Systems
     for sys in workspace.systems:
         sid = _dsl_id(sys.id)
-        lines.append(f'        {sid} = softwareSystem "{sys.name}" "{sys.description}" {{')
+        lines.append(
+            f'        {sid} = softwareSystem "{sys.name}" "{sys.description}" {{'
+        )
         for c in sys.containers:
             cid = _dsl_id(c.id)
             tech = c.tech_summary
             tags_str = ""
             if c.is_database:
                 tags_str = ' {\n                tags "Database"\n            }'
-            lines.append(f'            {cid} = container "{c.name}" "{c.description}" "{tech}"{tags_str}')
+            lines.append(
+                f'            {cid} = container "{c.name}" "{c.description}" "{tech}"{tags_str}'
+            )
 
             # Components within container
             for comp in c.components:
                 comp_id = _dsl_id(comp.id)
-                lines.append(f'                {comp_id} = component "{comp.name}" "{comp.description}" "{comp.tech_summary}"')
+                lines.append(
+                    f'                {comp_id} = component "{comp.name}" "{comp.description}" "{comp.tech_summary}"'
+                )
 
         lines.append("        }")
         lines.append("")
 
     # External systems
     for ext in workspace.external_systems:
-        lines.append(f'        {_dsl_id(ext.id)} = softwareSystem "{ext.name}" "{ext.description}"')
+        lines.append(
+            f'        {_dsl_id(ext.id)} = softwareSystem "{ext.name}" "{ext.description}"'
+        )
     if workspace.external_systems:
         lines.append("")
 
@@ -484,7 +559,9 @@ def to_structurizr_dsl(workspace: Workspace) -> str:
     # Cross-system relationships
     for rel in workspace.relationships:
         proto = f' "{rel.protocol}"' if rel.protocol else ""
-        lines.append(f'        {_dsl_id(rel.source_id)} -> {_dsl_id(rel.target_id)} "{rel.description}"{proto}')
+        lines.append(
+            f'        {_dsl_id(rel.source_id)} -> {_dsl_id(rel.target_id)} "{rel.description}"{proto}'
+        )
 
     lines.extend(["    }", ""])
 
@@ -492,31 +569,55 @@ def to_structurizr_dsl(workspace: Workspace) -> str:
     lines.append("    views {")
     # L1: System context
     if len(workspace.systems) > 1:
-        lines.extend(["        systemLandscape {", "            include *", "            autolayout lr", "        }"])
+        lines.extend(
+            [
+                "        systemLandscape {",
+                "            include *",
+                "            autolayout lr",
+                "        }",
+            ]
+        )
 
     # L2: Container per system
     for sys in workspace.systems:
         sid = _dsl_id(sys.id)
-        lines.extend([f"        container {sid} {{", "            include *", "            autolayout lr", "        }"])
+        lines.extend(
+            [
+                f"        container {sid} {{",
+                "            include *",
+                "            autolayout lr",
+                "        }",
+            ]
+        )
 
     # L3: Component per container (if any have components)
     for sys in workspace.systems:
         sid = _dsl_id(sys.id)
         for c in sys.containers:
             if c.components:
-                lines.extend([f"        component {sid}.{_dsl_id(c.id)} {{", "            include *", "            autolayout lr", "        }"])
+                lines.extend(
+                    [
+                        f"        component {sid}.{_dsl_id(c.id)} {{",
+                        "            include *",
+                        "            autolayout lr",
+                        "        }",
+                    ]
+                )
 
     # Styles
-    lines.extend([
-        "", "        styles {",
-        '            element "Person" { shape Person\n                background #0b3c5d\n                color #ffffff }',
-        '            element "Software System" { background #6c6c6c\n                color #ffffff }',
-        '            element "Container" { background #2a7fc1\n                color #ffffff }',
-        '            element "Database" { shape Cylinder\n                background #1a6d3a\n                color #ffffff }',
-        '            element "Component" { background #4a90d9\n                color #ffffff }',
-        '            relationship "Relationship" { color #707070\n                thickness 2 }',
-        "        }",
-    ])
+    lines.extend(
+        [
+            "",
+            "        styles {",
+            '            element "Person" { shape Person\n                background #0b3c5d\n                color #ffffff }',
+            '            element "Software System" { background #6c6c6c\n                color #ffffff }',
+            '            element "Container" { background #2a7fc1\n                color #ffffff }',
+            '            element "Database" { shape Cylinder\n                background #1a6d3a\n                color #ffffff }',
+            '            element "Component" { background #4a90d9\n                color #ffffff }',
+            '            relationship "Relationship" { color #707070\n                thickness 2 }',
+            "        }",
+        ]
+    )
 
     lines.extend(["    }", "}"])
     return "\n".join(lines)

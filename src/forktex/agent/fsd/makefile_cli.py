@@ -6,7 +6,11 @@ from pathlib import Path
 
 import asyncclick as click
 
-from forktex.fsd.loader import ensure_fsd_supported, ensure_manifest_supported, load_standard
+from forktex.fsd.loader import (
+    ensure_fsd_supported,
+    ensure_manifest_supported,
+    load_standard,
+)
 from forktex.fsd.makefile import generate_makefiles
 from forktex.manifest.models import ForktexManifest
 
@@ -30,9 +34,18 @@ async def makefile_group(ctx):
 
 
 @makefile_group.command("generate")
-@click.option("--package", default=None, help="Generate for one package path or package name")
-@click.option("--all-packages", is_flag=True, help="Also generate nested package Makefiles")
-@click.option("--stdout", "to_stdout", is_flag=True, help="Print generated content instead of writing files")
+@click.option(
+    "--package", default=None, help="Generate for one package path or package name"
+)
+@click.option(
+    "--all-packages", is_flag=True, help="Also generate nested package Makefiles"
+)
+@click.option(
+    "--stdout",
+    "to_stdout",
+    is_flag=True,
+    help="Print generated content instead of writing files",
+)
 @click.option("--force", is_flag=True, help="Overwrite existing Makefiles")
 @click.pass_context
 async def generate_cmd(ctx, package, all_packages, to_stdout, force):
@@ -42,7 +55,9 @@ async def generate_cmd(ctx, package, all_packages, to_stdout, force):
     ensure_manifest_supported(manifest)
     standard = load_standard()
     ensure_fsd_supported(standard, manifest.fsd)
-    generated = generate_makefiles(project_root, standard, manifest, package=package, all_packages=all_packages)
+    generated = generate_makefiles(
+        project_root, standard, manifest, package=package, all_packages=all_packages
+    )
 
     if to_stdout:
         for item in generated:
@@ -66,7 +81,9 @@ async def sync_cmd(ctx, package, all_packages):
     ensure_manifest_supported(manifest)
     standard = load_standard()
     ensure_fsd_supported(standard, manifest.fsd)
-    generated = generate_makefiles(project_root, standard, manifest, package=package, all_packages=all_packages)
+    generated = generate_makefiles(
+        project_root, standard, manifest, package=package, all_packages=all_packages
+    )
     written = _write_makefiles(generated, overwrite=True)
     for path in written:
         click.echo(f"Synced {path}")

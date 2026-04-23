@@ -19,9 +19,20 @@ from pathlib import Path
 from typing import Optional
 
 from forktex.agent.fsd.arch import (
-    Component, Container, Dependency, FileNode, GitInfo,
-    HealthCheck, PackageInfo, Port, Relationship, ServiceType,
-    SoftwareSystem, TechCategory, Technology, Workspace,
+    Component,
+    Container,
+    Dependency,
+    FileNode,
+    GitInfo,
+    HealthCheck,
+    PackageInfo,
+    Port,
+    Relationship,
+    ServiceType,
+    SoftwareSystem,
+    TechCategory,
+    Technology,
+    Workspace,
 )
 from forktex.agent.fsd.standard import determine_level
 from forktex.agent.fsd.check import _find_makefile_targets, _discover_services
@@ -40,8 +51,11 @@ def _discover_git(project_root: Path) -> Optional[GitInfo]:
     def _git(cmd: list[str]) -> str:
         try:
             return subprocess.run(
-                ["git"] + cmd, capture_output=True, text=True,
-                cwd=str(project_root), timeout=5,
+                ["git"] + cmd,
+                capture_output=True,
+                text=True,
+                cwd=str(project_root),
+                timeout=5,
             ).stdout.strip()
         except Exception:
             return ""
@@ -54,9 +68,12 @@ def _discover_git(project_root: Path) -> Optional[GitInfo]:
     remote = _git(["config", "--get", "remote.origin.url"])
 
     return GitInfo(
-        branch=branch, last_commit_hash=last_hash[:12] if last_hash else "",
-        last_commit_msg=last_msg[:80], last_commit_date=last_date,
-        dirty=dirty, remote_url=remote,
+        branch=branch,
+        last_commit_hash=last_hash[:12] if last_hash else "",
+        last_commit_msg=last_msg[:80],
+        last_commit_date=last_date,
+        dirty=dirty,
+        remote_url=remote,
     )
 
 
@@ -67,14 +84,16 @@ def _discover_packages(manifest: dict) -> list[PackageInfo]:
     """Read packages[] from forktex.json manifest."""
     pkgs = []
     for p in manifest.get("packages", []):
-        pkgs.append(PackageInfo(
-            name=p.get("name", ""),
-            path=p.get("path", ""),
-            version=p.get("version", ""),
-            language=p.get("language", "python"),
-            publishable=p.get("publishable", False),
-            description=p.get("description", ""),
-        ))
+        pkgs.append(
+            PackageInfo(
+                name=p.get("name", ""),
+                path=p.get("path", ""),
+                version=p.get("version", ""),
+                language=p.get("language", "python"),
+                publishable=p.get("publishable", False),
+                description=p.get("description", ""),
+            )
+        )
     return pkgs
 
 
@@ -82,20 +101,24 @@ def _components_from_domains(project_root: Path, domains) -> list[Component]:
     components = []
     for domain in domains:
         domain_dir = project_root / domain.rel_path
-        components.append(Component(
-            id=domain.id,
-            name=domain.name,
-            description=_infer_component_desc(domain.name),
-            technology=[Technology("Python", category=TechCategory.LANGUAGE)],
-            files=[p.name for p in sorted(domain_dir.glob("*.py"))[:10]],
-            tags=["domain"],
-            file_tree=_build_file_tree(domain_dir, max_depth=2),
-            line_count=domain.line_count,
-        ))
+        components.append(
+            Component(
+                id=domain.id,
+                name=domain.name,
+                description=_infer_component_desc(domain.name),
+                technology=[Technology("Python", category=TechCategory.LANGUAGE)],
+                files=[p.name for p in sorted(domain_dir.glob("*.py"))[:10]],
+                tags=["domain"],
+                file_tree=_build_file_tree(domain_dir, max_depth=2),
+                line_count=domain.line_count,
+            )
+        )
     return components
 
 
-def _discover_package_containers(project_root: Path, graph) -> tuple[list[Container], list[PackageInfo]]:
+def _discover_package_containers(
+    project_root: Path, graph
+) -> tuple[list[Container], list[PackageInfo]]:
     containers: list[Container] = []
     packages: list[PackageInfo] = []
     for package in graph.packages:
@@ -105,29 +128,35 @@ def _discover_package_containers(project_root: Path, graph) -> tuple[list[Contai
         if package.rel_path == ".":
             components = _components_from_domains(project_root, graph.domains)
         else:
-            components = _discover_components(package_dir) if package_dir.is_dir() else []
+            components = (
+                _discover_components(package_dir) if package_dir.is_dir() else []
+            )
 
         container_id = package.name.replace(" ", "-").replace("/", "-")
-        containers.append(Container(
-            id=container_id,
-            name=package.name,
-            description=package.description or f"{package.name} package",
-            service_type=ServiceType.COMPUTE,
-            technology=techs,
-            dependencies=deps,
-            components=components,
-            tags=["Package"],
-            manifest_id=container_id,
-        ))
-        packages.append(PackageInfo(
-            name=package.name,
-            path=package.rel_path,
-            version=package.version,
-            language=package.language,
-            publishable=package.publishable,
-            description=package.description,
-            manifest_path=package.manifest_path,
-        ))
+        containers.append(
+            Container(
+                id=container_id,
+                name=package.name,
+                description=package.description or f"{package.name} package",
+                service_type=ServiceType.COMPUTE,
+                technology=techs,
+                dependencies=deps,
+                components=components,
+                tags=["Package"],
+                manifest_id=container_id,
+            )
+        )
+        packages.append(
+            PackageInfo(
+                name=package.name,
+                path=package.rel_path,
+                version=package.version,
+                language=package.language,
+                publishable=package.publishable,
+                description=package.description,
+                manifest_path=package.manifest_path,
+            )
+        )
     return containers, packages
 
 
@@ -147,17 +176,25 @@ def _build_file_tree(root: Path, max_depth: int = 3, _depth: int = 0) -> FileNod
                 node.children.append(child_node)
             elif child.suffix in (".py", ".ts", ".tsx", ".js", ".jsx"):
                 try:
-                    lines = len(child.read_text(encoding="utf-8", errors="ignore").splitlines())
+                    lines = len(
+                        child.read_text(encoding="utf-8", errors="ignore").splitlines()
+                    )
                 except OSError:
                     lines = 0
-                node.children.append(FileNode(
-                    name=child.name, path=str(child),
-                    is_dir=False, size=child.stat().st_size,
-                    line_count=lines,
-                ))
+                node.children.append(
+                    FileNode(
+                        name=child.name,
+                        path=str(child),
+                        is_dir=False,
+                        size=child.stat().st_size,
+                        line_count=lines,
+                    )
+                )
     elif root.is_file():
         try:
-            node.line_count = len(root.read_text(encoding="utf-8", errors="ignore").splitlines())
+            node.line_count = len(
+                root.read_text(encoding="utf-8", errors="ignore").splitlines()
+            )
             node.size = root.stat().st_size
         except OSError:
             pass
@@ -173,7 +210,9 @@ def _count_lines(directory: Path) -> int:
             if "__pycache__" in str(f) or "node_modules" in str(f):
                 continue
             try:
-                total += len(f.read_text(encoding="utf-8", errors="ignore").splitlines())
+                total += len(
+                    f.read_text(encoding="utf-8", errors="ignore").splitlines()
+                )
             except OSError:
                 pass
     return total
@@ -229,9 +268,16 @@ def _detect_tech_from_dir(d: Path) -> list[Technology]:
         try:
             pkg = json.loads(pkg_json.read_text())
             deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
-            techs.append(Technology("TypeScript" if "typescript" in deps else "JavaScript", category=TechCategory.LANGUAGE))
+            techs.append(
+                Technology(
+                    "TypeScript" if "typescript" in deps else "JavaScript",
+                    category=TechCategory.LANGUAGE,
+                )
+            )
             if "react-native" in deps:
-                techs.append(Technology("React Native", category=TechCategory.FRAMEWORK))
+                techs.append(
+                    Technology("React Native", category=TechCategory.FRAMEWORK)
+                )
             elif "react" in deps:
                 techs.append(Technology("React", category=TechCategory.FRAMEWORK))
             if "expo" in deps or "expo-router" in deps:
@@ -261,7 +307,9 @@ def _read_deps(d: Path, limit: int = 20) -> list[Dependency]:
                 if "=" in line or ">=" in line:
                     parts = line.split("=", 1) if "=" in line else line.split(">=", 1)
                     name = parts[0].strip().strip('"').strip("'")
-                    version = parts[1].strip().strip('"').strip("'") if len(parts) > 1 else ""
+                    version = (
+                        parts[1].strip().strip('"').strip("'") if len(parts) > 1 else ""
+                    )
                     if name and name != "python":
                         deps.append(Dependency(name, version))
             if len(deps) >= limit:
@@ -281,6 +329,7 @@ def _read_deps(d: Path, limit: int = 20) -> list[Dependency]:
 
 # ── C4 Level 3: Component Discovery ─────────────────────────────────────────
 
+
 def _discover_components(service_dir: Path) -> list[Component]:
     """Discover L3 components from a service's filesystem.
 
@@ -296,15 +345,19 @@ def _discover_components(service_dir: Path) -> list[Component]:
             if d.is_dir() and not d.name.startswith(("__", ".")):
                 py_files = list(d.glob("*.py"))
                 if py_files:
-                    components.append(Component(
-                        id=d.name,
-                        name=d.name,
-                        description=_infer_component_desc(d.name),
-                        technology=[Technology("Python", category=TechCategory.LANGUAGE)],
-                        files=[f.name for f in py_files[:10]],
-                        file_tree=_build_file_tree(d, max_depth=2),
-                        line_count=_count_lines(d),
-                    ))
+                    components.append(
+                        Component(
+                            id=d.name,
+                            name=d.name,
+                            description=_infer_component_desc(d.name),
+                            technology=[
+                                Technology("Python", category=TechCategory.LANGUAGE)
+                            ],
+                            files=[f.name for f in py_files[:10]],
+                            file_tree=_build_file_tree(d, max_depth=2),
+                            line_count=_count_lines(d),
+                        )
+                    )
 
     # JavaScript/TypeScript: src/ subdirectories
     src_dir = service_dir / "src"
@@ -313,15 +366,19 @@ def _discover_components(service_dir: Path) -> list[Component]:
             if d.is_dir() and not d.name.startswith((".", "node_modules")):
                 ts_files = list(d.glob("*.ts")) + list(d.glob("*.tsx"))
                 if ts_files:
-                    components.append(Component(
-                        id=d.name,
-                        name=d.name,
-                        description=_infer_component_desc(d.name),
-                        technology=[Technology("TypeScript", category=TechCategory.LANGUAGE)],
-                        files=[f.name for f in ts_files[:10]],
-                        file_tree=_build_file_tree(d, max_depth=2),
-                        line_count=_count_lines(d),
-                    ))
+                    components.append(
+                        Component(
+                            id=d.name,
+                            name=d.name,
+                            description=_infer_component_desc(d.name),
+                            technology=[
+                                Technology("TypeScript", category=TechCategory.LANGUAGE)
+                            ],
+                            files=[f.name for f in ts_files[:10]],
+                            file_tree=_build_file_tree(d, max_depth=2),
+                            line_count=_count_lines(d),
+                        )
+                    )
 
     return components
 
@@ -354,6 +411,7 @@ def _infer_component_desc(name: str) -> str:
 
 
 # ── Project Discovery ────────────────────────────────────────────────────────
+
 
 def discover_project(project_root: Path) -> SoftwareSystem:
     """Build a full C4 model for a project from its files."""
@@ -389,7 +447,11 @@ def discover_project(project_root: Path) -> SoftwareSystem:
     for svc_def in cloud_manifest.get("services", []):
         sid = svc_def["id"]
         svc_type_str = svc_def.get("type", "compute")
-        svc_type = ServiceType(svc_type_str) if svc_type_str in [e.value for e in ServiceType] else ServiceType.COMPUTE
+        svc_type = (
+            ServiceType(svc_type_str)
+            if svc_type_str in [e.value for e in ServiceType]
+            else ServiceType.COMPUTE
+        )
 
         local_svc = local_svcs.get(sid, {})
         image = local_svc.get("image", svc_def.get("image", ""))
@@ -420,13 +482,25 @@ def discover_project(project_root: Path) -> SoftwareSystem:
         components = _discover_components(svc_dir) if svc_dir.is_dir() else []
 
         # Tags
-        tags = ["Database"] if any(t.category == TechCategory.DATABASE for t in techs) else []
+        tags = (
+            ["Database"]
+            if any(t.category == TechCategory.DATABASE for t in techs)
+            else []
+        )
 
         container = Container(
-            id=sid, name=sid, description=svc_def.get("description", f"{sid} service"),
-            service_type=svc_type, technology=techs, ports=ports, image=image,
-            health=health, dependencies=deps, components=components,
-            tags=tags, manifest_id=sid,
+            id=sid,
+            name=sid,
+            description=svc_def.get("description", f"{sid} service"),
+            service_type=svc_type,
+            technology=techs,
+            ports=ports,
+            image=image,
+            health=health,
+            dependencies=deps,
+            components=components,
+            tags=tags,
+            manifest_id=sid,
         )
         containers.append(container)
 
@@ -468,8 +542,11 @@ def discover_project(project_root: Path) -> SoftwareSystem:
     git_info = _discover_git(project_root)
 
     return SoftwareSystem(
-        id=project_root.name, name=project_name, description=f"{project_name} platform",
-        containers=containers, relationships=relationships,
+        id=project_root.name,
+        name=project_name,
+        description=f"{project_name} platform",
+        containers=containers,
+        relationships=relationships,
         api_version=cloud_manifest.get("apiVersion"),
         provider=infra.get("provider"),
         region=infra.get("region"),
@@ -491,7 +568,9 @@ def _discover_library_edges(base_dir: Path) -> list[Relationship]:
         data = json.loads(libs_path.read_text(encoding="utf-8"))
         edges = data.get("dependency_graph", {}).get("edges", [])
         return [
-            Relationship(source_id=src, target_id=tgt, description="depends on", tags=["library"])
+            Relationship(
+                source_id=src, target_id=tgt, description="depends on", tags=["library"]
+            )
             for src, tgt in edges
         ]
     except (json.JSONDecodeError, OSError):

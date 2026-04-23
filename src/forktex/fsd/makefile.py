@@ -22,7 +22,11 @@ def _custom_atoms(
     FSD standard catalog and which provides ``commands``. It is rendered as
     a regular Make target with the override's commands and description.
     """
-    config = package_manifest.fsd if package_manifest and package_manifest.fsd else manifest.fsd
+    config = (
+        package_manifest.fsd
+        if package_manifest and package_manifest.fsd
+        else manifest.fsd
+    )
     if not config:
         return []
     standard_ids = set(standard.atoms_by_id.keys())
@@ -64,8 +68,14 @@ def _normalize_profile_atom_ids(
     *,
     package_manifest: ForktexManifest | None = None,
 ) -> list[str]:
-    applicable, disabled = resolve_applicable_atoms(manifest, package_manifest=package_manifest)
-    config = package_manifest.fsd if package_manifest and package_manifest.fsd else manifest.fsd
+    applicable, disabled = resolve_applicable_atoms(
+        manifest, package_manifest=package_manifest
+    )
+    config = (
+        package_manifest.fsd
+        if package_manifest and package_manifest.fsd
+        else manifest.fsd
+    )
     override_disabled = {
         atom_id
         for atom_id, override in (config.atoms.items() if config else [])
@@ -89,13 +99,19 @@ def _get_atom_override(
     *,
     package_manifest: ForktexManifest | None = None,
 ) -> AtomOverride | None:
-    config = package_manifest.fsd if package_manifest and package_manifest.fsd else manifest.fsd
+    config = (
+        package_manifest.fsd
+        if package_manifest and package_manifest.fsd
+        else manifest.fsd
+    )
     if not config:
         return None
     return config.atoms.get(atom_id)
 
 
-def _make_target_names(atom: Atom, override: AtomOverride | None) -> tuple[str, list[str]]:
+def _make_target_names(
+    atom: Atom, override: AtomOverride | None
+) -> tuple[str, list[str]]:
     canonical = atom.make_targets or [atom.id]
     if override and override.targets:
         primary = override.targets[0]
@@ -109,7 +125,11 @@ def _make_target_comment(atom: Atom, target: str) -> str:
 
 
 def _package_paths(manifest: ForktexManifest) -> tuple[list[str], list[str]]:
-    publishable = [pkg.path for pkg in manifest.packages if pkg.publishable and pkg.language == "python"]
+    publishable = [
+        pkg.path
+        for pkg in manifest.packages
+        if pkg.publishable and pkg.language == "python"
+    ]
     root_paths = [p for p in publishable if p == "."]
     subpaths = [p for p in publishable if p != "."]
     return root_paths, subpaths
@@ -125,7 +145,9 @@ def _deps_lines(manifest: ForktexManifest) -> list[str]:
     ]
 
 
-def _loop_lines(command: str, paths: list[str], *, prefix: str = "", tolerate_failure: bool = False) -> list[str]:
+def _loop_lines(
+    command: str, paths: list[str], *, prefix: str = "", tolerate_failure: bool = False
+) -> list[str]:
     if not paths:
         return []
     suffix = " 2>/dev/null || true" if tolerate_failure else ""
@@ -196,19 +218,36 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
             "\tdone",
             '@echo "All packages published."',
         ]
+    if atom_id == "publish-check":
+        return [
+            "@for pkg in $(PUBLISHABLE_PACKAGES); do \\",
+            '\t\techo "Checking $$pkg..."; \\',
+            "\t\t$(MAKE) -C $$pkg publish-check; \\",
+            "\tdone",
+        ]
+    if atom_id == "publish-test":
+        return [
+            "@for pkg in $(PUBLISHABLE_PACKAGES); do \\",
+            '\t\techo "Test-publishing $$pkg..."; \\',
+            "\t\t$(MAKE) -C $$pkg publish-test; \\",
+            "\tdone",
+        ]
     if atom_id == "ci":
-        return ['@$(MAKE) format-check lint test', '@echo "CI passed for $(PROJECT_NAME)"']
+        return [
+            "@$(MAKE) format-check lint test",
+            '@echo "CI passed for $(PROJECT_NAME)"',
+        ]
     if atom_id == "clean":
         return [
-            'find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name dist -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name build -exec rm -rf {} + 2>/dev/null; true',
+            "find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type d -name dist -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type d -name build -exec rm -rf {} + 2>/dev/null; true",
             'find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type f -name .coverage -delete 2>/dev/null; true',
+            "find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type f -name .coverage -delete 2>/dev/null; true",
         ]
     if atom_id == "help":
         return [
@@ -229,7 +268,9 @@ def _package_atom_commands(atom_id: str, src_dir: str = "src") -> list[str]:
     if atom_id == "lint":
         return [f"ruff check {src_dir}/ tests/ 2>/dev/null || ruff check {src_dir}/"]
     if atom_id == "typecheck":
-        return [f"python -m pyright {src_dir}/ 2>/dev/null || python -m mypy {src_dir}/"]
+        return [
+            f"python -m pyright {src_dir}/ 2>/dev/null || python -m mypy {src_dir}/"
+        ]
     if atom_id == "test":
         return ["pytest tests/ -x -q 2>/dev/null || pytest -x -q"]
     if atom_id == "security-audit":
@@ -238,19 +279,35 @@ def _package_atom_commands(atom_id: str, src_dir: str = "src") -> list[str]:
         return ["rm -rf dist/ && python3 -m build"]
     if atom_id == "publish":
         return ["twine upload dist/*"]
+    if atom_id == "publish-check":
+        return [
+            '@echo "Checking publish readiness..."',
+            "@test -f README.md || (echo 'ERROR: README.md missing' && exit 1)",
+            "@test -f LICENSE || (echo 'ERROR: LICENSE missing' && exit 1)",
+            "python3 -m build 2>/dev/null && twine check dist/* && rm -rf dist/",
+            '@echo "Ready to publish."',
+        ]
+    if atom_id == "publish-test":
+        return [
+            "rm -rf dist/ && python3 -m build",
+            "twine upload --repository testpypi dist/*",
+        ]
     if atom_id == "ci":
-        return ['@$(MAKE) format-check lint test', '@echo "CI passed for $(PROJECT_NAME)"']
+        return [
+            "@$(MAKE) format-check lint test",
+            '@echo "CI passed for $(PROJECT_NAME)"',
+        ]
     if atom_id == "clean":
         return [
-            'find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name dist -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name build -exec rm -rf {} + 2>/dev/null; true',
+            "find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type d -name dist -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type d -name build -exec rm -rf {} + 2>/dev/null; true",
             'find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null; true',
-            'find . -type f -name .coverage -delete 2>/dev/null; true',
+            "find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null; true",
+            "find . -type f -name .coverage -delete 2>/dev/null; true",
         ]
     if atom_id == "help":
         return [
@@ -274,7 +331,9 @@ def _render_target(
     commands: list[str],
 ) -> list[str]:
     lines = [_make_target_comment(atom, target)]
-    lines.extend(f"\t{line}" if not line.startswith("\t") else line for line in commands)
+    lines.extend(
+        f"\t{line}" if not line.startswith("\t") else line for line in commands
+    )
     # Aliases declared as separate no-op rules AFTER the target's commands.
     # Putting them before the commands would make Make attach the commands
     # to the alias rule instead of the target itself.
@@ -321,16 +380,26 @@ def _root_secondary_targets() -> list[str]:
 
 def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> str:
     atom_ids = _normalize_profile_atom_ids(standard, manifest)
-    atoms = [standard.atoms_by_id[atom_id] for atom_id in atom_ids if atom_id in standard.atoms_by_id]
+    atoms = [
+        standard.atoms_by_id[atom_id]
+        for atom_id in atom_ids
+        if atom_id in standard.atoms_by_id
+    ]
     _, subpaths = _package_paths(manifest)
-    publishable_paths = [pkg.path for pkg in manifest.packages if pkg.publishable and pkg.language == "python"]
+    publishable_paths = [
+        pkg.path
+        for pkg in manifest.packages
+        if pkg.publishable and pkg.language == "python"
+    ]
 
     lines = [
         "# Generated by `forktex fsd makefile sync`",
         "# Unit: root project",
         f"PROJECT_NAME := {manifest.project_name or manifest.name or 'project'}",
         f"SUBPACKAGES := {' '.join(subpaths)}" if subpaths else "SUBPACKAGES :=",
-        f"PUBLISHABLE_PACKAGES := {' '.join(publishable_paths)}" if publishable_paths else "PUBLISHABLE_PACKAGES :=",
+        f"PUBLISHABLE_PACKAGES := {' '.join(publishable_paths)}"
+        if publishable_paths
+        else "PUBLISHABLE_PACKAGES :=",
         "",
     ]
 
@@ -338,13 +407,19 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         override = _get_atom_override(manifest, atom.id)
         target, aliases = _make_target_names(atom, override)
         commands = _override_commands(_root_atom_commands(atom.id, manifest), override)
-        lines.extend(_render_target(atom, target=target, aliases=aliases, commands=commands))
+        lines.extend(
+            _render_target(atom, target=target, aliases=aliases, commands=commands)
+        )
         lines.append("")
 
     custom = _custom_atoms(manifest, standard)
     for synthetic, override in custom:
         target, aliases = _make_target_names(synthetic, override)
-        lines.extend(_render_target(synthetic, target=target, aliases=aliases, commands=override.commands))
+        lines.extend(
+            _render_target(
+                synthetic, target=target, aliases=aliases, commands=override.commands
+            )
+        )
         lines.append("")
 
     lines.extend(_root_secondary_targets())
@@ -353,7 +428,29 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         "install-global: ## Install the latest local forktex CLI globally in editable mode",
         "\tpip install --break-system-packages -e .",
         "",
-        ".PHONY: " + " ".join(_dedupe([_make_target_names(atom, _get_atom_override(manifest, atom.id))[0] for atom in atoms] + custom_target_names + ["local", "dev", "local-down", "dev-down", "local-logs", "dev-logs", "format-check", "lint-fix", "test-cov", "deps-lock", "install-global"])),
+        ".PHONY: "
+        + " ".join(
+            _dedupe(
+                [
+                    _make_target_names(atom, _get_atom_override(manifest, atom.id))[0]
+                    for atom in atoms
+                ]
+                + custom_target_names
+                + [
+                    "local",
+                    "dev",
+                    "local-down",
+                    "dev-down",
+                    "local-logs",
+                    "dev-logs",
+                    "format-check",
+                    "lint-fix",
+                    "test-cov",
+                    "deps-lock",
+                    "install-global",
+                ]
+            )
+        ),
     ]
     lines.extend(extra_targets)
     return "\n".join(lines).rstrip() + "\n"
@@ -382,13 +479,23 @@ def generate_package_makefile(
     *,
     package_dir: Path | None = None,
 ) -> str:
-    atom_ids = _normalize_profile_atom_ids(standard, manifest, package_manifest=package_manifest)
-    atoms = [standard.atoms_by_id[atom_id] for atom_id in atom_ids if atom_id in standard.atoms_by_id]
+    atom_ids = _normalize_profile_atom_ids(
+        standard, manifest, package_manifest=package_manifest
+    )
+    atoms = [
+        standard.atoms_by_id[atom_id]
+        for atom_id in atom_ids
+        if atom_id in standard.atoms_by_id
+    ]
 
     # Detect package layout: prefer `app/` (FastAPI convention) when present,
     # fall back to `src/` (Python library convention).
     src_dir = "src"
-    if package_dir is not None and (package_dir / "app").is_dir() and not (package_dir / "src").is_dir():
+    if (
+        package_dir is not None
+        and (package_dir / "app").is_dir()
+        and not (package_dir / "src").is_dir()
+    ):
         src_dir = "app"
 
     lines = [
@@ -399,23 +506,41 @@ def generate_package_makefile(
     ]
 
     for atom in atoms:
-        override = _get_atom_override(manifest, atom.id, package_manifest=package_manifest)
+        override = _get_atom_override(
+            manifest, atom.id, package_manifest=package_manifest
+        )
         target, aliases = _make_target_names(atom, override)
-        commands = _override_commands(_package_atom_commands(atom.id, src_dir), override)
-        lines.extend(_render_target(atom, target=target, aliases=aliases, commands=commands))
+        commands = _override_commands(
+            _package_atom_commands(atom.id, src_dir), override
+        )
+        lines.extend(
+            _render_target(atom, target=target, aliases=aliases, commands=commands)
+        )
         lines.append("")
 
     custom = _custom_atoms(manifest, standard, package_manifest=package_manifest)
     for synthetic, override in custom:
         target, aliases = _make_target_names(synthetic, override)
-        lines.extend(_render_target(synthetic, target=target, aliases=aliases, commands=override.commands))
+        lines.extend(
+            _render_target(
+                synthetic, target=target, aliases=aliases, commands=override.commands
+            )
+        )
         lines.append("")
 
     lines.extend(_package_secondary_targets(src_dir))
 
     custom_target_names = [_make_target_names(s, o)[0] for s, o in custom]
     phony_targets = _dedupe(
-        [_make_target_names(atom, _get_atom_override(manifest, atom.id, package_manifest=package_manifest))[0] for atom in atoms]
+        [
+            _make_target_names(
+                atom,
+                _get_atom_override(
+                    manifest, atom.id, package_manifest=package_manifest
+                ),
+            )[0]
+            for atom in atoms
+        ]
         + custom_target_names
         + ["format-check", "lint-fix"]
     )
@@ -423,10 +548,23 @@ def generate_package_makefile(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def generate_makefiles(project_root: Path, standard: FSDStandard, manifest: ForktexManifest, *, package: str | None = None, all_packages: bool = False) -> list[GeneratedMakefile]:
+def generate_makefiles(
+    project_root: Path,
+    standard: FSDStandard,
+    manifest: ForktexManifest,
+    *,
+    package: str | None = None,
+    all_packages: bool = False,
+) -> list[GeneratedMakefile]:
     """Generate one or more Makefiles for the current project."""
 
-    generated = [GeneratedMakefile(unit_name=manifest.project_name or manifest.name or project_root.name, unit_path=project_root, content=generate_root_makefile(standard, manifest))]
+    generated = [
+        GeneratedMakefile(
+            unit_name=manifest.project_name or manifest.name or project_root.name,
+            unit_path=project_root,
+            content=generate_root_makefile(standard, manifest),
+        )
+    ]
 
     if not (package or all_packages):
         return generated
@@ -438,7 +576,11 @@ def generate_makefiles(project_root: Path, standard: FSDStandard, manifest: Fork
     for pkg in manifest.packages:
         if pkg.path == ".":
             continue
-        if selected_paths and pkg.path not in selected_paths and pkg.name not in selected_paths:
+        if (
+            selected_paths
+            and pkg.path not in selected_paths
+            and pkg.name not in selected_paths
+        ):
             continue
         manifest_path = project_root / pkg.path / "forktex.json"
         if not manifest_path.is_file():
@@ -446,7 +588,9 @@ def generate_makefiles(project_root: Path, standard: FSDStandard, manifest: Fork
         package_manifest = ForktexManifest.load(manifest_path)
         generated.append(
             GeneratedMakefile(
-                unit_name=package_manifest.project_name or package_manifest.name or pkg.name,
+                unit_name=package_manifest.project_name
+                or package_manifest.name
+                or pkg.name,
                 unit_path=project_root / pkg.path,
                 content=generate_package_makefile(
                     standard,

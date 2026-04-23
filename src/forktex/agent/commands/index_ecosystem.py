@@ -74,7 +74,9 @@ def _discover_agents_md(root: Path) -> list[tuple[str, str]]:
 @click.command(name="index-ecosystem")
 @click.option("--dir", "-d", "root_dir", default=None, help="Ecosystem root directory")
 @click.option("--collection", "-c", default=COLLECTION_NAME, help="Collection name")
-@click.option("--dry-run", is_flag=True, help="Show what would be indexed without uploading")
+@click.option(
+    "--dry-run", is_flag=True, help="Show what would be indexed without uploading"
+)
 async def index_ecosystem(root_dir: str | None, collection: str, dry_run: bool):
     """Index ecosystem knowledge into Intelligence API for RAG queries.
 
@@ -140,7 +142,9 @@ async def index_ecosystem(root_dir: str | None, collection: str, dry_run: bool):
 
             # Create or find collection
             collections_resp = await ai.list_collections()
-            coll_list = collections_resp.get("collections", collections_resp.get("data", []))
+            coll_list = collections_resp.get(
+                "collections", collections_resp.get("data", [])
+            )
             existing_coll = None
             for c in coll_list:
                 if c.get("name") == collection:
@@ -168,7 +172,11 @@ async def index_ecosystem(root_dir: str | None, collection: str, dry_run: bool):
                 content = full.read_bytes()
                 filename = f"{label}--{Path(rel_path).name}"
 
-                content_type = "application/json" if rel_path.endswith(".json") else "text/markdown"
+                content_type = (
+                    "application/json"
+                    if rel_path.endswith(".json")
+                    else "text/markdown"
+                )
 
                 try:
                     await ai.upload_document(
@@ -182,9 +190,13 @@ async def index_ecosystem(root_dir: str | None, collection: str, dry_run: bool):
                 except Exception as e:
                     console.print(f"  [red]Failed[/red] {filename}: {e}")
 
-            console.print(f"\n[bold green]Indexed {uploaded}/{len(existing)} files into '{collection}'[/bold green]")
+            console.print(
+                f"\n[bold green]Indexed {uploaded}/{len(existing)} files into '{collection}'[/bold green]"
+            )
             console.print(f"\nAgents can now search this knowledge:")
-            console.print(f"  [cyan]forktex ask 'What database does the network platform use?'[/cyan]")
+            console.print(
+                f"  [cyan]forktex ask 'What database does the network platform use?'[/cyan]"
+            )
             console.print(f"  [cyan]forktex ask 'How are workflows structured?'[/cyan]")
 
     except Exception as e:

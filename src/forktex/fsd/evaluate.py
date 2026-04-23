@@ -16,6 +16,7 @@ from forktex.fsd.profiles import resolve_applicable_atoms
 
 class AtomStatus(str, Enum):
     """Result of evaluating a single atom."""
+
     SATISFIED = "satisfied"
     FAILED = "failed"
     SKIPPED = "skipped"
@@ -25,6 +26,7 @@ class AtomStatus(str, Enum):
 @dataclass
 class AtomResult:
     """Evaluation result for a single atom."""
+
     id: str
     name: str
     domain: str
@@ -41,6 +43,7 @@ class AtomResult:
 @dataclass
 class FacetResult:
     """Evaluation result for a facet."""
+
     id: str
     name: str
     question: str
@@ -53,6 +56,7 @@ class FacetResult:
 @dataclass
 class LevelResult:
     """Evaluation result for a level."""
+
     id: str
     name: str
     description: str
@@ -63,6 +67,7 @@ class LevelResult:
 @dataclass
 class FSDResult:
     """Complete evaluation result."""
+
     fsd_version: str
     project: str
     level: str
@@ -164,26 +169,40 @@ def _evaluate_atom(
 
     if applicable_atoms is not None and atom.id not in applicable_atoms:
         return AtomResult(
-            id=atom.id, name=atom.name, domain=atom.domain, scope=scope,
-            status=AtomStatus.OUT_OF_SCOPE, detail="Not applicable for active profile",
-            iso=iso_refs, required_targets=make_tgts,
+            id=atom.id,
+            name=atom.name,
+            domain=atom.domain,
+            scope=scope,
+            status=AtomStatus.OUT_OF_SCOPE,
+            detail="Not applicable for active profile",
+            iso=iso_refs,
+            required_targets=make_tgts,
         )
 
     # Check if skipped
     if atom.id in skip_set or atom.domain in skip_set:
         return AtomResult(
-            id=atom.id, name=atom.name, domain=atom.domain, scope=scope,
-            status=AtomStatus.SKIPPED, detail="Skipped by project config",
-            iso=iso_refs, required_targets=make_tgts,
+            id=atom.id,
+            name=atom.name,
+            domain=atom.domain,
+            scope=scope,
+            status=AtomStatus.SKIPPED,
+            detail="Skipped by project config",
+            iso=iso_refs,
+            required_targets=make_tgts,
         )
 
     # Org-scoped atoms are out-of-scope for project-level checks
     if scope == "organization":
         return AtomResult(
-            id=atom.id, name=atom.name, domain=atom.domain, scope=scope,
+            id=atom.id,
+            name=atom.name,
+            domain=atom.domain,
+            scope=scope,
             status=AtomStatus.OUT_OF_SCOPE,
             detail="Organization-scoped — evaluated at org level",
-            iso=iso_refs, required_targets=make_tgts,
+            iso=iso_refs,
+            required_targets=make_tgts,
         )
 
     # Apply overrides if present
@@ -191,9 +210,14 @@ def _evaluate_atom(
     override = overrides.get(atom.id)
     if atom.id in profile_disabled or (override and override.disabled):
         return AtomResult(
-            id=atom.id, name=atom.name, domain=atom.domain, scope=scope,
-            status=AtomStatus.SKIPPED, detail=override.reason if override else "Disabled by active profile",
-            iso=iso_refs, required_targets=make_tgts,
+            id=atom.id,
+            name=atom.name,
+            domain=atom.domain,
+            scope=scope,
+            status=AtomStatus.SKIPPED,
+            detail=override.reason if override else "Disabled by active profile",
+            iso=iso_refs,
+            required_targets=make_tgts,
         )
 
     if override and override.resolve:
@@ -204,7 +228,9 @@ def _evaluate_atom(
         target_names = override.targets + override.aliases
         make_tgts = target_names
         resolve_rules = [
-            rule.model_copy(update={"any_of": target_names, "all_of": []}) if rule.strategy == "make" else rule
+            rule.model_copy(update={"any_of": target_names, "all_of": []})
+            if rule.strategy == "make"
+            else rule
             for rule in resolve_rules
         ]
 
@@ -217,21 +243,29 @@ def _evaluate_atom(
             if strategy == "make":
                 present = [t for t in (rule.any_of + rule.all_of) if t in make_targets]
             return AtomResult(
-                id=atom.id, name=atom.name, domain=atom.domain, scope=scope,
+                id=atom.id,
+                name=atom.name,
+                domain=atom.domain,
+                scope=scope,
                 status=AtomStatus.SATISFIED,
                 strategy_used=strategy,
                 detail=f"Satisfied via {strategy}",
-                iso=iso_refs, required_targets=make_tgts,
+                iso=iso_refs,
+                required_targets=make_tgts,
                 present_targets=present,
             )
 
     # Not satisfied
     missing = [t for t in make_tgts if t not in make_targets] if make_tgts else []
     return AtomResult(
-        id=atom.id, name=atom.name, domain=atom.domain, scope=scope,
+        id=atom.id,
+        name=atom.name,
+        domain=atom.domain,
+        scope=scope,
         status=AtomStatus.FAILED,
         detail="No resolve rule satisfied",
-        iso=iso_refs, required_targets=make_tgts,
+        iso=iso_refs,
+        required_targets=make_tgts,
         missing_targets=missing,
     )
 
@@ -257,7 +291,11 @@ def evaluate(
     skip_set: set[str] = set(config.skip) if config else set()
     overrides = config.atoms if config else {}
     target_level = config.target_level if config else None
-    applicable_atoms, profile_disabled = resolve_applicable_atoms(manifest, package_manifest=None) if manifest else (None, set())
+    applicable_atoms, profile_disabled = (
+        resolve_applicable_atoms(manifest, package_manifest=None)
+        if manifest
+        else (None, set())
+    )
 
     # Evaluate atoms
     atom_results: list[AtomResult] = []
@@ -266,9 +304,14 @@ def evaluate(
     for atom in standard.atoms:
         scope = _get_domain_scope(standard, atom.domain)
         result = _evaluate_atom(
-            atom, scope=scope, make_targets=make_targets,
-            project_root=project_root, skip_set=skip_set, overrides=overrides,
-            applicable_atoms=applicable_atoms, profile_disabled=profile_disabled,
+            atom,
+            scope=scope,
+            make_targets=make_targets,
+            project_root=project_root,
+            skip_set=skip_set,
+            overrides=overrides,
+            applicable_atoms=applicable_atoms,
+            profile_disabled=profile_disabled,
         )
         atom_results.append(result)
         atom_status[atom.id] = result.status
@@ -283,18 +326,28 @@ def evaluate(
         missing = []
         for aid in required_atom_ids:
             status = atom_status.get(aid, AtomStatus.FAILED)
-            if status in (AtomStatus.SATISFIED, AtomStatus.SKIPPED, AtomStatus.OUT_OF_SCOPE):
+            if status in (
+                AtomStatus.SATISFIED,
+                AtomStatus.SKIPPED,
+                AtomStatus.OUT_OF_SCOPE,
+            ):
                 sat.append(aid)
             else:
                 missing.append(aid)
 
         ok = len(missing) == 0
         facet_satisfied[facet.id] = ok
-        facet_results.append(FacetResult(
-            id=facet.id, name=facet.name, question=facet.question,
-            satisfied=ok, required_atoms=required_atom_ids,
-            satisfied_atoms=sat, missing_atoms=missing,
-        ))
+        facet_results.append(
+            FacetResult(
+                id=facet.id,
+                name=facet.name,
+                question=facet.question,
+                satisfied=ok,
+                required_atoms=required_atom_ids,
+                satisfied_atoms=sat,
+                missing_atoms=missing,
+            )
+        )
 
     # Determine level
     achieved_level = standard.levels[0] if standard.levels else None
@@ -317,10 +370,15 @@ def evaluate(
         if ok:
             achieved_level = level
 
-        level_results.append(LevelResult(
-            id=level.id, name=level.name, description=level.description,
-            achieved=ok, required_atoms=sorted(required),
-        ))
+        level_results.append(
+            LevelResult(
+                id=level.id,
+                name=level.name,
+                description=level.description,
+                achieved=ok,
+                required_atoms=sorted(required),
+            )
+        )
 
     level_id = achieved_level.id if achieved_level else "L0"
     level_name = achieved_level.name if achieved_level else "Bootstrap"

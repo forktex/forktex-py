@@ -62,7 +62,9 @@ def _load_architecture(root: Path) -> str:
     try:
         data = json.loads(latest.read_text(encoding="utf-8"))
         systems = data.get("systems", [])
-        summary_lines = [f"Architecture snapshot ({data.get('generated_at', 'unknown')}):"]
+        summary_lines = [
+            f"Architecture snapshot ({data.get('generated_at', 'unknown')}):"
+        ]
         for sys in systems:
             name = sys.get("name", "?")
             level = sys.get("fsd_level", "?")
@@ -84,7 +86,9 @@ def _load_libraries(root: Path) -> str:
         libs = data.get("libraries", [])
         lines = ["Library catalog:"]
         for lib in libs:
-            lines.append(f"  - {lib['name']} v{lib.get('version', '?')} ({lib['path']}) — {lib.get('description', '')}")
+            lines.append(
+                f"  - {lib['name']} v{lib.get('version', '?')} ({lib['path']}) — {lib.get('description', '')}"
+            )
 
         edges = data.get("dependency_graph", {}).get("edges", [])
         if edges:
@@ -134,8 +138,15 @@ def _build_system_prompt(root: Path) -> str:
 
 @click.command(name="root")
 @click.option("--dir", "-d", "root_dir", default=None, help="Ecosystem root directory")
-@click.option("--task", "-t", default=None, help="One-shot task (otherwise interactive)")
-@click.option("--type", "agent_type", default="assistant", help="Agent type (assistant, developer, researcher)")
+@click.option(
+    "--task", "-t", default=None, help="One-shot task (otherwise interactive)"
+)
+@click.option(
+    "--type",
+    "agent_type",
+    default="assistant",
+    help="Agent type (assistant, developer, researcher)",
+)
 async def root_agent(root_dir: str | None, task: str | None, agent_type: str):
     """Start the ecosystem-aware root agent.
 
@@ -165,17 +176,22 @@ async def root_agent(root_dir: str | None, task: str | None, agent_type: str):
     rag_available = False
     try:
         from forktex.intelligence import Intelligence
+
         async with Intelligence() as ai:
             collections = await ai.list_collections()
             for c in collections.get("data", []):
                 if c.get("name") == ECOSYSTEM_COLLECTION:
                     rag_available = True
                     doc_count = c.get("document_count", 0)
-                    info(f"RAG collection '{ECOSYSTEM_COLLECTION}': {doc_count} documents")
+                    info(
+                        f"RAG collection '{ECOSYSTEM_COLLECTION}': {doc_count} documents"
+                    )
                     break
 
         if not rag_available:
-            info("RAG collection not indexed. Run: forktex intelligence index-ecosystem")
+            info(
+                "RAG collection not indexed. Run: forktex intelligence index-ecosystem"
+            )
     except Exception:
         info("Intelligence API not available — running with static context only")
 
@@ -195,18 +211,23 @@ async def root_agent(root_dir: str | None, task: str | None, agent_type: str):
         tool_server = IntelligenceToolServer(str(root))
         tools = tool_server.get_tool_schemas()
 
-        agent = LocalAgentLoop(system=system_prompt, tools=tools, tool_server=tool_server)
+        agent = LocalAgentLoop(
+            system=system_prompt, tools=tools, tool_server=tool_server
+        )
         response = await agent.run(task)
 
         console.print("\n[bold]Response:[/bold]\n")
         console.print(response.text)
 
         if response.tool_calls_made:
-            console.print(f"\n[dim]{response.tool_calls_made} tool calls, "
-                          f"{response.input_tokens + response.output_tokens} tokens[/dim]")
+            console.print(
+                f"\n[dim]{response.tool_calls_made} tool calls, "
+                f"{response.input_tokens + response.output_tokens} tokens[/dim]"
+            )
     else:
         # Interactive mode — delegate to chat with enriched system prompt
         from forktex.agent.intelligence.cli.chat import chat as _chat_fn
+
         ctx = click.get_current_context()
         # Store system prompt in context for the chat to pick up
         ctx.ensure_object(dict)

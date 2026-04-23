@@ -99,15 +99,19 @@ class TestAgentTypeRegistry:
     def test_load_custom_from_file(self, temp_dir):
         agents_dir = Path(temp_dir) / ".forktex" / "agents"
         agents_dir.mkdir(parents=True)
-        (agents_dir / "types.json").write_text(json.dumps([
-            {
-                "name": "my_agent",
-                "description": "My custom agent",
-                "allowed_tools": ["read_file", "bash_execute"],
-                "can_spawn": True,
-                "system_prompt": "You are my custom agent.",
-            }
-        ]))
+        (agents_dir / "types.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "name": "my_agent",
+                        "description": "My custom agent",
+                        "allowed_tools": ["read_file", "bash_execute"],
+                        "can_spawn": True,
+                        "system_prompt": "You are my custom agent.",
+                    }
+                ]
+            )
+        )
 
         registry = AgentTypeRegistry()
         registry.load_custom(temp_dir)

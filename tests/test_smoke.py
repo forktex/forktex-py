@@ -28,6 +28,7 @@ class TestFilesystemToolsSmoke:
     @pytest.fixture
     def fs_tools(self, temp_dir_with_files):
         from forktex.agent.tools.filesystem import create_filesystem_tools
+
         return {t.name: t for t in create_filesystem_tools(temp_dir_with_files)}
 
     @pytest.mark.asyncio
@@ -44,7 +45,9 @@ class TestFilesystemToolsSmoke:
 
     @pytest.mark.asyncio
     async def test_patch_file(self, fs_tools, temp_dir_with_files):
-        r = await fs_tools["patch_file"].execute(path="main.py", old_str="hello", new_str="goodbye")
+        r = await fs_tools["patch_file"].execute(
+            path="main.py", old_str="hello", new_str="goodbye"
+        )
         assert not r.is_error
         assert "goodbye" in (Path(temp_dir_with_files) / "main.py").read_text()
 
@@ -98,6 +101,7 @@ class TestBashToolsSmoke:
     @pytest.fixture
     def bash_tools(self, temp_dir):
         from forktex.agent.tools.bash import create_bash_tools
+
         return {t.name: t for t in create_bash_tools(temp_dir)}
 
     @pytest.mark.asyncio
@@ -114,7 +118,9 @@ class TestBashToolsSmoke:
 
     @pytest.mark.asyncio
     async def test_multiline_output(self, bash_tools):
-        r = await bash_tools["bash_execute"].execute(command="echo 'line1'; echo 'line2'; echo 'line3'")
+        r = await bash_tools["bash_execute"].execute(
+            command="echo 'line1'; echo 'line2'; echo 'line3'"
+        )
         assert not r.is_error
         assert "line1" in r.content
         assert "line3" in r.content
@@ -138,6 +144,7 @@ class TestGitToolsSmoke:
     @pytest.fixture
     def git_tools(self, temp_git_repo):
         from forktex.agent.tools.git import create_git_tools
+
         return {t.name: t for t in create_git_tools(temp_git_repo)}
 
     @pytest.mark.asyncio
@@ -184,6 +191,7 @@ class TestToolServerSmoke:
 
     def test_creates_all_tool_groups(self, temp_dir_with_files):
         from forktex.agent.tools.server import ToolServer
+
         server = ToolServer(temp_dir_with_files, enable_web=False)
         names = server.list_tools()
         # filesystem
@@ -204,6 +212,7 @@ class TestToolServerSmoke:
 
     def test_schemas_are_valid_json_schema(self, temp_dir_with_files):
         from forktex.agent.tools.server import ToolServer
+
         server = ToolServer(temp_dir_with_files, enable_web=False)
         schemas = server.get_schemas()
         for s in schemas:
@@ -215,6 +224,7 @@ class TestToolServerSmoke:
     @pytest.mark.asyncio
     async def test_call_through_server(self, temp_dir_with_files):
         from forktex.agent.tools.server import ToolServer
+
         server = ToolServer(temp_dir_with_files, enable_web=False)
         r = await server.call("read_file", path="main.py")
         assert not r.is_error
@@ -223,6 +233,7 @@ class TestToolServerSmoke:
     @pytest.mark.asyncio
     async def test_call_unknown_tool(self, temp_dir_with_files):
         from forktex.agent.tools.server import ToolServer
+
         server = ToolServer(temp_dir_with_files, enable_web=False)
         r = await server.call("nonexistent_tool")
         assert r.is_error
@@ -234,14 +245,15 @@ class TestToolServerSmoke:
 
 
 class TestConfigSmoke:
-
     def test_default_settings(self):
         from forktex.config import Settings
+
         s = Settings()
         assert s.debug is False
 
     def test_env_loading(self, monkeypatch):
         from forktex.config import Settings, reset_settings
+
         reset_settings()
         monkeypatch.setenv("FORKTEX_DEBUG", "true")
         s = Settings.load()
@@ -249,11 +261,13 @@ class TestConfigSmoke:
 
     def test_override_kwargs(self):
         from forktex.config import Settings
+
         s = Settings.load(debug=True)
         assert s.debug is True
 
     def test_get_settings_singleton(self):
         from forktex.config import get_settings, reset_settings
+
         reset_settings()
         s1 = get_settings(debug=True)
         s2 = get_settings()
@@ -266,22 +280,27 @@ class TestConfigSmoke:
 
 
 class TestCLISmoke:
-
     def test_imports(self):
         from forktex.agent.cli import cli, main
+
         assert cli is not None
         assert main is not None
 
     def test_package_exports(self):
         from forktex import (
-            StateManager, Settings, get_settings,
-            generate_id, current_timestamp,
+            StateManager,
+            Settings,
+            get_settings,
+            generate_id,
+            current_timestamp,
         )
+
         assert StateManager is not None
         assert Settings is not None
 
     def test_version(self):
         from forktex import __version__
+
         assert __version__ == "0.5.0"
 
 
@@ -297,17 +316,20 @@ class TestCoreLibraryImports:
         from forktex.core.state import StateManager
         from forktex.core.utils import generate_id, current_timestamp
         from forktex.core.paths import get_global_config_dir, get_project_config_dir
+
         assert StateManager is not None
         assert generate_id is not None
 
     def test_config_import(self):
         from forktex.config import Settings, get_settings
+
         assert Settings is not None
 
     def test_intelligence_library_imports(self):
         from forktex_intelligence.config import IntelligenceSettings
         from forktex_intelligence.client.client import ForktexIntelligenceClient
         from forktex_intelligence.streams import SSEEvent, SSEEventType
+
         assert IntelligenceSettings is not None
         assert ForktexIntelligenceClient is not None
         assert SSEEvent is not None
@@ -328,6 +350,7 @@ class TestCoreLibraryImports:
             SSEEvent,
             SSEEventType,
         )
+
         assert Intelligence is not None
         assert Response is not None
         assert StructuredResponse is not None
@@ -352,6 +375,7 @@ class TestCoreLibraryImports:
             SSEEvent,
             SSEEventType,
         )
+
         assert Intelligence is not None
         assert Response is not None
         assert ForktexIntelligenceClient is not None
@@ -371,6 +395,7 @@ class TestCoreLibraryImports:
             TokenResponse,
             EventRead,
         )
+
         assert ForktexCloudClient is not None
         assert CloudContext is not None
         assert Manifest is not None

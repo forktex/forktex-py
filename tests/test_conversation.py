@@ -35,7 +35,9 @@ class TestConversation:
 
     def test_add_assistant_tool_calls(self):
         c = Conversation()
-        tool_calls = [{"id": "tc-1", "name": "read_file", "arguments": {"path": "x.py"}}]
+        tool_calls = [
+            {"id": "tc-1", "name": "read_file", "arguments": {"path": "x.py"}}
+        ]
         c.add_assistant_tool_calls("Let me read that file.", tool_calls)
         msg = c.messages[0]
         assert msg["role"] == "assistant"
@@ -44,7 +46,9 @@ class TestConversation:
 
     def test_add_assistant_tool_calls_empty_text(self):
         c = Conversation()
-        c.add_assistant_tool_calls("", [{"id": "tc-1", "name": "bash", "arguments": {}}])
+        c.add_assistant_tool_calls(
+            "", [{"id": "tc-1", "name": "bash", "arguments": {}}]
+        )
         assert c.messages[0]["content"] == ""
 
     def test_clear(self):

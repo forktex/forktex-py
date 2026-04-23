@@ -31,12 +31,14 @@ async def init_cmd(project, save_global):
 
     project_root = project or str(Path.cwd().absolute())
 
-    console.print(Panel.fit(
-        "[bold]Intelligence API Setup[/bold]\n\n"
-        "Connect to the ForkTex Intelligence API.\n"
-        "This is required for: forktex chat, forktex ask, forktex run",
-        border_style="blue",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold]Intelligence API Setup[/bold]\n\n"
+            "Connect to the ForkTex Intelligence API.\n"
+            "This is required for: forktex chat, forktex ask, forktex run",
+            border_style="blue",
+        )
+    )
     console.print()
 
     # 1. Endpoint
@@ -69,8 +71,17 @@ async def init_cmd(project, save_global):
             if is_new:
                 with spinner("Creating account..."):
                     result = await client.register(email, password)
-                api_key = result.get("api_key", "")
-                org_slug = result.get("org_slug", "")
+                # register() returns JWT, not API key — create one
+                orgs = await client.list_orgs()
+                if not orgs:
+                    error("Account created but no organizations found.")
+                    await client.close()
+                    sys.exit(1)
+                org_id = orgs[0]["id"]
+                client.set_org(org_id)
+                key_result = await client.create_api_key("forktex-cli")
+                api_key = key_result.get("raw_key", "")
+                org_slug = orgs[0].get("slug", org_id)
                 success(f"Account created! Org: {org_slug}")
             else:
                 with spinner("Logging in..."):
@@ -109,35 +120,45 @@ async def init_cmd(project, save_global):
             health = await client.health()
             whoami = await client.whoami()
         await client.close()
-        success(f"Connected! API v{health.version}, org: {whoami.get('org_id', 'unknown')[:8]}...")
+        success(
+            f"Connected! API v{health.version}, org: {whoami.get('org_id', 'unknown')[:8]}..."
+        )
     except Exception as e:
         console.print(f"[yellow]Warning:[/yellow] Validation failed: {e}")
         info("Config saved anyway.")
 
     # 5. Save
+    from forktex.agent.intelligence.settings import (
+        save_intelligence_global,
+        save_intelligence_project,
+    )
+    from forktex.core.paths import get_global_config_dir
+
     if save_global:
-        settings.save_global()
-        info("Saved to ~/.forktex/intelligence.json")
+        save_intelligence_global(settings)
+        info(f"Saved to {get_global_config_dir()}/intelligence.json")
     else:
-        settings.save_project(project_root)
+        save_intelligence_project(settings, project_root)
         info(f"Saved to {project_root}/.forktex/intelligence.json")
 
     console.print()
-    info("Ready! Try: [bold]forktex ask \"Hello!\"[/bold]")
+    info('Ready! Try: [bold]forktex ask "Hello!"[/bold]')
 
 
 @intelligence.command(name="status")
 @click.option("--project", "-d", default=None, help="Project directory")
 async def status_cmd(project):
     """Show Intelligence API connection status."""
-    from forktex_intelligence.config import get_intelligence_settings
+    from forktex.agent.intelligence.settings import get_intelligence_settings
     from forktex_intelligence.client.client import ForktexIntelligenceClient
 
     project_root = project or str(Path.cwd().absolute())
     settings = get_intelligence_settings(project_root=project_root)
 
     console.print(f"[bold]Endpoint:[/bold] {settings.endpoint}")
-    console.print(f"[bold]API Key:[/bold] {'***' + settings.api_key[-4:] if settings.api_key else 'not set'}")
+    console.print(
+        f"[bold]API Key:[/bold] {'***' + settings.api_key[-4:] if settings.api_key else 'not set'}"
+    )
 
     if settings.is_configured:
         try:
@@ -146,7 +167,9 @@ async def status_cmd(project):
                 health = await client.health()
                 whoami = await client.whoami()
             await client.close()
-            console.print(f"[bold green]Status:[/bold green] Connected (v{health.version})")
+            console.print(
+                f"[bold green]Status:[/bold green] Connected (v{health.version})"
+            )
             console.print(f"[bold]Org:[/bold]    {whoami.get('org_id', 'unknown')}")
         except Exception as e:
             console.print(f"[bold red]Status:[/bold red] Failed ({e})")

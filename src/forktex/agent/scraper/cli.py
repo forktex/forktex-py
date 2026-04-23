@@ -29,11 +29,35 @@ def _get_project_root() -> str:
 @click.option("--max-rounds", default=40, help="Maximum agent loop rounds")
 @click.option("--client-cert", default=None, help="Path to client certificate PEM file")
 @click.option("--client-key", default=None, help="Path to client private key PEM file")
-@click.option("--client-pfx", default=None, help="Path to PKCS#12 (.p12/.pfx) certificate bundle")
-@click.option("--client-passphrase", default=None, help="Passphrase for the PFX/P12 file (or set FORKTEX_PFX_PASSPHRASE)")
+@click.option(
+    "--client-pfx", default=None, help="Path to PKCS#12 (.p12/.pfx) certificate bundle"
+)
+@click.option(
+    "--client-passphrase",
+    default=None,
+    help="Passphrase for the PFX/P12 file (or set FORKTEX_PFX_PASSPHRASE)",
+)
 @click.option("--client-ca", default=None, help="Path to CA certificate PEM file")
-@click.option("--head", "headed", is_flag=True, default=False, help="Run browser in headed mode (visible window)")
-async def scrape(url, goal, output, project, max_rounds, client_cert, client_key, client_pfx, client_passphrase, client_ca, headed):
+@click.option(
+    "--head",
+    "headed",
+    is_flag=True,
+    default=False,
+    help="Run browser in headed mode (visible window)",
+)
+async def scrape(
+    url,
+    goal,
+    output,
+    project,
+    max_rounds,
+    client_cert,
+    client_key,
+    client_pfx,
+    client_passphrase,
+    client_ca,
+    headed,
+):
     """Scrape a website using an AI-driven browser agent.
 
     Launches a persistent browser, navigates to URL, and uses the
@@ -48,7 +72,7 @@ async def scrape(url, goal, output, project, max_rounds, client_cert, client_key
         forktex scrape "https://e-licitatie.ro:8881/su/home" -g "Extract IT offers" \\
             --client-pfx licitatii.p12 --client-passphrase "secret"
     """
-    from forktex_intelligence.config import get_intelligence_settings
+    from forktex.agent.intelligence.settings import get_intelligence_settings
     from forktex_intelligence.client.client import ForktexIntelligenceClient
     from forktex_intelligence.streams import SSEEventType
     from forktex.agent.manager import AgentManager
@@ -78,12 +102,14 @@ async def scrape(url, goal, output, project, max_rounds, client_cert, client_key
         has_client_cert = client_pfx or (client_cert and client_key)
         if has_client_cert:
             from urllib.parse import urlparse
+
             parsed = urlparse(url)
             cert_origin = f"{parsed.scheme}://{parsed.netloc}"
 
         # Allow passphrase from env var
         if client_pfx and not client_passphrase:
             import os
+
             client_passphrase = os.environ.get("FORKTEX_PFX_PASSPHRASE")
 
         info("Starting browser...")
@@ -137,7 +163,9 @@ async def scrape(url, goal, output, project, max_rounds, client_cert, client_key
 
         console.print(f"\n[bold]Goal:[/bold] {goal}")
         console.print(f"[bold]URL:[/bold] {url}")
-        console.print(f"[dim]Session: {session.id} | Agent: {process.id} (scraper)[/dim]")
+        console.print(
+            f"[dim]Session: {session.id} | Agent: {process.id} (scraper)[/dim]"
+        )
         console.print()
 
         # Stream the response
@@ -161,6 +189,7 @@ async def scrape(url, goal, output, project, max_rounds, client_cert, client_key
 
         # Finalize
         from forktex.agent.process import AgentStatus
+
         if process.status != AgentStatus.FAILED:
             process.status = AgentStatus.COMPLETED
             process.completed_at = time.time()

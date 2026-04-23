@@ -105,17 +105,21 @@ async def show_agent(agent_id, project):
 
     result = latest.get("result")
     if result:
-        lines.append(f"[bold]Tokens:[/bold]     {result.get('input_tokens', 0)} in / {result.get('output_tokens', 0)} out")
+        lines.append(
+            f"[bold]Tokens:[/bold]     {result.get('input_tokens', 0)} in / {result.get('output_tokens', 0)} out"
+        )
         lines.append(f"[bold]Tool calls:[/bold] {result.get('tool_calls_made', 0)}")
 
     if latest.get("error"):
         lines.append(f"[bold red]Error:[/bold red]      {latest['error']}")
 
-    console.print(Panel(
-        "\n".join(lines),
-        title=f"Agent {full_id[:8]}...",
-        border_style="blue",
-    ))
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title=f"Agent {full_id[:8]}...",
+            border_style="blue",
+        )
+    )
 
     if len(entries) > 1:
         console.print(f"\n[dim]History: {len(entries)} state snapshots[/dim]")
@@ -155,9 +159,13 @@ async def cancel_agent(agent_id, project):
         return
 
     import time
-    store.append(full_id, {
-        **(latest or {}),
-        "status": "cancelled",
-        "completed_at": time.time(),
-    })
+
+    store.append(
+        full_id,
+        {
+            **(latest or {}),
+            "status": "cancelled",
+            "completed_at": time.time(),
+        },
+    )
     info(f"Agent {full_id[:8]}... marked as cancelled")

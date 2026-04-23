@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import asyncclick as click
 
+from forktex.agent.cloud.settings import save_cloud_context_global
+
 
 @click.command()
-@click.option("--url", prompt="Controller URL", default="https://cloud.forktex.com",
-              help="Cloud controller URL")
+@click.option(
+    "--url",
+    prompt="Controller URL",
+    default="https://cloud.forktex.com",
+    help="Cloud controller URL",
+)
 @click.option("--api-key", default=None, help="API key for CI/CD mode (ftx-...)")
 @click.pass_context
 async def login(ctx, url, api_key):
@@ -28,13 +34,28 @@ async def login(ctx, url, api_key):
         # CI/CD mode — store API key directly
         cloud_ctx.account_key = api_key
         cloud_ctx.access_token = None
-        cloud_ctx.save_global()
+        save_cloud_context_global(cloud_ctx)
         try:
-            with ForktexCloudClient(cloud_ctx.controller, account_key=api_key) as client:
+            with ForktexCloudClient(
+                cloud_ctx.controller, account_key=api_key
+            ) as client:
                 health = client.health()
-            click.echo(f"Connected to {cloud_ctx.controller} (API key mode, status: {health.status})")
+            click.echo(
+                f"Connected to {cloud_ctx.controller} (API key mode, status: {health.status})"
+            )
         except Exception as e:
-            click.echo(f"Warning: could not verify connection: {e}", err=True)
+            import httpx
+            from forktex_cloud import CloudAPIError
+
+            if isinstance(e, CloudAPIError):
+                click.echo(
+                    f"Warning: authentication failed ({e.status_code}): {e.detail}",
+                    err=True,
+                )
+            elif isinstance(e, (httpx.ConnectError, httpx.TimeoutException)):
+                click.echo(f"Warning: could not reach controller: {e}", err=True)
+            else:
+                click.echo(f"Warning: could not verify connection: {e}", err=True)
             click.echo("Credentials saved. You can retry later.")
         return
 
@@ -82,7 +103,7 @@ async def login(ctx, url, api_key):
             cloud_ctx.account_key = None
             cloud_ctx.org_id = str(org.id)
             cloud_ctx.region = region
-            cloud_ctx.save_global()
+            save_cloud_context_global(cloud_ctx)
 
             click.echo(
                 f"Logged in to {cloud_ctx.controller} as {email}\n"
@@ -91,4 +112,14 @@ async def login(ctx, url, api_key):
             )
 
     except Exception as e:
-        click.echo(f"Login failed: {e}", err=True)
+        import httpx
+        from forktex_cloud import CloudAPIError
+
+        if isinstance(e, CloudAPIError):
+            click.echo(f"Login failed ({e.status_code}): {e.detail}", err=True)
+        elif isinstance(e, (httpx.ConnectError, httpx.TimeoutException)):
+            click.echo(
+                f"Login failed: could not reach {cloud_ctx.controller} ({e})", err=True
+            )
+        else:
+            click.echo(f"Login failed: {e}", err=True)

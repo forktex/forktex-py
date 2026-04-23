@@ -22,14 +22,16 @@ def _get_project_root() -> str:
 
 def _build_intelligence_client(project_root: Optional[str] = None):
     """Create Intelligence API client from settings."""
-    from forktex_intelligence.config import get_intelligence_settings
+    from forktex.agent.intelligence.settings import get_intelligence_settings
     from forktex_intelligence.client.client import ForktexIntelligenceClient
 
     settings = get_intelligence_settings(project_root=project_root)
 
     if not settings.is_configured:
         error("Intelligence API not configured.")
-        info("Run [bold]forktex intelligence init[/bold] to set up your API endpoint and key.")
+        info(
+            "Run [bold]forktex intelligence init[/bold] to set up your API endpoint and key."
+        )
         sys.exit(1)
 
     return ForktexIntelligenceClient.from_settings(settings)
@@ -38,12 +40,14 @@ def _build_intelligence_client(project_root: Optional[str] = None):
 def _build_tool_server(project_root: str):
     """Create the local tool server for tool intercepts."""
     from forktex.agent.intelligence.tool_server import ToolServer
+
     return ToolServer(project_root)
 
 
 def _build_agent_loop(client, tool_server, system=None, on_tool_event=None):
     """Create the local agent loop with client-side conversation management."""
     from forktex.agent.intelligence.agent import LocalAgentLoop
+
     return LocalAgentLoop(
         client,
         tool_server,
@@ -75,7 +79,7 @@ async def chat(project):
     )
 
     # Auto-resolve org from API key
-    if not client._org_id:
+    if not client.org_id:
         try:
             await client.whoami()
         except Exception as e:
@@ -106,22 +110,26 @@ async def chat(project):
                     continue
                 elif cmd == "/tools":
                     tools = tool_server.list_tools()
-                    console.print(Panel(
-                        "\n".join(f"  {t}" for t in tools),
-                        title=f"Local Tools ({len(tools)})",
-                        border_style="blue",
-                    ))
+                    console.print(
+                        Panel(
+                            "\n".join(f"  {t}" for t in tools),
+                            title=f"Local Tools ({len(tools)})",
+                            border_style="blue",
+                        )
+                    )
                     continue
                 elif cmd == "/help":
-                    console.print(Panel(
-                        "[bold]Commands:[/bold]\n\n"
-                        "  /clear    Clear conversation history\n"
-                        "  /tools    List available local tools\n"
-                        "  /help     Show this help\n"
-                        "  Ctrl+C    Exit chat",
-                        title="Help",
-                        border_style="blue",
-                    ))
+                    console.print(
+                        Panel(
+                            "[bold]Commands:[/bold]\n\n"
+                            "  /clear    Clear conversation history\n"
+                            "  /tools    List available local tools\n"
+                            "  /help     Show this help\n"
+                            "  Ctrl+C    Exit chat",
+                            title="Help",
+                            border_style="blue",
+                        )
+                    )
                     continue
                 else:
                     info(f"Unknown command: {cmd}")
@@ -142,7 +150,12 @@ async def chat(project):
                     elif event.event == SSEEventType.DONE:
                         pass  # Stream complete for this turn (may loop for tools)
             except Exception as e:
-                error(f"Stream error: {e}")
+                from forktex_intelligence.client.client import IntelligenceAPIError
+
+                if isinstance(e, IntelligenceAPIError):
+                    error(f"API error ({e.status_code}): {e.detail}")
+                else:
+                    error(f"Stream error: {e}")
 
             if full_text:
                 console.print()  # Newline after streaming
@@ -189,7 +202,9 @@ async def ask(prompt, project):
                 error("Empty response from Intelligence API")
 
             if response.total_tokens:
-                info(f"Tokens: {response.input_tokens} in / {response.output_tokens} out")
+                info(
+                    f"Tokens: {response.input_tokens} in / {response.output_tokens} out"
+                )
 
     except RuntimeError as e:
         error(str(e))

@@ -63,9 +63,7 @@ class AgentStateStore:
         """List all agent IDs with stored history."""
         if not self._root.exists():
             return []
-        return [
-            p.stem for p in self._root.glob("*.jsonl")
-        ]
+        return [p.stem for p in self._root.glob("*.jsonl")]
 
     def delete(self, agent_id: str) -> None:
         """Delete history for an agent."""

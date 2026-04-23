@@ -51,8 +51,24 @@ PROFILE_CATALOG: dict[str, RuntimeProfile] = {
     ),
     "package/python-library": RuntimeProfile(
         id="package/python-library",
-        required=("deps", "format", "lint", "test", "build", "publish", "ci", "clean", "help"),
-        optional=("security-audit", "typecheck", "license"),
+        required=(
+            "deps",
+            "format",
+            "lint",
+            "test",
+            "build",
+            "publish",
+            "ci",
+            "clean",
+            "help",
+        ),
+        optional=(
+            "security-audit",
+            "typecheck",
+            "license",
+            "publish-check",
+            "publish-test",
+        ),
         disabled=(
             "start",
             "stop",
@@ -70,8 +86,25 @@ PROFILE_CATALOG: dict[str, RuntimeProfile] = {
     ),
     "package/python-sdk": RuntimeProfile(
         id="package/python-sdk",
-        required=("deps", "format", "lint", "test", "build", "publish", "ci", "clean", "help"),
-        optional=("security-audit", "typecheck", "license", "codegen-check"),
+        required=(
+            "deps",
+            "format",
+            "lint",
+            "test",
+            "build",
+            "publish",
+            "ci",
+            "clean",
+            "help",
+        ),
+        optional=(
+            "security-audit",
+            "typecheck",
+            "license",
+            "codegen-check",
+            "publish-check",
+            "publish-test",
+        ),
         disabled=(
             "start",
             "stop",
@@ -97,7 +130,11 @@ def resolve_profile_ids(
 ) -> list[str]:
     """Resolve applicable runtime profiles for a manifest unit."""
 
-    config: FSDConfig | None = package_manifest.fsd if package_manifest and package_manifest.fsd else manifest.fsd
+    config: FSDConfig | None = (
+        package_manifest.fsd
+        if package_manifest and package_manifest.fsd
+        else manifest.fsd
+    )
     if config and config.profiles:
         return config.profiles
     return ["package/python-library"] if package_manifest else []

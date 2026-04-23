@@ -18,14 +18,22 @@ import uuid
 import pytest
 
 # Skip entire module if integration test deps are missing
-uvicorn = pytest.importorskip("uvicorn", reason="uvicorn required for cloud integration tests")
-pytest.importorskip("testcontainers", reason="testcontainers required for cloud integration tests")
-pytest.importorskip("sqlalchemy", reason="sqlalchemy required for cloud integration tests")
+uvicorn = pytest.importorskip(
+    "uvicorn", reason="uvicorn required for cloud integration tests"
+)
+pytest.importorskip(
+    "testcontainers", reason="testcontainers required for cloud integration tests"
+)
+pytest.importorskip(
+    "sqlalchemy", reason="sqlalchemy required for cloud integration tests"
+)
 
 from urllib.parse import urlparse
 
 # Ensure the Cloud API package is importable
-CLOUD_API_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "forktex", "cloud", "api")
+CLOUD_API_DIR = os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "..", "forktex", "cloud", "api"
+)
 CLOUD_API_DIR = os.path.normpath(CLOUD_API_DIR)
 if CLOUD_API_DIR not in sys.path:
     sys.path.insert(0, CLOUD_API_DIR)
@@ -194,9 +202,7 @@ class TestOrgsAfterRegister:
         token_resp = client.login(
             user_credentials["email"], user_credentials["password"]
         )
-        authed = ForktexCloudClient(
-            cloud_server, access_token=token_resp.access_token
-        )
+        authed = ForktexCloudClient(cloud_server, access_token=token_resp.access_token)
         orgs = authed.list_orgs()
         assert len(orgs) >= 1
         assert isinstance(orgs[0], OrgRead)
@@ -219,9 +225,7 @@ class TestOrgScopedCRUD:
         authed = ForktexCloudClient(cloud_server, access_token=token)
         orgs = authed.list_orgs()
         org_id = str(orgs[0].id)
-        return ForktexCloudClient(
-            cloud_server, access_token=token, org_id=org_id
-        )
+        return ForktexCloudClient(cloud_server, access_token=token, org_id=org_id)
 
     def test_create_and_list_projects(self, authed_client):
         result = authed_client.create_project(f"proj-{uuid.uuid4().hex[:8]}")
@@ -266,9 +270,7 @@ class TestApiKeyAuth:
         org_id = str(orgs[0].id)
 
         # Create API key
-        jwt_client = ForktexCloudClient(
-            cloud_server, access_token=token, org_id=org_id
-        )
+        jwt_client = ForktexCloudClient(cloud_server, access_token=token, org_id=org_id)
         key_resp = jwt_client.create_api_key("test-key")
         assert isinstance(key_resp, ApiKeyCreated)
         assert key_resp.raw_key
@@ -331,9 +333,7 @@ class TestMeEndpoint:
         token_resp = client.login(
             user_credentials["email"], user_credentials["password"]
         )
-        authed = ForktexCloudClient(
-            cloud_server, access_token=token_resp.access_token
-        )
+        authed = ForktexCloudClient(cloud_server, access_token=token_resp.access_token)
         result = authed.me()
         assert isinstance(result, MeResponse)
         assert result.user.email == user_credentials["email"]

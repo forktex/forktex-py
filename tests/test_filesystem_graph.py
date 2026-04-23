@@ -13,9 +13,18 @@ def test_build_project_graph_detects_root_packages_and_child_manifests():
     # forktex-py is now a single-package repo. The four ecosystem SDKs
     # (forktex-intelligence, forktex-cloud, forktex-core, forktex-documents)
     # live in their own repos and are consumed as ordinary dependencies.
-    child_manifest_paths = {p.relative_to(project_root).as_posix() for p in graph.child_manifest_paths}
+    child_manifest_paths = {
+        p.relative_to(project_root).as_posix() for p in graph.child_manifest_paths
+    }
     assert child_manifest_paths == set() or all(
-        not p.startswith(("forktex-core/", "forktex-documents/", "forktex-intelligence/", "forktex-cloud/"))
+        not p.startswith(
+            (
+                "forktex-core/",
+                "forktex-documents/",
+                "forktex-intelligence/",
+                "forktex-cloud/",
+            )
+        )
         for p in child_manifest_paths
     )
 

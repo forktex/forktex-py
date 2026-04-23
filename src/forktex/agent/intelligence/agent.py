@@ -52,23 +52,29 @@ class Conversation:
 
     def add_tool_result(self, tool_call_id: str, tool_name: str, content: str) -> None:
         """Add tool result as a tool-role message for the next turn."""
-        self.messages.append({
-            "role": "tool",
-            "content": content,
-            "tool_call_id": tool_call_id,
-        })
+        self.messages.append(
+            {
+                "role": "tool",
+                "content": content,
+                "tool_call_id": tool_call_id,
+            }
+        )
 
-    def add_assistant_tool_calls(self, text: str, tool_calls: list[Dict[str, Any]]) -> None:
+    def add_assistant_tool_calls(
+        self, text: str, tool_calls: list[Dict[str, Any]]
+    ) -> None:
         """Record that the assistant requested tool calls.
 
         Includes the structured tool_calls so the server can reconstruct
         the proper wire format for the underlying model.
         """
-        self.messages.append({
-            "role": "assistant",
-            "content": text or "",
-            "tool_calls": tool_calls,
-        })
+        self.messages.append(
+            {
+                "role": "assistant",
+                "content": text or "",
+                "tool_calls": tool_calls,
+            }
+        )
 
     def clear(self) -> None:
         self.messages.clear()
@@ -148,7 +154,7 @@ class LocalAgentLoop:
                     break
                 except Exception:
                     if _attempt < 2:
-                        wait = (2 ** _attempt) * 5  # 5s, 10s
+                        wait = (2**_attempt) * 5  # 5s, 10s
                         yield SSEEvent(
                             event=SSEEventType.DELTA,
                             data={"text": f"\n[Retrying in {wait}s...]\n"},
@@ -169,7 +175,9 @@ class LocalAgentLoop:
                 return
 
             # Tool calls requested — execute them and loop
-            self.conversation.add_assistant_tool_calls(collected_text, collected_tool_calls)
+            self.conversation.add_assistant_tool_calls(
+                collected_text, collected_tool_calls
+            )
 
             for tc in collected_tool_calls:
                 tool_name = tc.get("name", "")
@@ -191,7 +199,9 @@ class LocalAgentLoop:
         # Hit max rounds
         yield SSEEvent(
             event=SSEEventType.ERROR,
-            data={"message": f"Agent loop exceeded {self._max_tool_rounds} tool rounds"},
+            data={
+                "message": f"Agent loop exceeded {self._max_tool_rounds} tool rounds"
+            },
         )
 
     async def run_task(self, task: str) -> AgentResponse:

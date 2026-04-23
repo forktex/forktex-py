@@ -40,7 +40,9 @@ async def _read_file(project_root: str, path: str) -> ToolResult:
             data={"content": content, "lines": lines, "size": size},
         )
     except UnicodeDecodeError:
-        return ToolResult(content=f"Binary file, cannot read as text: {path}", is_error=True)
+        return ToolResult(
+            content=f"Binary file, cannot read as text: {path}", is_error=True
+        )
     except Exception as exc:
         return ToolResult(content=f"Error reading {path}: {exc}", is_error=True)
 
@@ -130,9 +132,7 @@ async def _list_directory(
     )
 
 
-async def _glob_search(
-    project_root: str, pattern: str, path: str = "."
-) -> ToolResult:
+async def _glob_search(project_root: str, pattern: str, path: str = ".") -> ToolResult:
     full = _resolve(project_root, path)
     try:
         matches = await asyncio.to_thread(
@@ -179,11 +179,13 @@ async def _grep_search(
                 content = file_path.read_text(errors="replace")
                 for i, line in enumerate(content.splitlines(), 1):
                     if regex.search(line):
-                        results.append({
-                            "file": str(file_path.relative_to(root)),
-                            "line": i,
-                            "content": line.strip(),
-                        })
+                        results.append(
+                            {
+                                "file": str(file_path.relative_to(root)),
+                                "line": i,
+                                "content": line.strip(),
+                            }
+                        )
                         if len(results) >= 100:
                             return results
             except (PermissionError, OSError):
@@ -219,7 +221,10 @@ def create_filesystem_tools(project_root: str) -> List[Tool]:
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "Relative file path"},
-                    "content": {"type": "string", "description": "File content to write"},
+                    "content": {
+                        "type": "string",
+                        "description": "File content to write",
+                    },
                 },
                 "required": ["path", "content"],
             },
@@ -232,7 +237,10 @@ def create_filesystem_tools(project_root: str) -> List[Tool]:
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "Relative file path"},
-                    "old_str": {"type": "string", "description": "String to find and replace"},
+                    "old_str": {
+                        "type": "string",
+                        "description": "String to find and replace",
+                    },
                     "new_str": {"type": "string", "description": "Replacement string"},
                 },
                 "required": ["path", "old_str", "new_str"],
@@ -259,9 +267,21 @@ def create_filesystem_tools(project_root: str) -> List[Tool]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Relative directory path", "default": "."},
-                    "recursive": {"type": "boolean", "description": "List recursively", "default": False},
-                    "max_depth": {"type": "integer", "description": "Max recursion depth", "default": 3},
+                    "path": {
+                        "type": "string",
+                        "description": "Relative directory path",
+                        "default": ".",
+                    },
+                    "recursive": {
+                        "type": "boolean",
+                        "description": "List recursively",
+                        "default": False,
+                    },
+                    "max_depth": {
+                        "type": "integer",
+                        "description": "Max recursion depth",
+                        "default": 3,
+                    },
                 },
             },
             handler=lambda path=".", recursive=False, max_depth=3: _list_directory(
@@ -274,8 +294,15 @@ def create_filesystem_tools(project_root: str) -> List[Tool]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "pattern": {"type": "string", "description": "Glob pattern (e.g. '*.py')"},
-                    "path": {"type": "string", "description": "Starting directory", "default": "."},
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern (e.g. '*.py')",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Starting directory",
+                        "default": ".",
+                    },
                 },
                 "required": ["pattern"],
             },
@@ -287,9 +314,19 @@ def create_filesystem_tools(project_root: str) -> List[Tool]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "pattern": {"type": "string", "description": "Regex pattern to search for"},
-                    "path": {"type": "string", "description": "Starting path", "default": "."},
-                    "glob": {"type": "string", "description": "File glob filter (e.g. '*.py')"},
+                    "pattern": {
+                        "type": "string",
+                        "description": "Regex pattern to search for",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Starting path",
+                        "default": ".",
+                    },
+                    "glob": {
+                        "type": "string",
+                        "description": "File glob filter (e.g. '*.py')",
+                    },
                 },
                 "required": ["pattern"],
             },

@@ -87,11 +87,15 @@ def require_project_root(
 
     root = find_project_root(start, manifest_name=manifest_name, max_depth=max_depth)
     if root is None:
-        raise FileNotFoundError(f"No {manifest_name} found from {resolve_path(start)} upward")
+        raise FileNotFoundError(
+            f"No {manifest_name} found from {resolve_path(start)} upward"
+        )
     return root
 
 
-def find_projects(base_dir: str | Path, names: tuple[str, ...] | list[str] | None = None) -> list[Path]:
+def find_projects(
+    base_dir: str | Path, names: tuple[str, ...] | list[str] | None = None
+) -> list[Path]:
     """Find child project directories containing a canonical root manifest."""
 
     base = resolve_path(base_dir)
@@ -110,7 +114,9 @@ def get_project_config_dir(project_root: Optional[str | Path] = None) -> Path:
     return root / FORKTEX_DIRNAME
 
 
-def get_project_data_path(*parts: str, project_root: Optional[str | Path] = None) -> Path:
+def get_project_data_path(
+    *parts: str, project_root: Optional[str | Path] = None
+) -> Path:
     """Return a path under the project ``.forktex`` directory."""
 
     return get_project_config_dir(project_root).joinpath(*parts)

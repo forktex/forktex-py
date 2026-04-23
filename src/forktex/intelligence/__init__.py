@@ -9,8 +9,6 @@ Within the forktex CLI, both import paths work:
     from forktex_intelligence import Intelligence
 """
 
-__version__ = "0.2.0"
-
 from forktex_intelligence.api import (
     AvailableModel,
     Intelligence,
@@ -18,8 +16,8 @@ from forktex_intelligence.api import (
     StructuredResponse,
     StreamChunks,
 )
-from forktex_intelligence.config import (
-    IntelligenceSettings,
+from forktex_intelligence.config import IntelligenceSettings
+from forktex.agent.intelligence.settings import (
     get_intelligence_settings,
     reset_intelligence_settings,
 )

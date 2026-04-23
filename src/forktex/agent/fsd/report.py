@@ -23,22 +23,38 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 # Quality gates: (make target, label, ISO mappings)
 GATES: list[tuple[str, str, list[ISOMapping]]] = [
-    ("format-check", "Format Check", [
-        ISOMapping("27001", "A.8.26", "Application security requirements"),
-        ISOMapping("9001", "8.3.4", "Design and development controls"),
-    ]),
-    ("lint", "Lint", [
-        ISOMapping("27001", "A.8.28", "Secure coding"),
-        ISOMapping("9001", "8.3.4", "Design and development controls"),
-    ]),
-    ("test", "Test", [
-        ISOMapping("27001", "A.8.29", "Security testing"),
-        ISOMapping("9001", "8.6", "Release of products"),
-        ISOMapping("9001", "9.1.1", "Monitoring and measurement"),
-    ]),
-    ("audit", "Security Audit", [
-        ISOMapping("27001", "A.8.8", "Technical vulnerability management"),
-    ]),
+    (
+        "format-check",
+        "Format Check",
+        [
+            ISOMapping("27001", "A.8.26", "Application security requirements"),
+            ISOMapping("9001", "8.3.4", "Design and development controls"),
+        ],
+    ),
+    (
+        "lint",
+        "Lint",
+        [
+            ISOMapping("27001", "A.8.28", "Secure coding"),
+            ISOMapping("9001", "8.3.4", "Design and development controls"),
+        ],
+    ),
+    (
+        "test",
+        "Test",
+        [
+            ISOMapping("27001", "A.8.29", "Security testing"),
+            ISOMapping("9001", "8.6", "Release of products"),
+            ISOMapping("9001", "9.1.1", "Monitoring and measurement"),
+        ],
+    ),
+    (
+        "audit",
+        "Security Audit",
+        [
+            ISOMapping("27001", "A.8.8", "Technical vulnerability management"),
+        ],
+    ),
 ]
 
 
@@ -47,7 +63,11 @@ def _run_gate(target: str, label: str, iso: list[ISOMapping], cwd: Path) -> dict
     start = datetime.now(timezone.utc)
     try:
         result = subprocess.run(
-            ["make", target], capture_output=True, text=True, cwd=cwd, timeout=300,
+            ["make", target],
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            timeout=300,
         )
         end = datetime.now(timezone.utc)
         return {
@@ -60,23 +80,44 @@ def _run_gate(target: str, label: str, iso: list[ISOMapping], cwd: Path) -> dict
             "started_at": start.isoformat(),
             "finished_at": end.isoformat(),
             "duration_seconds": (end - start).total_seconds(),
-            "iso_mappings": [{"standard": m.standard, "clause": m.clause, "control": m.control} for m in iso],
+            "iso_mappings": [
+                {"standard": m.standard, "clause": m.clause, "control": m.control}
+                for m in iso
+            ],
         }
     except subprocess.TimeoutExpired:
         return {
-            "label": label, "command": f"make {target}", "exit_code": -1, "passed": False,
-            "error": "timeout after 300s", "stdout": "", "stderr": "",
-            "started_at": start.isoformat(), "finished_at": datetime.now(timezone.utc).isoformat(),
+            "label": label,
+            "command": f"make {target}",
+            "exit_code": -1,
+            "passed": False,
+            "error": "timeout after 300s",
+            "stdout": "",
+            "stderr": "",
+            "started_at": start.isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
             "duration_seconds": 300.0,
-            "iso_mappings": [{"standard": m.standard, "clause": m.clause, "control": m.control} for m in iso],
+            "iso_mappings": [
+                {"standard": m.standard, "clause": m.clause, "control": m.control}
+                for m in iso
+            ],
         }
     except FileNotFoundError:
         return {
-            "label": label, "command": f"make {target}", "exit_code": -1, "passed": False,
-            "error": "make not found", "stdout": "", "stderr": "",
-            "started_at": start.isoformat(), "finished_at": datetime.now(timezone.utc).isoformat(),
+            "label": label,
+            "command": f"make {target}",
+            "exit_code": -1,
+            "passed": False,
+            "error": "make not found",
+            "stdout": "",
+            "stderr": "",
+            "started_at": start.isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
             "duration_seconds": 0.0,
-            "iso_mappings": [{"standard": m.standard, "clause": m.clause, "control": m.control} for m in iso],
+            "iso_mappings": [
+                {"standard": m.standard, "clause": m.clause, "control": m.control}
+                for m in iso
+            ],
         }
 
 
@@ -88,7 +129,12 @@ def _render_html(data: dict) -> str:
 
 
 @click.command()
-@click.option("--output-dir", default=None, type=click.Path(), help="Output directory for evidence")
+@click.option(
+    "--output-dir",
+    default=None,
+    type=click.Path(),
+    help="Output directory for evidence",
+)
 @click.option("--json-output", "as_json", is_flag=True, help="Output JSON to stdout")
 @click.pass_context
 async def report(ctx, output_dir, as_json):
@@ -118,13 +164,15 @@ async def report(ctx, output_dir, as_json):
     iso_evidence = []
     for gate in gate_results:
         for m in gate["iso_mappings"]:
-            iso_evidence.append({
-                "standard": m["standard"],
-                "clause": m["clause"],
-                "control": m["control"],
-                "gate_label": gate["label"],
-                "passed": gate["passed"],
-            })
+            iso_evidence.append(
+                {
+                    "standard": m["standard"],
+                    "clause": m["clause"],
+                    "control": m["control"],
+                    "gate_label": gate["label"],
+                    "passed": gate["passed"],
+                }
+            )
 
     data = {
         "fsd_version": load_standard().version,

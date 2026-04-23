@@ -6,6 +6,7 @@ import pytest
 def test_cli_import():
     """Test that CLI module imports cleanly."""
     from forktex.agent.cli import cli, main
+
     assert cli is not None
     assert main is not None
 
@@ -19,12 +20,14 @@ def test_package_import():
         generate_id,
         current_timestamp,
     )
+
     assert StateManager is not None
     assert Settings is not None
 
 
 def test_version():
     from forktex import __version__
+
     assert __version__ == "0.5.0"
 
 
@@ -37,11 +40,13 @@ class TestInitCommand:
         from forktex.core.state import StateManager
 
         state = StateManager(temp_dir)
-        await state.write_config({
-            "provider": "openai",
-            "api_key": "sk-test123",
-            "model": "gpt-4o",
-        })
+        await state.write_config(
+            {
+                "provider": "openai",
+                "api_key": "sk-test123",
+                "model": "gpt-4o",
+            }
+        )
 
         config = await state.read_config()
         assert config["provider"] == "openai"
