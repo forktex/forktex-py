@@ -17,6 +17,7 @@ from forktex.agent.tools.base import Tool, ToolResult
 
 # ── Web search (ddgs-based, no browser) ─────────────────────────────────────
 
+
 async def _web_search(query: str, max_results: int = 10) -> ToolResult:
     """Search the web using DuckDuckGo via the ddgs package."""
     try:
@@ -60,6 +61,7 @@ async def _web_search(query: str, max_results: int = 10) -> ToolResult:
 
 
 # ── Web fetch (Playwright for JS rendering) ─────────────────────────────────
+
 
 class _BrowserManager:
     """Lazy Playwright browser -- only starts when web_fetch is first called."""
@@ -141,6 +143,7 @@ async def _web_fetch(url: str) -> ToolResult:
 
 
 # ── Tool factory ────────────────────────────────────────────────────────────
+
 
 def create_web_tools() -> List[Tool]:
     """Create web browsing tools (provider-independent)."""

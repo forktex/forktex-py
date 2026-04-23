@@ -30,11 +30,13 @@ async def vault_set(ctx, key, value, env):
     if mode == "remote":
         cloud_ctx = ctx.obj["cloud_ctx"]
         from forktex_cloud.client import ForktexCloudClient
+
         with ForktexCloudClient.from_context(cloud_ctx) as client:
             client.vault_set(key, value, env=env)
     else:
         project_root = ctx.obj["project_root"]
         from forktex_cloud.secrets.factory import get_secrets_provider
+
         provider = get_secrets_provider(project_root=project_root)
         provider.set(key, value, env)
 
@@ -52,12 +54,14 @@ async def vault_get(ctx, key, env):
     if mode == "remote":
         cloud_ctx = ctx.obj["cloud_ctx"]
         from forktex_cloud.client import ForktexCloudClient
+
         with ForktexCloudClient.from_context(cloud_ctx) as client:
             result = client.vault_get(key, env=env)
             click.echo(result.value or "")
     else:
         project_root = ctx.obj["project_root"]
         from forktex_cloud.secrets.factory import get_secrets_provider
+
         try:
             provider = get_secrets_provider(project_root=project_root)
             click.echo(provider.get(key, env))
@@ -75,11 +79,13 @@ async def vault_list(ctx, env):
     if mode == "remote":
         cloud_ctx = ctx.obj["cloud_ctx"]
         from forktex_cloud.client import ForktexCloudClient
+
         with ForktexCloudClient.from_context(cloud_ctx) as client:
             keys = client.vault_list(env=env)
     else:
         project_root = ctx.obj["project_root"]
         from forktex_cloud.secrets.factory import get_secrets_provider
+
         provider = get_secrets_provider(project_root=project_root)
         keys = provider.list_keys(env)
 
@@ -100,11 +106,13 @@ async def vault_delete(ctx, key, env):
     if mode == "remote":
         cloud_ctx = ctx.obj["cloud_ctx"]
         from forktex_cloud.client import ForktexCloudClient
+
         with ForktexCloudClient.from_context(cloud_ctx) as client:
             client.vault_delete(key, env=env)
     else:
         project_root = ctx.obj["project_root"]
         from forktex_cloud.secrets.factory import get_secrets_provider
+
         provider = get_secrets_provider(project_root=project_root)
         provider.delete(key, env)
 

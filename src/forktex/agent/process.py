@@ -144,5 +144,7 @@ class AgentProcess:
                 "tool_calls_made": len(self.result.tool_calls_made),
                 "input_tokens": self.result.input_tokens,
                 "output_tokens": self.result.output_tokens,
-            } if self.result else None,
+            }
+            if self.result
+            else None,
         }

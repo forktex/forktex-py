@@ -11,7 +11,9 @@ import asyncclick as click
 @click.command()
 @click.option("--yes", is_flag=True, help="Skip confirmation")
 @click.option("--keep-dns", is_flag=True, help="Keep DNS records")
-@click.option("--env", "environment", default=None, help="Environment (dev for local teardown)")
+@click.option(
+    "--env", "environment", default=None, help="Environment (dev for local teardown)"
+)
 @click.pass_context
 async def down(ctx, yes, keep_dns, environment):
     """Tear down: destroy server + DNS (remote) or stop containers (dev)."""
@@ -23,14 +25,27 @@ async def down(ctx, yes, keep_dns, environment):
         project_name = "forktex"
         try:
             from forktex_cloud.manifest.loader import Manifest
+
             manifest = Manifest.load(project_root / "forktex.json", env="dev")
             project_name = manifest.name or "forktex"
-        except Exception:
-            pass
+        except (FileNotFoundError, ValueError, KeyError):
+            click.echo(
+                f"Warning: could not load manifest, using project name '{project_name}'",
+                err=True,
+            )
 
         result = subprocess.run(
-            ["docker", "compose", "-p", project_name, "-f", compose_file,
-             "down", "-v", "--remove-orphans"],
+            [
+                "docker",
+                "compose",
+                "-p",
+                project_name,
+                "-f",
+                compose_file,
+                "down",
+                "-v",
+                "--remove-orphans",
+            ],
         )
         if result.returncode != 0:
             sys.exit(result.returncode)

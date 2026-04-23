@@ -16,7 +16,12 @@ from jinja2 import Environment, FileSystemLoader
 
 from forktex.core.paths import get_fsd_evidence_dir
 from forktex.fsd.evaluate import AtomStatus, evaluate
-from forktex.fsd.loader import ensure_fsd_supported, ensure_manifest_supported, load_project_config, load_standard
+from forktex.fsd.loader import (
+    ensure_fsd_supported,
+    ensure_manifest_supported,
+    load_project_config,
+    load_standard,
+)
 from forktex.manifest.models import ForktexManifest
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -30,7 +35,9 @@ def _find_makefile_targets(makefile_path: Path) -> set[str]:
     try:
         result = subprocess.run(
             ["make", "-f", str(makefile_path), "-pRrq", "--no-print-directory"],
-            capture_output=True, text=True, cwd=makefile_path.parent,
+            capture_output=True,
+            text=True,
+            cwd=makefile_path.parent,
         )
         for line in result.stdout.splitlines():
             if line and not line.startswith(("\t", ".", "#", " ")) and ":" in line:
@@ -42,8 +49,20 @@ def _find_makefile_targets(makefile_path: Path) -> set[str]:
     return targets
 
 
-SKIP_DIRS = {".git", ".forktex", ".standard", ".github", "node_modules", ".venv",
-             "__pycache__", ".pytest_cache", "dist", "build", ".expo", ".next"}
+SKIP_DIRS = {
+    ".git",
+    ".forktex",
+    ".standard",
+    ".github",
+    "node_modules",
+    ".venv",
+    "__pycache__",
+    ".pytest_cache",
+    "dist",
+    "build",
+    ".expo",
+    ".next",
+}
 
 
 def _discover_services(project_root: Path) -> list[dict]:
@@ -60,7 +79,14 @@ def _discover_services(project_root: Path) -> list[dict]:
             targets = _find_makefile_targets(d / "Makefile")
         except PermissionError:
             continue
-        services.append({"name": d.name, "path": str(d), "targets": sorted(targets), "target_count": len(targets)})
+        services.append(
+            {
+                "name": d.name,
+                "path": str(d),
+                "targets": sorted(targets),
+                "target_count": len(targets),
+            }
+        )
     return services
 
 
@@ -72,7 +98,9 @@ def _evaluate(project_root: Path) -> dict:
     manifest = ForktexManifest.load(project_root / "forktex.json")
     ensure_manifest_supported(manifest)
     config = load_project_config(project_root)
-    standard = load_standard(Path(config.standard_path) if config and config.standard_path else None)
+    standard = load_standard(
+        Path(config.standard_path) if config and config.standard_path else None
+    )
     ensure_fsd_supported(standard, config)
 
     for svc in services:
@@ -101,9 +129,18 @@ def _evaluate(project_root: Path) -> dict:
             "description": atom.description,
             "targets": atom_result.required_targets or atom.make_targets,
             "required_targets": atom_result.required_targets or atom.make_targets,
-            "iso": [{"standard": m.standard, "clause": m.clause, "control": m.control} for m in atom.iso],
+            "iso": [
+                {"standard": m.standard, "clause": m.clause, "control": m.control}
+                for m in atom.iso
+            ],
             "status": status.value,
-            "display_status": "PASS" if status == AtomStatus.SATISFIED else ("SKIP" if status == AtomStatus.SKIPPED else ("N/A" if status == AtomStatus.OUT_OF_SCOPE else "FAIL")),
+            "display_status": "PASS"
+            if status == AtomStatus.SATISFIED
+            else (
+                "SKIP"
+                if status == AtomStatus.SKIPPED
+                else ("N/A" if status == AtomStatus.OUT_OF_SCOPE else "FAIL")
+            ),
             "satisfied": status == AtomStatus.SATISFIED,
             "present_required": atom_result.present_targets,
             "missing_required": atom_result.missing_targets,
@@ -111,13 +148,15 @@ def _evaluate(project_root: Path) -> dict:
         }
         atom_results.append(atom_payload)
         for m in atom_payload["iso"]:
-            iso_mappings.append({
-                "standard": m["standard"],
-                "clause": m["clause"],
-                "control": m["control"],
-                "atom_name": atom.name,
-                "satisfied": status == AtomStatus.SATISFIED,
-            })
+            iso_mappings.append(
+                {
+                    "standard": m["standard"],
+                    "clause": m["clause"],
+                    "control": m["control"],
+                    "atom_name": atom.name,
+                    "satisfied": status == AtomStatus.SATISFIED,
+                }
+            )
 
     return {
         "fsd_version": standard.version,
@@ -142,10 +181,23 @@ def _render_html(data: dict) -> str:
 
 
 @click.command()
-@click.option("--level", default=None, help="Required level (e.g., L2). Exit non-zero if not met.")
+@click.option(
+    "--level", default=None, help="Required level (e.g., L2). Exit non-zero if not met."
+)
 @click.option("--json-output", "as_json", is_flag=True, help="Output as JSON to stdout")
-@click.option("--html", "html_path", default=None, type=click.Path(), help="Write HTML report to file")
-@click.option("--output-dir", default=None, type=click.Path(), help="Write both JSON + HTML to directory")
+@click.option(
+    "--html",
+    "html_path",
+    default=None,
+    type=click.Path(),
+    help="Write HTML report to file",
+)
+@click.option(
+    "--output-dir",
+    default=None,
+    type=click.Path(),
+    help="Write both JSON + HTML to directory",
+)
 @click.pass_context
 async def check(ctx, level, as_json, html_path, output_dir):
     """Verify that a project meets the ForkTex Standard for Delivery."""
@@ -172,7 +224,9 @@ async def check(ctx, level, as_json, html_path, output_dir):
         click.echo(f"FSD Compliance Check: {data['project']}")
         click.echo("=" * 50)
         click.echo(f"Root Makefile: {'found' if data['root_makefile'] else 'MISSING'}")
-        click.echo(f"Services: {', '.join(s['name'] for s in data['services']) or 'none'}")
+        click.echo(
+            f"Services: {', '.join(s['name'] for s in data['services']) or 'none'}"
+        )
         click.echo()
         click.echo("Atoms:")
         for atom in data["atoms"]:

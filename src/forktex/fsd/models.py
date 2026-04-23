@@ -133,7 +133,11 @@ class Atom(Identifiable):
         if not self.resolve:
             return False
         return any(
-            rule.check(make_targets=make_targets, project_root=project_root, docs_root=docs_root)
+            rule.check(
+                make_targets=make_targets,
+                project_root=project_root,
+                docs_root=docs_root,
+            )
             for rule in self.resolve
         )
 
@@ -191,7 +195,9 @@ class FSDStandard(Versioned):
     def domains_by_id(self) -> dict[str, Domain]:
         return {d.id: d for d in self.domains}
 
-    def determine_level(self, *, make_targets: set[str] = set(), docs_root: Path | None = None) -> Level:
+    def determine_level(
+        self, *, make_targets: set[str] = set(), docs_root: Path | None = None
+    ) -> Level:
         achieved = self.levels[0] if self.levels else Level(id="L0", name="Bootstrap")
         for level in self.levels:
             if self._check_level(level, make_targets=make_targets, docs_root=docs_root):
@@ -217,7 +223,10 @@ class FSDStandard(Versioned):
         raw["atoms"] = [a for a in raw.get("atoms", []) if not a.get("_comment")]
         raw["facets"] = [f for f in raw.get("facets", []) if not f.get("_comment")]
         for atom in raw["atoms"]:
-            atom["iso"] = [ISORef.from_string(s) if isinstance(s, str) else s for s in atom.get("iso", [])]
+            atom["iso"] = [
+                ISORef.from_string(s) if isinstance(s, str) else s
+                for s in atom.get("iso", [])
+            ]
         return cls.model_validate(raw)
 
 

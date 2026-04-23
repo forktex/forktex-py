@@ -38,7 +38,11 @@ class TestToolRegistry:
         tool = Tool(
             name="echo",
             description="Echo text",
-            parameters={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+            parameters={
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "required": ["text"],
+            },
             handler=echo_handler,
         )
         registry.register(tool)
@@ -61,8 +65,12 @@ class TestToolRegistry:
         async def noop() -> ToolResult:
             return ToolResult(content="")
 
-        registry.register(Tool(name="t1", description="Test 1", parameters={}, handler=noop))
-        registry.register(Tool(name="t2", description="Test 2", parameters={}, handler=noop))
+        registry.register(
+            Tool(name="t1", description="Test 1", parameters={}, handler=noop)
+        )
+        registry.register(
+            Tool(name="t2", description="Test 2", parameters={}, handler=noop)
+        )
 
         schemas = registry.list_schemas()
         assert len(schemas) == 2

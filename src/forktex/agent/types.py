@@ -32,25 +32,47 @@ class AgentType:
 
 # ── Built-in tool sets ──────────────────────────────────────────────────
 
-_RO_TOOLS = frozenset({
-    "read_file", "list_directory", "glob_search", "grep_search",
-    "git_status", "git_diff", "git_log",
-})
+_RO_TOOLS = frozenset(
+    {
+        "read_file",
+        "list_directory",
+        "glob_search",
+        "grep_search",
+        "git_status",
+        "git_diff",
+        "git_log",
+    }
+)
 
-_RW_TOOLS = _RO_TOOLS | frozenset({
-    "write_file", "patch_file", "delete_file",
-    "git_commit",
-})
+_RW_TOOLS = _RO_TOOLS | frozenset(
+    {
+        "write_file",
+        "patch_file",
+        "delete_file",
+        "git_commit",
+    }
+)
 
 _BASH_TOOLS = frozenset({"bash_execute"})
 _WEB_TOOLS = frozenset({"web_search", "web_fetch"})
 
-_SCRAPER_TOOLS = frozenset({
-    "scraper_navigate", "scraper_click", "scraper_fill", "scraper_select",
-    "scraper_wait", "scraper_extract", "scraper_screenshot", "scraper_get_html",
-    "scraper_evaluate", "scraper_truths_get", "scraper_truths_save",
-    "scraper_save_data", "web_search",
-})
+_SCRAPER_TOOLS = frozenset(
+    {
+        "scraper_navigate",
+        "scraper_click",
+        "scraper_fill",
+        "scraper_select",
+        "scraper_wait",
+        "scraper_extract",
+        "scraper_screenshot",
+        "scraper_get_html",
+        "scraper_evaluate",
+        "scraper_truths_get",
+        "scraper_truths_save",
+        "scraper_save_data",
+        "web_search",
+    }
+)
 
 # ── Built-in agent types ────────────────────────────────────────────────
 

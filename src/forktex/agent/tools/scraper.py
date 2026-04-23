@@ -124,8 +124,13 @@ def _auto_save_truth(
         if page is None:
             return
         from urllib.parse import urlparse
+
         domain = urlparse(page.url).hostname or "unknown"
-        category = "xpaths" if selector.startswith("/") or selector.startswith("//") else "selectors"
+        category = (
+            "xpaths"
+            if selector.startswith("/") or selector.startswith("//")
+            else "selectors"
+        )
         key = f"{action}:{selector}"
         truths_store.save_entry(domain, category, key, selector, confidence=0.9)
     except Exception:
@@ -203,7 +208,9 @@ def create_scraper_tools(
 
     # ── 5. scraper_wait ─────────────────────────────────────────────────
 
-    async def _wait(selector: str, state: str = "visible", timeout: int = 10000) -> ToolResult:
+    async def _wait(
+        selector: str, state: str = "visible", timeout: int = 10000
+    ) -> ToolResult:
         try:
             page = browser.page
             if page is None:
@@ -239,7 +246,9 @@ def create_scraper_tools(
                         values.append(await el.get_attribute(attribute) or "")
                 content = "\n".join(f"[{i}] {v.strip()}" for i, v in enumerate(values))
                 if values:
-                    _auto_save_truth(truths_store, browser, selector, f"extract_all:{attribute}")
+                    _auto_save_truth(
+                        truths_store, browser, selector, f"extract_all:{attribute}"
+                    )
                 return ToolResult(
                     content=content or "(no matches)",
                     data={"values": values, "count": len(values)},
@@ -254,7 +263,9 @@ def create_scraper_tools(
                     val = await el.inner_html()
                 else:
                     val = await el.get_attribute(attribute) or ""
-                _auto_save_truth(truths_store, browser, selector, f"extract:{attribute}")
+                _auto_save_truth(
+                    truths_store, browser, selector, f"extract:{attribute}"
+                )
                 return ToolResult(
                     content=val.strip(),
                     data={"value": val.strip()},
@@ -302,7 +313,8 @@ def create_scraper_tools(
                 html = await el.inner_html()
             truncated = html[:max_length]
             return ToolResult(
-                content=truncated + ("... (truncated)" if len(html) > max_length else ""),
+                content=truncated
+                + ("... (truncated)" if len(html) > max_length else ""),
                 data={"html": html, "truncated": len(html) > max_length},
             )
         except Exception as exc:
@@ -394,8 +406,15 @@ def create_scraper_tools(
             parameters={
                 "type": "object",
                 "properties": {
-                    "selector": {"type": "string", "description": "CSS or XPath selector"},
-                    "timeout": {"type": "integer", "description": "Timeout in ms", "default": 5000},
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS or XPath selector",
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in ms",
+                        "default": 5000,
+                    },
                 },
                 "required": ["selector"],
             },
@@ -407,9 +426,16 @@ def create_scraper_tools(
             parameters={
                 "type": "object",
                 "properties": {
-                    "selector": {"type": "string", "description": "CSS or XPath selector for the input"},
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS or XPath selector for the input",
+                    },
                     "value": {"type": "string", "description": "Text to fill"},
-                    "timeout": {"type": "integer", "description": "Timeout in ms", "default": 5000},
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in ms",
+                        "default": 5000,
+                    },
                 },
                 "required": ["selector", "value"],
             },
@@ -421,9 +447,19 @@ def create_scraper_tools(
             parameters={
                 "type": "object",
                 "properties": {
-                    "selector": {"type": "string", "description": "CSS or XPath selector for the select element"},
-                    "value": {"type": "string", "description": "Option value to select"},
-                    "timeout": {"type": "integer", "description": "Timeout in ms", "default": 5000},
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS or XPath selector for the select element",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Option value to select",
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in ms",
+                        "default": 5000,
+                    },
                 },
                 "required": ["selector", "value"],
             },
@@ -435,13 +471,20 @@ def create_scraper_tools(
             parameters={
                 "type": "object",
                 "properties": {
-                    "selector": {"type": "string", "description": "CSS or XPath selector"},
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS or XPath selector",
+                    },
                     "state": {
                         "type": "string",
                         "description": "State to wait for: visible, hidden, attached, detached",
                         "default": "visible",
                     },
-                    "timeout": {"type": "integer", "description": "Timeout in ms", "default": 10000},
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in ms",
+                        "default": 10000,
+                    },
                 },
                 "required": ["selector"],
             },
@@ -453,7 +496,10 @@ def create_scraper_tools(
             parameters={
                 "type": "object",
                 "properties": {
-                    "selector": {"type": "string", "description": "CSS or XPath selector"},
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS or XPath selector",
+                    },
                     "attribute": {
                         "type": "string",
                         "description": "Attribute to extract: textContent, innerHTML, href, src, etc.",
@@ -475,8 +521,16 @@ def create_scraper_tools(
             parameters={
                 "type": "object",
                 "properties": {
-                    "filename": {"type": "string", "description": "Screenshot filename (optional)", "default": ""},
-                    "full_page": {"type": "boolean", "description": "Capture full page", "default": False},
+                    "filename": {
+                        "type": "string",
+                        "description": "Screenshot filename (optional)",
+                        "default": "",
+                    },
+                    "full_page": {
+                        "type": "boolean",
+                        "description": "Capture full page",
+                        "default": False,
+                    },
                 },
                 "required": [],
             },
@@ -488,9 +542,21 @@ def create_scraper_tools(
             parameters={
                 "type": "object",
                 "properties": {
-                    "selector": {"type": "string", "description": "CSS or XPath selector", "default": "body"},
-                    "outer": {"type": "boolean", "description": "Return outerHTML instead of innerHTML", "default": False},
-                    "max_length": {"type": "integer", "description": "Max chars in content field", "default": 5000},
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS or XPath selector",
+                        "default": "body",
+                    },
+                    "outer": {
+                        "type": "boolean",
+                        "description": "Return outerHTML instead of innerHTML",
+                        "default": False,
+                    },
+                    "max_length": {
+                        "type": "integer",
+                        "description": "Max chars in content field",
+                        "default": 5000,
+                    },
                 },
                 "required": [],
             },
@@ -502,7 +568,10 @@ def create_scraper_tools(
             parameters={
                 "type": "object",
                 "properties": {
-                    "expression": {"type": "string", "description": "JavaScript expression to evaluate"},
+                    "expression": {
+                        "type": "string",
+                        "description": "JavaScript expression to evaluate",
+                    },
                 },
                 "required": ["expression"],
             },
@@ -514,7 +583,10 @@ def create_scraper_tools(
             parameters={
                 "type": "object",
                 "properties": {
-                    "domain": {"type": "string", "description": "Domain name (e.g. e-licitatie.ro)"},
+                    "domain": {
+                        "type": "string",
+                        "description": "Domain name (e.g. e-licitatie.ro)",
+                    },
                 },
                 "required": ["domain"],
             },
@@ -533,7 +605,11 @@ def create_scraper_tools(
                     },
                     "key": {"type": "string", "description": "Entry key/name"},
                     "value": {"description": "Entry value (string, object, etc.)"},
-                    "confidence": {"type": "number", "description": "Confidence score 0.0-1.0", "default": 1.0},
+                    "confidence": {
+                        "type": "number",
+                        "description": "Confidence score 0.0-1.0",
+                        "default": 1.0,
+                    },
                 },
                 "required": ["domain", "category", "key", "value"],
             },
@@ -545,7 +621,10 @@ def create_scraper_tools(
             parameters={
                 "type": "object",
                 "properties": {
-                    "filename": {"type": "string", "description": "Output filename (e.g. offers.json)"},
+                    "filename": {
+                        "type": "string",
+                        "description": "Output filename (e.g. offers.json)",
+                    },
                     "data": {"description": "Data to save (will be JSON-serialized)"},
                 },
                 "required": ["filename", "data"],

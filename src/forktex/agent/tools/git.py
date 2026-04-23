@@ -13,13 +13,15 @@ from forktex.agent.tools.base import Tool, ToolResult
 
 class GitToolError(RuntimeError):
     """Raised when Git operations fail."""
+
     pass
 
 
 async def _run_git(project_root: str, *args: str) -> str:
     """Run a git command and return stdout."""
     proc = await asyncio.create_subprocess_exec(
-        "git", *args,
+        "git",
+        *args,
         cwd=project_root,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -97,7 +99,9 @@ async def _git_commit(
 async def _git_log(project_root: str, n: int = 10) -> ToolResult:
     try:
         log_output = await _run_git(
-            project_root, "log", f"-{n}",
+            project_root,
+            "log",
+            f"-{n}",
             "--format=%H|%s|%an|%aI",
         )
         commits = []
@@ -106,19 +110,23 @@ async def _git_log(project_root: str, n: int = 10) -> ToolResult:
                 continue
             parts = line.split("|", 3)
             if len(parts) >= 4:
-                commits.append({
-                    "hash": parts[0],
-                    "message": parts[1],
-                    "author": parts[2],
-                    "date": parts[3],
-                })
+                commits.append(
+                    {
+                        "hash": parts[0],
+                        "message": parts[1],
+                        "author": parts[2],
+                        "date": parts[3],
+                    }
+                )
         data = {"commits": commits}
         return ToolResult(content=json.dumps(data, indent=2), data=data)
     except GitToolError as exc:
         return ToolResult(content=f"Git error: {exc}", is_error=True)
 
 
-async def _git_branch(project_root: str, name: str, checkout: bool = True) -> ToolResult:
+async def _git_branch(
+    project_root: str, name: str, checkout: bool = True
+) -> ToolResult:
     """Create a new branch and optionally check it out."""
     try:
         await _run_git(project_root, "branch", name)
@@ -181,7 +189,11 @@ def create_git_tools(project_root: str) -> List[Tool]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "staged": {"type": "boolean", "description": "Show staged changes only", "default": False},
+                    "staged": {
+                        "type": "boolean",
+                        "description": "Show staged changes only",
+                        "default": False,
+                    },
                 },
             },
             handler=lambda staged=False: _git_diff(project_root, staged),
@@ -201,7 +213,9 @@ def create_git_tools(project_root: str) -> List[Tool]:
                 },
                 "required": ["message"],
             },
-            handler=lambda message, files=None: _git_commit(project_root, message, files),
+            handler=lambda message, files=None: _git_commit(
+                project_root, message, files
+            ),
         ),
         Tool(
             name="git_log",
@@ -209,7 +223,11 @@ def create_git_tools(project_root: str) -> List[Tool]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "n": {"type": "integer", "description": "Number of commits", "default": 10},
+                    "n": {
+                        "type": "integer",
+                        "description": "Number of commits",
+                        "default": 10,
+                    },
                 },
             },
             handler=lambda n=10: _git_log(project_root, n),
@@ -221,11 +239,17 @@ def create_git_tools(project_root: str) -> List[Tool]:
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "description": "Branch name to create"},
-                    "checkout": {"type": "boolean", "description": "Check out after creating", "default": True},
+                    "checkout": {
+                        "type": "boolean",
+                        "description": "Check out after creating",
+                        "default": True,
+                    },
                 },
                 "required": ["name"],
             },
-            handler=lambda name, checkout=True: _git_branch(project_root, name, checkout),
+            handler=lambda name, checkout=True: _git_branch(
+                project_root, name, checkout
+            ),
         ),
         Tool(
             name="git_checkout",
@@ -233,7 +257,10 @@ def create_git_tools(project_root: str) -> List[Tool]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "ref": {"type": "string", "description": "Branch name or commit ref"},
+                    "ref": {
+                        "type": "string",
+                        "description": "Branch name or commit ref",
+                    },
                 },
                 "required": ["ref"],
             },

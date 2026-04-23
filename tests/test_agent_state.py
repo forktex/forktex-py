@@ -55,12 +55,14 @@ class TestAgentStateStore:
 
     def test_save_snapshot(self, temp_dir):
         store = AgentStateStore(temp_dir)
-        store.save_snapshot({
-            "id": "abc123",
-            "status": "completed",
-            "agent_type": "developer",
-            "task": "build something",
-        })
+        store.save_snapshot(
+            {
+                "id": "abc123",
+                "status": "completed",
+                "agent_type": "developer",
+                "task": "build something",
+            }
+        )
 
         latest = store.load_latest("abc123")
         assert latest is not None

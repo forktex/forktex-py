@@ -15,7 +15,12 @@ from jinja2 import Environment, FileSystemLoader
 
 from forktex.agent.fsd.arch import Workspace, to_structurizr_dsl
 from forktex.agent.fsd.arch_discover import discover_project, discover_multi
-from forktex.core.paths import get_architecture_dir, get_fsd_evidence_dir, find_project_root, has_manifest
+from forktex.core.paths import (
+    get_architecture_dir,
+    get_fsd_evidence_dir,
+    find_project_root,
+    has_manifest,
+)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -33,10 +38,12 @@ def _render_html(workspace: Workspace) -> str:
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
     template = env.get_template("arch.html")
     nav_json = json.dumps(workspace.to_navigation())
-    edges_json = json.dumps([
-        {"source": r.source_id, "target": r.target_id, "label": r.description}
-        for r in workspace.relationships
-    ])
+    edges_json = json.dumps(
+        [
+            {"source": r.source_id, "target": r.target_id, "label": r.description}
+            for r in workspace.relationships
+        ]
+    )
     return template.render(
         workspace=workspace,
         generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
@@ -75,12 +82,17 @@ def _print_system(sys):
     click.echo(f"  {sys.name} (FSD {sys.fsd_level})")
     for c in sys.containers:
         port_str = f":{c.primary_port.host}" if c.primary_port else ""
-        click.echo(f"    {c.id:<16} {c.service_type.value:<14} {c.tech_summary:<30} {port_str}")
+        click.echo(
+            f"    {c.id:<16} {c.service_type.value:<14} {c.tech_summary:<30} {port_str}"
+        )
         if c.components:
-            click.echo(f"      components: {', '.join(comp.name for comp in c.components)}")
+            click.echo(
+                f"      components: {', '.join(comp.name for comp in c.components)}"
+            )
 
 
 # ── Commands ─────────────────────────────────────────────────────────────────
+
 
 @click.group("arch")
 @click.pass_context
@@ -93,8 +105,14 @@ async def arch(ctx):
 
 
 @arch.command("discover")
-@click.option("--project-dir", default=".", help="Project root directory (default: cwd)")
-@click.option("--output-dir", default=None, help="Output directory (default: .forktex/fsd/evidence/)")
+@click.option(
+    "--project-dir", default=".", help="Project root directory (default: cwd)"
+)
+@click.option(
+    "--output-dir",
+    default=None,
+    help="Output directory (default: .forktex/fsd/evidence/)",
+)
 async def discover_cmd(project_dir, output_dir):
     """Discover architecture of a project.
 
@@ -125,7 +143,11 @@ async def discover_cmd(project_dir, output_dir):
 
 
 @arch.command("multi")
-@click.option("--base-dir", default=None, help="Parent directory containing projects (default: parent of cwd)")
+@click.option(
+    "--base-dir",
+    default=None,
+    help="Parent directory containing projects (default: parent of cwd)",
+)
 @click.argument("projects", nargs=-1)
 @click.option("--output-dir", default=None, help="Output directory")
 async def multi_cmd(base_dir, projects, output_dir):
@@ -156,7 +178,9 @@ async def multi_cmd(base_dir, projects, output_dir):
 
     click.echo(f"Architecture: {workspace.name}")
     click.echo(f"{'=' * 50}")
-    click.echo(f"Projects: {len(workspace.systems)} | Containers: {total_containers} | Ports: {total_ports}")
+    click.echo(
+        f"Projects: {len(workspace.systems)} | Containers: {total_containers} | Ports: {total_ports}"
+    )
     click.echo()
 
     for sys in workspace.systems:
@@ -169,7 +193,9 @@ async def multi_cmd(base_dir, projects, output_dir):
         click.echo(f"  {'Project':<22} {'Service':<12} {'Host':<8} {'Type'}")
         click.echo(f"  {'-' * 52}")
         for p in workspace.all_ports:
-            click.echo(f"  {p['system']:<22} {p['service']:<12} :{p['host_port']:<6} {p['type']}")
+            click.echo(
+                f"  {p['system']:<22} {p['service']:<12} :{p['host_port']:<6} {p['type']}"
+            )
         click.echo()
 
     click.echo(f"JSON:          {json_path}")
@@ -181,7 +207,9 @@ async def multi_cmd(base_dir, projects, output_dir):
 @click.option("--base-dir", default=None, help="Parent directory containing projects")
 @click.argument("projects", nargs=-1)
 @click.option("--output-dir", "-o", default=".", help="Output directory for reports")
-@click.option("--pdf", is_flag=True, help="Also generate PDF (requires forktex-documents[pdf])")
+@click.option(
+    "--pdf", is_flag=True, help="Also generate PDF (requires forktex-documents[pdf])"
+)
 @click.option("--system", "-s", default=None, help="Report for a single system only")
 async def report_cmd(base_dir, projects, output_dir, pdf, system):
     """Generate modular architecture reports (HTML + optional PDF).
@@ -204,7 +232,12 @@ async def report_cmd(base_dir, projects, output_dir, pdf, system):
 
     total_containers = sum(len(s.containers) for s in workspace.systems)
     total_packages = sum(len(s.packages) for s in workspace.systems)
-    total_lines = sum(comp.line_count for s in workspace.systems for c in s.containers for comp in c.components)
+    total_lines = sum(
+        comp.line_count
+        for s in workspace.systems
+        for c in s.containers
+        for comp in c.components
+    )
 
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
     out = Path(output_dir)
@@ -216,15 +249,21 @@ async def report_cmd(base_dir, projects, output_dir, pdf, system):
         sys_obj = workspace.system_by_id(system)
         if not sys_obj:
             raise click.ClickException(f"System '{system}' not found")
-        html = env.get_template("reports/system_report.html").render(sys=sys_obj, generated_at=ts)
+        html = env.get_template("reports/system_report.html").render(
+            sys=sys_obj, generated_at=ts
+        )
         p = out / f"{system}-report.html"
         p.write_text(html)
         files.append(p)
     else:
         html = env.get_template("reports/ecosystem_report.html").render(
-            workspace=workspace, generated_at=ts, total_containers=total_containers,
-            total_ports=len(workspace.all_ports), total_packages=total_packages,
-            total_lines=total_lines, all_ports=workspace.all_ports,
+            workspace=workspace,
+            generated_at=ts,
+            total_containers=total_containers,
+            total_ports=len(workspace.all_ports),
+            total_packages=total_packages,
+            total_lines=total_lines,
+            all_ports=workspace.all_ports,
         )
         p = out / "ecosystem-report.html"
         p.write_text(html)
@@ -236,6 +275,7 @@ async def report_cmd(base_dir, projects, output_dir, pdf, system):
     if pdf:
         try:
             from forktex_documents import render_pdf
+
             for f in files:
                 pdf_bytes = render_pdf(f.read_text(), base_url=str(out))
                 pdf_p = Path(str(f).replace(".html", ".pdf"))
@@ -249,7 +289,9 @@ async def report_cmd(base_dir, projects, output_dir, pdf, system):
 @click.option("--base-dir", default=None, help="Parent directory")
 @click.option("--port", "-p", default=4444, help="Port")
 @click.option("--host", default="127.0.0.1", help="Host")
-@click.option("--static-dir", default=None, help="Serve React build from this directory")
+@click.option(
+    "--static-dir", default=None, help="Serve React build from this directory"
+)
 async def serve_cmd(base_dir, port, host, static_dir):
     """Start a live architecture web server.
 
@@ -355,7 +397,7 @@ async def serve_cmd(base_dir, port, host, static_dir):
         type: str
         level: int
         data: dict = Field(default_factory=dict)
-        children: list['NavigationNode'] = Field(default_factory=list)
+        children: list["NavigationNode"] = Field(default_factory=list)
 
     class ArchitectureResponse(BaseModel):
         generated_at: str
@@ -389,14 +431,22 @@ async def serve_cmd(base_dir, port, host, static_dir):
         allow_headers=["*"],
     )
 
-    @web_app.get("/api/architecture", response_model=ArchitectureResponse, tags=["Architecture"])
+    @web_app.get(
+        "/api/architecture", response_model=ArchitectureResponse, tags=["Architecture"]
+    )
     async def get_architecture():
         """Full architecture model with C4 hierarchy, git, packages, and edges."""
         ws = discover_multi(root)
-        raw = {"generated_at": datetime.now(timezone.utc).isoformat(), **ws.to_dict(), "navigation": ws.to_navigation()}
+        raw = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            **ws.to_dict(),
+            "navigation": ws.to_navigation(),
+        }
         return JSONResponse(raw)
 
-    @web_app.get("/api/navigation", response_model=NavigationNode, tags=["Architecture"])
+    @web_app.get(
+        "/api/navigation", response_model=NavigationNode, tags=["Architecture"]
+    )
     async def get_navigation():
         """Hierarchical navigation tree for drill-down UI."""
         return JSONResponse(discover_multi(root).to_navigation())
@@ -407,22 +457,37 @@ async def serve_cmd(base_dir, port, host, static_dir):
         ws = discover_multi(root)
         return JSONResponse([_system_dict_from_ws(s) for s in ws.systems])
 
-    @web_app.get("/api/systems/{system_id}", response_model=SystemInfo, tags=["Architecture"])
+    @web_app.get(
+        "/api/systems/{system_id}", response_model=SystemInfo, tags=["Architecture"]
+    )
     async def get_system(system_id: str):
         """Get a single system by ID with full container/component detail."""
         ws = discover_multi(root)
         sys = ws.system_by_id(system_id)
         if not sys:
-            return JSONResponse({"detail": f"System '{system_id}' not found"}, status_code=404)
+            return JSONResponse(
+                {"detail": f"System '{system_id}' not found"}, status_code=404
+            )
         return JSONResponse(_system_dict_from_ws(sys))
 
     @web_app.get("/api/edges", response_model=list[EdgeInfo], tags=["Architecture"])
     async def list_edges():
         """Cross-system dependency edges from libraries.json."""
         ws = discover_multi(root)
-        return JSONResponse([{"source": r.source_id, "target": r.target_id, "description": r.description} for r in ws.relationships])
+        return JSONResponse(
+            [
+                {
+                    "source": r.source_id,
+                    "target": r.target_id,
+                    "description": r.description,
+                }
+                for r in ws.relationships
+            ]
+        )
 
-    @web_app.get("/api/ports", response_model=list[PortAllocation], tags=["Architecture"])
+    @web_app.get(
+        "/api/ports", response_model=list[PortAllocation], tags=["Architecture"]
+    )
     async def list_ports():
         """Port allocation table across all systems."""
         ws = discover_multi(root)
@@ -430,6 +495,7 @@ async def serve_cmd(base_dir, port, host, static_dir):
 
     def _system_dict_from_ws(sys):
         from forktex.agent.fsd.arch import _system_dict
+
         return _system_dict(sys)
 
     # ── Chat + Tools (MCP-like client-level tool calling) ──
@@ -450,10 +516,17 @@ async def serve_cmd(base_dir, port, host, static_dir):
             "description": "Generate and deploy a workflow from a natural language description",
             "endpoint": "http://localhost:8002/api/deploy/smart-build",
             "method": "POST",
-            "parameters": {"type": "object", "properties": {
-                "description": {"type": "string", "description": "Natural language workflow description"},
-                "auto_deploy": {"type": "boolean", "default": True},
-            }, "required": ["description"]},
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "description": "Natural language workflow description",
+                    },
+                    "auto_deploy": {"type": "boolean", "default": True},
+                },
+                "required": ["description"],
+            },
         },
         {
             "name": "list_workflows",
@@ -497,12 +570,16 @@ async def serve_cmd(base_dir, port, host, static_dir):
         messages = body.get("messages", [])
         tools_enabled = body.get("tools_enabled", True)
 
-        from forktex_intelligence.config import get_intelligence_settings
+        from forktex.agent.intelligence.settings import get_intelligence_settings
+
         settings = get_intelligence_settings()
         if not settings.is_configured:
-            return JSONResponse({"detail": "Intelligence API not configured"}, status_code=503)
+            return JSONResponse(
+                {"detail": "Intelligence API not configured"}, status_code=503
+            )
 
         from forktex_intelligence import Intelligence
+
         try:
             async with Intelligence() as ai:
                 llm_tools = None
@@ -511,7 +588,9 @@ async def serve_cmd(base_dir, port, host, static_dir):
                         {
                             "name": t["name"],
                             "description": t["description"],
-                            "input_schema": t.get("parameters", {"type": "object", "properties": {}}),
+                            "input_schema": t.get(
+                                "parameters", {"type": "object", "properties": {}}
+                            ),
                         }
                         for t in TOOLS
                     ]
@@ -531,17 +610,23 @@ async def serve_cmd(base_dir, port, host, static_dir):
                     tools=llm_tools,
                 )
 
-                return JSONResponse({
-                    "role": "assistant",
-                    "content": resp.text,
-                    "tool_calls": resp.tool_calls,
-                })
+                return JSONResponse(
+                    {
+                        "role": "assistant",
+                        "content": resp.text,
+                        "tool_calls": resp.tool_calls,
+                    }
+                )
         except Exception as e:
-            return JSONResponse({"role": "assistant", "content": f"Error: {e}", "tool_calls": []})
+            return JSONResponse(
+                {"role": "assistant", "content": f"Error: {e}", "tool_calls": []}
+            )
 
     # Serve React build if provided
     if static_dir and Path(static_dir).is_dir():
-        web_app.mount("/app", StaticFiles(directory=static_dir, html=True), name="static")
+        web_app.mount(
+            "/app", StaticFiles(directory=static_dir, html=True), name="static"
+        )
         click.echo(f"  React: http://{host}:{port}/app")
 
     # Fallback: serve the Jinja2 HTML dashboard

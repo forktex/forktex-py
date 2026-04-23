@@ -21,18 +21,21 @@ from forktex.agent.cloud.logs import logs
 from forktex.agent.cloud.events import events
 from forktex.agent.cloud.dns import dns
 from forktex.agent.cloud.ssl import ssl
+from forktex.agent.cloud.usage import usage
 
 
 @click.group()
-@click.option("--project-dir", default=None, help="Project root directory (default: cwd)")
+@click.option(
+    "--project-dir", default=None, help="Project root directory (default: cwd)"
+)
 @click.pass_context
 async def cloud(ctx, project_dir):
     """ForkTex Cloud — deploy, manage, and monitor your infrastructure."""
     from pathlib import Path
-    from forktex_cloud.config import CloudContext
+    from forktex.agent.cloud.settings import load_cloud_context
 
     project_root = Path(project_dir).resolve() if project_dir else Path.cwd()
-    cloud_ctx = CloudContext.load(project_root)
+    cloud_ctx = load_cloud_context(project_root)
     ctx.ensure_object(dict)
     ctx.obj["project_root"] = project_root
     ctx.obj["cloud_ctx"] = cloud_ctx
@@ -53,3 +56,4 @@ cloud.add_command(logs)
 cloud.add_command(events)
 cloud.add_command(dns)
 cloud.add_command(ssl)
+cloud.add_command(usage)

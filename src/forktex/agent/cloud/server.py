@@ -31,25 +31,31 @@ async def server_list(ctx):
     fmt = "  {:<38s}  {:<24s}  {:<16s}  {:<12s}  {}"
     click.echo(fmt.format("ID", "NAME", "IP", "PROVIDER", "STATUS"))
     for s in servers:
-        click.echo(fmt.format(
-            str(s.id),
-            s.name,
-            s.ipv4 or "-",
-            s.provider,
-            s.status,
-        ))
+        click.echo(
+            fmt.format(
+                str(s.id),
+                s.name,
+                s.ipv4 or "-",
+                s.provider,
+                s.status,
+            )
+        )
 
 
 @server.command("create")
 @click.option("--name", required=True, help="Server name")
-@click.option("--flavour", default=None, help="Flavour (starter/standard/performance/heavy)")
+@click.option(
+    "--flavour", default=None, help="Flavour (starter/standard/performance/heavy)"
+)
 @click.option("--region", default=None, help="Region")
 @click.option("--type", "server_type", default=None, help="Server type override")
 @click.option("--image", default=None, help="OS image")
 @click.option("--location", default=None, help="Data center override")
 @click.option("--project", "project_id", default="", help="Project name")
 @click.pass_context
-async def server_create(ctx, name, flavour, region, server_type, image, location, project_id):
+async def server_create(
+    ctx, name, flavour, region, server_type, image, location, project_id
+):
     """Create a new VPS."""
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
@@ -58,8 +64,13 @@ async def server_create(ctx, name, flavour, region, server_type, image, location
 
     with ForktexCloudClient.from_context(cloud_ctx) as client:
         result = client.create_server(
-            name, flavour=flavour, region=region, server_type=server_type,
-            image=image, location=location, project_id=project_id,
+            name,
+            flavour=flavour,
+            region=region,
+            server_type=server_type,
+            image=image,
+            location=location,
+            project_id=project_id,
         )
     click.echo(result.model_dump_json(indent=2))
 
@@ -112,9 +123,8 @@ async def server_restart_cmd(ctx, server_id, service):
     with ForktexCloudClient.from_context(cloud_ctx) as client:
         result = client.server_restart(server_id, service=service)
     click.echo(f"Restart: {result.status}")
-    output = getattr(result, "output", "")
-    if output:
-        click.echo(output)
+    if result.output:
+        click.echo(result.output)
 
 
 @server.command("exec")
@@ -131,15 +141,20 @@ async def server_exec_cmd(ctx, server_id, service, command):
 
     with ForktexCloudClient.from_context(cloud_ctx) as client:
         result = client.server_exec(server_id, service=service, command=command)
-    click.echo(result.output if hasattr(result, 'output') else result.status)
+    click.echo(result.output or result.status)
 
 
 @server.command("switch")
 @click.argument("server_id")
-@click.option("--component", required=True,
-              help="Compute service id to flip (e.g. 'web', 'api').")
-@click.option("--to-color", required=True, type=click.Choice(["blue", "green"]),
-              help="Target slot to make active.")
+@click.option(
+    "--component", required=True, help="Compute service id to flip (e.g. 'web', 'api')."
+)
+@click.option(
+    "--to-color",
+    required=True,
+    type=click.Choice(["blue", "green"]),
+    help="Target slot to make active.",
+)
 @click.pass_context
 async def server_switch_cmd(ctx, server_id, component, to_color):
     """Manually switch blue-green traffic for a component (manual rollback path)."""
@@ -158,8 +173,7 @@ async def server_switch_cmd(ctx, server_id, component, to_color):
 @server.command("update")
 @click.argument("server_id")
 @click.option("--component", required=True, help="Compute service id to update.")
-@click.option("--new-image", required=True,
-              help="New docker image (e.g. 'myapi:v2').")
+@click.option("--new-image", required=True, help="New docker image (e.g. 'myapi:v2').")
 @click.pass_context
 async def server_update_cmd(ctx, server_id, component, new_image):
     """Blue-green image update: pull, deploy to inactive slot, health check, auto-switch.
@@ -173,7 +187,9 @@ async def server_update_cmd(ctx, server_id, component, new_image):
     from forktex_cloud.client import ForktexCloudClient
 
     with ForktexCloudClient.from_context(cloud_ctx) as client:
-        result = client.server_update(server_id, component=component, new_image=new_image)
+        result = client.server_update(
+            server_id, component=component, new_image=new_image
+        )
     click.echo(f"Update {component} -> {new_image}: {result.status}")
     if result.output:
         click.echo(result.output)

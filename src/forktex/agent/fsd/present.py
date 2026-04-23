@@ -25,22 +25,89 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 # ── Color schemes per archetype ──────────────────────────────────────────────
 
 ARCHETYPE_COLORS = {
-    "forktex-api":     {"primary": "#10b981", "primary_light": "#34d399", "accent": "#06b6d4", "primary_rgb": "16, 185, 129", "accent_rgb": "6, 182, 212"},
-    "forktex-client":  {"primary": "#8b5cf6", "primary_light": "#a78bfa", "accent": "#ec4899", "primary_rgb": "139, 92, 246", "accent_rgb": "236, 72, 153"},
-    "forktex-web":     {"primary": "#3b82f6", "primary_light": "#60a5fa", "accent": "#8b5cf6", "primary_rgb": "59, 130, 246", "accent_rgb": "139, 92, 246"},
-    "forktex-db":      {"primary": "#0ea5e9", "primary_light": "#38bdf8", "accent": "#06b6d4", "primary_rgb": "14, 165, 233", "accent_rgb": "6, 182, 212"},
-    "forktex-cache":   {"primary": "#ef4444", "primary_light": "#f87171", "accent": "#f97316", "primary_rgb": "239, 68, 68", "accent_rgb": "249, 115, 22"},
-    "forktex-storage": {"primary": "#059669", "primary_light": "#34d399", "accent": "#0ea5e9", "primary_rgb": "5, 150, 105", "accent_rgb": "14, 165, 233"},
-    "forktex-vector":  {"primary": "#d946ef", "primary_light": "#e879f9", "accent": "#f97316", "primary_rgb": "217, 70, 239", "accent_rgb": "249, 115, 22"},
-    "forktex-queue":   {"primary": "#f59e0b", "primary_light": "#fbbf24", "accent": "#10b981", "primary_rgb": "245, 158, 11", "accent_rgb": "16, 185, 129"},
-    "forktex-mail":    {"primary": "#6366f1", "primary_light": "#818cf8", "accent": "#06b6d4", "primary_rgb": "99, 102, 241", "accent_rgb": "6, 182, 212"},
-    "forktex-phone":   {"primary": "#14b8a6", "primary_light": "#2dd4bf", "accent": "#8b5cf6", "primary_rgb": "20, 184, 166", "accent_rgb": "139, 92, 246"},
+    "forktex-api": {
+        "primary": "#10b981",
+        "primary_light": "#34d399",
+        "accent": "#06b6d4",
+        "primary_rgb": "16, 185, 129",
+        "accent_rgb": "6, 182, 212",
+    },
+    "forktex-client": {
+        "primary": "#8b5cf6",
+        "primary_light": "#a78bfa",
+        "accent": "#ec4899",
+        "primary_rgb": "139, 92, 246",
+        "accent_rgb": "236, 72, 153",
+    },
+    "forktex-web": {
+        "primary": "#3b82f6",
+        "primary_light": "#60a5fa",
+        "accent": "#8b5cf6",
+        "primary_rgb": "59, 130, 246",
+        "accent_rgb": "139, 92, 246",
+    },
+    "forktex-db": {
+        "primary": "#0ea5e9",
+        "primary_light": "#38bdf8",
+        "accent": "#06b6d4",
+        "primary_rgb": "14, 165, 233",
+        "accent_rgb": "6, 182, 212",
+    },
+    "forktex-cache": {
+        "primary": "#ef4444",
+        "primary_light": "#f87171",
+        "accent": "#f97316",
+        "primary_rgb": "239, 68, 68",
+        "accent_rgb": "249, 115, 22",
+    },
+    "forktex-storage": {
+        "primary": "#059669",
+        "primary_light": "#34d399",
+        "accent": "#0ea5e9",
+        "primary_rgb": "5, 150, 105",
+        "accent_rgb": "14, 165, 233",
+    },
+    "forktex-vector": {
+        "primary": "#d946ef",
+        "primary_light": "#e879f9",
+        "accent": "#f97316",
+        "primary_rgb": "217, 70, 239",
+        "accent_rgb": "249, 115, 22",
+    },
+    "forktex-queue": {
+        "primary": "#f59e0b",
+        "primary_light": "#fbbf24",
+        "accent": "#10b981",
+        "primary_rgb": "245, 158, 11",
+        "accent_rgb": "16, 185, 129",
+    },
+    "forktex-mail": {
+        "primary": "#6366f1",
+        "primary_light": "#818cf8",
+        "accent": "#06b6d4",
+        "primary_rgb": "99, 102, 241",
+        "accent_rgb": "6, 182, 212",
+    },
+    "forktex-phone": {
+        "primary": "#14b8a6",
+        "primary_light": "#2dd4bf",
+        "accent": "#8b5cf6",
+        "primary_rgb": "20, 184, 166",
+        "accent_rgb": "139, 92, 246",
+    },
 }
 
-DEFAULT_COLORS = {"primary": "#10b981", "primary_light": "#34d399", "accent": "#06b6d4", "primary_rgb": "16, 185, 129", "accent_rgb": "6, 182, 212"}
+DEFAULT_COLORS = {
+    "primary": "#10b981",
+    "primary_light": "#34d399",
+    "accent": "#06b6d4",
+    "primary_rgb": "16, 185, 129",
+    "accent_rgb": "6, 182, 212",
+}
 
 
 # ── Markdown extraction ──────────────────────────────────────────────────────
+
 
 def _extract_tables(md: str, header_pattern: str) -> list[dict]:
     """Extract rows from the first markdown table under a heading matching pattern."""
@@ -58,7 +125,12 @@ def _extract_tables(md: str, header_pattern: str) -> list[dict]:
                 headers = cells
             else:
                 rows.append(dict(zip(headers, cells)))
-        elif in_section and not line.startswith("|") and line.strip() and not line.startswith("<!--"):
+        elif (
+            in_section
+            and not line.startswith("|")
+            and line.strip()
+            and not line.startswith("<!--")
+        ):
             if headers:
                 break
     return rows
@@ -92,7 +164,10 @@ def _extract_front_matter(md: str) -> dict:
                     key, val = line.split(":", 1)
                     val = val.strip().strip('"').strip("'")
                     if val.startswith("["):
-                        val = [v.strip().strip('"').strip("'") for v in val.strip("[]").split(",")]
+                        val = [
+                            v.strip().strip('"').strip("'")
+                            for v in val.strip("[]").split(",")
+                        ]
                     fm[key.strip()] = val
             return fm
     return {}
@@ -100,39 +175,68 @@ def _extract_front_matter(md: str) -> dict:
 
 # ── Data builders ────────────────────────────────────────────────────────────
 
-def _build_archetype_context(manifest_item: dict, md_content: str, colors: dict) -> dict:
+
+def _build_archetype_context(
+    manifest_item: dict, md_content: str, colors: dict
+) -> dict:
     """Build Jinja2 context for an archetype presentation."""
     slug = manifest_item.get("slug", "")
     stack = manifest_item.get("stack", [])
     title = manifest_item.get("title", slug)
 
     # Extract tech stack table
-    tech_rows = _extract_tables(md_content, "stack") or _extract_tables(md_content, "technology")
+    tech_rows = _extract_tables(md_content, "stack") or _extract_tables(
+        md_content, "technology"
+    )
     tech_stack = []
     for row in tech_rows[:10]:
-        name = row.get("Component") or row.get("Technology") or row.get("component") or row.get("technology") or ""
+        name = (
+            row.get("Component")
+            or row.get("Technology")
+            or row.get("component")
+            or row.get("technology")
+            or ""
+        )
         version = row.get("Version") or row.get("version") or ""
         tech = row.get("Technology") or row.get("technology") or ""
         if name and name.strip("**"):
             tech_stack.append({"name": name.strip("*"), "version": version or tech})
 
     # Extract features/capabilities
-    features = _extract_section_items(md_content, "capabilit") or \
-               _extract_section_items(md_content, "feature") or \
-               _extract_section_items(md_content, "pattern") or \
-               _extract_section_items(md_content, "rule")
+    features = (
+        _extract_section_items(md_content, "capabilit")
+        or _extract_section_items(md_content, "feature")
+        or _extract_section_items(md_content, "pattern")
+        or _extract_section_items(md_content, "rule")
+    )
 
     # Extract dependencies
-    dep_rows = _extract_tables(md_content, "dependenc") or _extract_tables(md_content, "key package")
+    dep_rows = _extract_tables(md_content, "dependenc") or _extract_tables(
+        md_content, "key package"
+    )
     dependencies = []
     for row in dep_rows[:9]:
-        name = row.get("Drive") or row.get("Package") or row.get("name") or list(row.values())[0] if row else ""
-        desc = row.get("Purpose") or row.get("description") or row.get("desc") or (list(row.values())[1] if len(row) > 1 else "")
+        name = (
+            row.get("Drive")
+            or row.get("Package")
+            or row.get("name")
+            or list(row.values())[0]
+            if row
+            else ""
+        )
+        desc = (
+            row.get("Purpose")
+            or row.get("description")
+            or row.get("desc")
+            or (list(row.values())[1] if len(row) > 1 else "")
+        )
         if name and name.strip("*`"):
             dependencies.append({"name": name.strip("*`"), "desc": desc.strip("*`")})
 
     # Extract FSD atoms
-    atom_rows = _extract_tables(md_content, "fsd atom") or _extract_tables(md_content, "atom")
+    atom_rows = _extract_tables(md_content, "fsd atom") or _extract_tables(
+        md_content, "atom"
+    )
     fsd_atoms = []
     for row in atom_rows[:12]:
         name = row.get("Atom") or row.get("atom") or ""
@@ -140,21 +244,30 @@ def _build_archetype_context(manifest_item: dict, md_content: str, colors: dict)
         iso = row.get("ISO") or row.get("ISO Control") or row.get("iso") or ""
         status = row.get("Status") or row.get("status") or ""
         if name and name.strip("`"):
-            fsd_atoms.append({
-                "name": name.strip("`"),
-                "target": target.strip("`"),
-                "iso": iso,
-                "status": "pass" if "required" in status.lower() or "optional" in status.lower() else status.lower(),
-            })
+            fsd_atoms.append(
+                {
+                    "name": name.strip("`"),
+                    "target": target.strip("`"),
+                    "iso": iso,
+                    "status": "pass"
+                    if "required" in status.lower() or "optional" in status.lower()
+                    else status.lower(),
+                }
+            )
 
     # Subtitle from first paragraph after title
     subtitle_match = re.search(r"^>\s*(.+)$", md_content, re.MULTILINE)
-    subtitle = subtitle_match.group(1).strip() if subtitle_match else f"{'Technology blueprint' if True else 'Platform implementation guide'} for the FORKTEX ecosystem"
+    subtitle = (
+        subtitle_match.group(1).strip()
+        if subtitle_match
+        else f"{'Technology blueprint' if True else 'Platform implementation guide'} for the FORKTEX ecosystem"
+    )
 
     return {
         "kind": "archetype",
         "title": title,
-        "display_name": slug.replace("forktex-", "").replace("-", " ").title() + " Stack",
+        "display_name": slug.replace("forktex-", "").replace("-", " ").title()
+        + " Stack",
         "subtitle": subtitle,
         "colors": colors,
         "header_badges": [{"value": s, "label": ""} for s in stack[:4]],
@@ -171,7 +284,9 @@ def _build_archetype_context(manifest_item: dict, md_content: str, colors: dict)
     }
 
 
-def _build_blueprint_context(manifest_item: dict, md_content: str, colors: dict) -> dict:
+def _build_blueprint_context(
+    manifest_item: dict, md_content: str, colors: dict
+) -> dict:
     """Build Jinja2 context for a blueprint presentation."""
     slug = manifest_item.get("slug", "")
     title = manifest_item.get("title", slug)
@@ -179,8 +294,12 @@ def _build_blueprint_context(manifest_item: dict, md_content: str, colors: dict)
 
     ctx = _build_archetype_context(manifest_item, md_content, colors)
     ctx["kind"] = "blueprint"
-    ctx["display_name"] = slug.replace("-api", "").replace("-client", "").replace("-", " ").title()
-    ctx["subtitle"] = f"Development blueprint for {ctx['display_name']} — instantiation of {archetype}"
+    ctx["display_name"] = (
+        slug.replace("-api", "").replace("-client", "").replace("-", " ").title()
+    )
+    ctx["subtitle"] = (
+        f"Development blueprint for {ctx['display_name']} — instantiation of {archetype}"
+    )
 
     # Extract platform info from front matter or markdown
     fm = _extract_front_matter(md_content)
@@ -192,27 +311,53 @@ def _build_blueprint_context(manifest_item: dict, md_content: str, colors: dict)
     }
 
     # Extract engines from Engine/Module inventory section
-    engines = _extract_tables(md_content, "engine") or _extract_tables(md_content, "module")
+    engines = _extract_tables(md_content, "engine") or _extract_tables(
+        md_content, "module"
+    )
     if engines:
         ctx["features"] = []
         for eng in engines[:10]:
-            name = eng.get("Engine") or eng.get("Module") or eng.get("engine") or list(eng.values())[0] if eng else ""
-            purpose = eng.get("Purpose") or eng.get("purpose") or (list(eng.values())[1] if len(eng) > 1 else "")
+            name = (
+                eng.get("Engine")
+                or eng.get("Module")
+                or eng.get("engine")
+                or list(eng.values())[0]
+                if eng
+                else ""
+            )
+            purpose = (
+                eng.get("Purpose")
+                or eng.get("purpose")
+                or (list(eng.values())[1] if len(eng) > 1 else "")
+            )
             if name and name.strip("*`"):
                 ctx["features"].append(f"{name.strip('*`')} — {purpose.strip('*`')}")
 
     # Extract API routes
-    routes = _extract_tables(md_content, "api route") or _extract_tables(md_content, "endpoint")
+    routes = _extract_tables(md_content, "api route") or _extract_tables(
+        md_content, "endpoint"
+    )
     if routes and not ctx.get("architecture_layers"):
-        ctx["architecture_layers"] = [{
-            "boxes": [{"name": r.get("Prefix") or r.get("Route") or list(r.values())[0], "highlight": i == 0}]
-            for i, r in enumerate(routes[:4]) if r
-        }]
+        ctx["architecture_layers"] = [
+            {
+                "boxes": [
+                    {
+                        "name": r.get("Prefix")
+                        or r.get("Route")
+                        or list(r.values())[0],
+                        "highlight": i == 0,
+                    }
+                ]
+                for i, r in enumerate(routes[:4])
+                if r
+            }
+        ]
 
     return ctx
 
 
 # ── Rendering ────────────────────────────────────────────────────────────────
+
 
 def _render(context: dict) -> str:
     """Render the archetype/blueprint template."""
@@ -223,6 +368,7 @@ def _render(context: dict) -> str:
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
+
 @click.group()
 def present():
     """Generate presentations for archetypes and blueprints."""
@@ -231,7 +377,12 @@ def present():
 
 @present.command()
 @click.option("--output-dir", default=None, type=click.Path(), help="Output directory")
-@click.option("--docs-dir", default=None, type=click.Path(), help="Docs root (default: cwd/docs or cwd)")
+@click.option(
+    "--docs-dir",
+    default=None,
+    type=click.Path(),
+    help="Docs root (default: cwd/docs or cwd)",
+)
 @click.pass_context
 async def archetypes(ctx, output_dir, docs_dir):
     """Generate HTML presentations for all archetypes."""
@@ -270,7 +421,12 @@ async def archetypes(ctx, output_dir, docs_dir):
 
 @present.command()
 @click.option("--output-dir", default=None, type=click.Path(), help="Output directory")
-@click.option("--docs-dir", default=None, type=click.Path(), help="Docs root (default: cwd/docs or cwd)")
+@click.option(
+    "--docs-dir",
+    default=None,
+    type=click.Path(),
+    help="Docs root (default: cwd/docs or cwd)",
+)
 @click.pass_context
 async def blueprints(ctx, output_dir, docs_dir):
     """Generate HTML presentations for all blueprints."""

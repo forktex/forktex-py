@@ -34,10 +34,19 @@ def temp_dir_with_files(temp_dir):
 def temp_git_repo(temp_dir):
     """Create a temporary git repository."""
     import subprocess
+
     subprocess.run(["git", "init"], cwd=temp_dir, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=temp_dir, capture_output=True)
-    subprocess.run(["git", "config", "user.name", "Test"], cwd=temp_dir, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=temp_dir,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"], cwd=temp_dir, capture_output=True
+    )
     (Path(temp_dir) / "file.txt").write_text("hello\n")
     subprocess.run(["git", "add", "."], cwd=temp_dir, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "initial"], cwd=temp_dir, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "initial"], cwd=temp_dir, capture_output=True
+    )
     return temp_dir

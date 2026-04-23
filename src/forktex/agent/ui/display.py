@@ -21,11 +21,13 @@ _RESULT_TRUNCATE = 300
 
 
 def show_welcome() -> None:
-    console.print(Panel.fit(
-        "[bold cyan]Forktex[/bold cyan] - AI-Powered Development Assistant\n"
-        f"Version {CLI_VERSION}",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]Forktex[/bold cyan] - AI-Powered Development Assistant\n"
+            f"Version {CLI_VERSION}",
+            border_style="cyan",
+        )
+    )
 
 
 def show_session_info(model: str, project_root: str) -> None:
@@ -87,4 +89,6 @@ def handle_tool_event(event: str, tool_name: str, data: Dict[str, Any]) -> None:
     if event == "call":
         show_tool_call(tool_name, data)
     elif event == "result":
-        show_tool_result(tool_name, data.get("content", ""), data.get("is_error", False))
+        show_tool_result(
+            tool_name, data.get("content", ""), data.get("is_error", False)
+        )

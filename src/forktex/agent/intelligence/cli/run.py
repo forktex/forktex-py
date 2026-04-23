@@ -23,7 +23,12 @@ def _get_project_root() -> str:
 @click.command()
 @click.argument("task")
 @click.option("--project", "-d", default=None, help="Project directory")
-@click.option("--agent-type", "-t", default="developer", help="Agent type (developer, researcher, reviewer, assistant)")
+@click.option(
+    "--agent-type",
+    "-t",
+    default="developer",
+    help="Agent type (developer, researcher, reviewer, assistant)",
+)
 async def run(task, project, agent_type):
     """Run a task with full orchestration via the Intelligence API.
 
@@ -33,7 +38,7 @@ async def run(task, project, agent_type):
         forktex run "Add error handling to src/app.py"
         forktex run --agent-type researcher "What testing patterns does this project use?"
     """
-    from forktex_intelligence.config import get_intelligence_settings
+    from forktex.agent.intelligence.settings import get_intelligence_settings
     from forktex_intelligence.client.client import ForktexIntelligenceClient
     from forktex_intelligence.streams import SSEEventType
     from forktex.agent.manager import AgentManager
@@ -48,7 +53,7 @@ async def run(task, project, agent_type):
 
     client = ForktexIntelligenceClient.from_settings(settings)
     # Auto-resolve org from API key
-    if not client._org_id:
+    if not client.org_id:
         await client.whoami()
 
     manager = AgentManager(
@@ -72,7 +77,9 @@ async def run(task, project, agent_type):
 
     try:
         console.print(f"\n[bold]Task:[/bold] {task}")
-        console.print(f"[dim]Session: {session.id} | Agent: {process.id} ({agent_type})[/dim]")
+        console.print(
+            f"[dim]Session: {session.id} | Agent: {process.id} ({agent_type})[/dim]"
+        )
         console.print()
 
         # Stream the response
@@ -96,9 +103,11 @@ async def run(task, project, agent_type):
 
         # Finalize
         from forktex.agent.process import AgentStatus
+
         if process.status != AgentStatus.FAILED:
             process.status = AgentStatus.COMPLETED
             import time
+
             process.completed_at = time.time()
 
         manager.persist_state(process)
@@ -107,6 +116,11 @@ async def run(task, project, agent_type):
         info(f"Task completed. Agent: {process.id[:8]}...")
 
     except Exception as e:
-        error(f"Execution failed: {e}")
+        from forktex_intelligence.client.client import IntelligenceAPIError
+
+        if isinstance(e, IntelligenceAPIError):
+            error(f"API error ({e.status_code}): {e.detail}")
+        else:
+            error(f"Execution failed: {e}")
     finally:
         await client.close()

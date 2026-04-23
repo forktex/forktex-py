@@ -11,7 +11,10 @@ from pathlib import Path
 import asyncclick as click
 
 from forktex.agent.tools.git import (
-    _git_branch, _git_checkout, _git_status, _git_branch_list,
+    _git_branch,
+    _git_checkout,
+    _git_status,
+    _git_branch_list,
 )
 
 
@@ -24,7 +27,12 @@ async def git(ctx):
 
 @git.command("branch-all")
 @click.argument("branch_name")
-@click.option("--projects", "-p", multiple=True, help="Project directories (default: auto-detect siblings)")
+@click.option(
+    "--projects",
+    "-p",
+    multiple=True,
+    help="Project directories (default: auto-detect siblings)",
+)
 @click.option("--base-dir", default=None, help="Parent directory containing projects")
 @click.option("--checkout/--no-checkout", default=True, help="Checkout after creating")
 async def branch_all(branch_name, projects, base_dir, checkout):
@@ -41,10 +49,7 @@ async def branch_all(branch_name, projects, base_dir, checkout):
         dirs = [root / p for p in projects]
     else:
         # Auto-detect: all sibling directories that are git repos
-        dirs = sorted(
-            d for d in root.iterdir()
-            if d.is_dir() and (d / ".git").exists()
-        )
+        dirs = sorted(d for d in root.iterdir() if d.is_dir() and (d / ".git").exists())
 
     for d in dirs:
         if not d.exists():
@@ -59,12 +64,16 @@ async def branch_all(branch_name, projects, base_dir, checkout):
 
         # Check if branch already exists
         branches_result = await _git_branch_list(str(d))
-        existing = branches_result.data.get("branches", []) if branches_result.data else []
+        existing = (
+            branches_result.data.get("branches", []) if branches_result.data else []
+        )
 
         if branch_name in existing:
             if checkout:
                 r = await _git_checkout(str(d), branch_name)
-                click.echo(f"  EXISTS  {d.name}: already has '{branch_name}', checked out")
+                click.echo(
+                    f"  EXISTS  {d.name}: already has '{branch_name}', checked out"
+                )
             else:
                 click.echo(f"  EXISTS  {d.name}: already has '{branch_name}'")
         else:
@@ -88,10 +97,7 @@ async def status_all(projects, base_dir):
     if projects:
         dirs = [root / p for p in projects]
     else:
-        dirs = sorted(
-            d for d in root.iterdir()
-            if d.is_dir() and (d / ".git").exists()
-        )
+        dirs = sorted(d for d in root.iterdir() if d.is_dir() and (d / ".git").exists())
 
     for d in dirs:
         if not d.exists() or not (d / ".git").exists():
@@ -103,7 +109,11 @@ async def status_all(projects, base_dir):
             staged = len(data.get("staged", []))
             modified = len(data.get("modified", []))
             untracked = len(data.get("untracked", []))
-            status = "clean" if (staged + modified + untracked) == 0 else f"S:{staged} M:{modified} U:{untracked}"
+            status = (
+                "clean"
+                if (staged + modified + untracked) == 0
+                else f"S:{staged} M:{modified} U:{untracked}"
+            )
             click.echo(f"  {d.name:<20} {branch:<25} {status}")
         else:
             click.echo(f"  {d.name:<20} (error)")
@@ -123,10 +133,7 @@ async def checkout_all(ref, projects, base_dir):
     if projects:
         dirs = [root / p for p in projects]
     else:
-        dirs = sorted(
-            d for d in root.iterdir()
-            if d.is_dir() and (d / ".git").exists()
-        )
+        dirs = sorted(d for d in root.iterdir() if d.is_dir() and (d / ".git").exists())
 
     for d in dirs:
         if not d.exists() or not (d / ".git").exists():

@@ -1,0 +1,118 @@
+"""Intelligence config persistence — load/save IntelligenceSettings from .forktex/ files.
+
+IntelligenceSettings (from forktex_intelligence SDK) is a pure data model.
+This module owns all filesystem I/O: reading config from environment variables,
+``~/.forktex/intelligence.json`` (global), and ``<project>/.forktex/intelligence.json``
+(project-level), and persisting changes back.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from typing import Any, Optional
+
+from forktex_intelligence.config import IntelligenceSettings
+from forktex.core.paths import (
+    get_global_config_dir,
+    get_project_config_dir,
+)
+
+_INTELLIGENCE_CONFIG_FILENAME = "intelligence.json"
+
+# Cached settings
+_settings: Optional[IntelligenceSettings] = None
+
+
+def load_intelligence_settings(
+    project_root: Optional[str] = None,
+    **overrides: Any,
+) -> IntelligenceSettings:
+    """Load intelligence settings from config files and env vars.
+
+    Resolution order (highest priority first):
+    1. Explicit overrides
+    2. Environment variables (FORKTEX_INTELLIGENCE_ENDPOINT, FORKTEX_INTELLIGENCE_API_KEY)
+    3. Project-level config (.forktex/intelligence.json)
+    4. Global config (~/.forktex/intelligence.json)
+    5. Defaults
+    """
+    values: dict[str, Any] = {}
+
+    # Global config
+    global_path = get_global_config_dir() / _INTELLIGENCE_CONFIG_FILENAME
+    if global_path.exists():
+        try:
+            data = json.loads(global_path.read_text())
+            if isinstance(data, dict):
+                for key in IntelligenceSettings.model_fields:
+                    if key in data:
+                        values[key] = data[key]
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Project-level config (overrides global)
+    if project_root:
+        project_path = (
+            get_project_config_dir(project_root) / _INTELLIGENCE_CONFIG_FILENAME
+        )
+        if project_path.exists():
+            try:
+                data = json.loads(project_path.read_text())
+                if isinstance(data, dict):
+                    for key in IntelligenceSettings.model_fields:
+                        if key in data:
+                            values[key] = data[key]
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    # Environment variables
+    env_map = {
+        "endpoint": "FORKTEX_INTELLIGENCE_ENDPOINT",
+        "api_key": "FORKTEX_INTELLIGENCE_API_KEY",
+    }
+    for field_name, env_name in env_map.items():
+        val = os.environ.get(env_name)
+        if val is not None:
+            values[field_name] = val
+
+    # Explicit overrides
+    for k, v in overrides.items():
+        if v is not None:
+            values[k] = v
+
+    return IntelligenceSettings(**values)
+
+
+def get_intelligence_settings(
+    project_root: Optional[str] = None, **overrides: Any
+) -> IntelligenceSettings:
+    """Get or create cached intelligence settings."""
+    global _settings
+    if _settings is None or overrides or project_root:
+        _settings = load_intelligence_settings(project_root=project_root, **overrides)
+    return _settings
+
+
+def reset_intelligence_settings() -> None:
+    """Reset cached settings (for testing)."""
+    global _settings
+    _settings = None
+
+
+def save_intelligence_global(settings: IntelligenceSettings) -> None:
+    """Persist settings to ~/.forktex/intelligence.json."""
+    path = get_global_config_dir() / _INTELLIGENCE_CONFIG_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {"endpoint": settings.endpoint, "api_key": settings.api_key}
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def save_intelligence_project(
+    settings: IntelligenceSettings, project_root: str
+) -> None:
+    """Persist settings to .forktex/intelligence.json."""
+    path = get_project_config_dir(project_root) / _INTELLIGENCE_CONFIG_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {"endpoint": settings.endpoint, "api_key": settings.api_key}
+    path.write_text(json.dumps(data, indent=2) + "\n")

@@ -46,12 +46,14 @@ def _check_platform(project_root: Path) -> dict:
         iso_parts = []
         for m in atom.iso:
             iso_parts.append(f"{m.standard}:{m.clause}")
-        atoms.append({
-            "id": atom.id,
-            "name": atom.name,
-            "satisfied": satisfied,
-            "iso_summary": ", ".join(iso_parts) if iso_parts else "",
-        })
+        atoms.append(
+            {
+                "id": atom.id,
+                "name": atom.name,
+                "satisfied": satisfied,
+                "iso_summary": ", ".join(iso_parts) if iso_parts else "",
+            }
+        )
         if satisfied:
             passing_ids.add(atom.id)
 
@@ -102,7 +104,9 @@ async def overview(base_dir, projects, output_dir, name):
         click.echo(f"  Scanning {d.name}...")
         data = _check_platform(d)
         systems.append(data)
-        click.echo(f"    FSD {data['system'].fsd_level} | {len(data['passing_atoms'])}/{data['total_atoms']} atoms | {len(data['system'].containers)} containers")
+        click.echo(
+            f"    FSD {data['system'].fsd_level} | {len(data['passing_atoms'])}/{data['total_atoms']} atoms | {len(data['system'].containers)} containers"
+        )
 
     if not systems:
         raise click.ClickException("No projects found")
@@ -114,11 +118,16 @@ async def overview(base_dir, projects, output_dir, name):
         for c in s["system"].containers:
             for p in c.ports:
                 tech = c.tech_summary
-                all_ports.append({
-                    "system": s["system"].name, "service": c.id,
-                    "host_port": p.host, "container_port": p.container,
-                    "type": c.service_type.value, "tech": tech,
-                })
+                all_ports.append(
+                    {
+                        "system": s["system"].name,
+                        "service": c.id,
+                        "host_port": p.host,
+                        "container_port": p.container,
+                        "type": c.service_type.value,
+                        "tech": tech,
+                    }
+                )
     all_ports.sort(key=lambda x: x["host_port"])
 
     highest_level = max((s["system"].fsd_level for s in systems), default="L0")
@@ -136,7 +145,9 @@ async def overview(base_dir, projects, output_dir, name):
     for atom in ATOMS:
         for m in atom.iso:
             entry = {
-                "clause": m.clause, "control": m.control, "atom": atom.id,
+                "clause": m.clause,
+                "control": m.control,
+                "atom": atom.id,
                 "covered": atom.id in all_passing,
                 "partial": atom.id in any_passing and atom.id not in all_passing,
             }
@@ -184,7 +195,8 @@ async def overview(base_dir, projects, output_dir, name):
         "fsd_version": FSD_VERSION,
         "systems": [
             {
-                "id": s["id"], "name": s["system"].name,
+                "id": s["id"],
+                "name": s["system"].name,
                 "fsd_level": s["system"].fsd_level,
                 "containers": len(s["system"].containers),
                 "atoms_passing": len(s["passing_atoms"]),

@@ -31,6 +31,9 @@ def test_generate_root_makefile_contains_expected_targets():
 
     content = generated[0].content
     assert "PROJECT_NAME := forktex-py" in content
-    assert "install-global: ## Install the latest local forktex CLI globally in editable mode" in content
+    assert (
+        "install-global: ## Install the latest local forktex CLI globally in editable mode"
+        in content
+    )
     assert "format-check: ## Check formatting without rewriting files" in content
     assert "deps-lock: ## Lock dependencies" in content

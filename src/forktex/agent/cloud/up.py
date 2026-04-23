@@ -9,8 +9,12 @@ import asyncclick as click
 
 
 @click.command()
-@click.option("--env", "environment", default=None,
-              help="Environment overlay (e.g. dev, staging, production)")
+@click.option(
+    "--env",
+    "environment",
+    default=None,
+    help="Environment overlay (e.g. dev, staging, production)",
+)
 @click.option("--name", default=None, help="Override project name")
 @click.option("--flavour", default=None, help="Override infrastructure flavour")
 @click.option("--region", default=None, help="Override infrastructure region")
@@ -18,7 +22,9 @@ import asyncclick as click
 @click.option("--skip-ssl", is_flag=True, help="Skip SSL provisioning")
 @click.option("-d", "--detach", is_flag=True, help="Run containers in background (dev)")
 @click.option("--build", is_flag=True, help="Rebuild images before starting (dev)")
-@click.option("--down", "tear_down", is_flag=True, help="Stop and remove containers (dev)")
+@click.option(
+    "--down", "tear_down", is_flag=True, help="Stop and remove containers (dev)"
+)
 @click.option("--logs", "tail_logs", is_flag=True, help="Tail logs (dev)")
 @click.option("--service", default=None, help="Filter logs by service (dev)")
 @click.option("--since", default="10m", help="Log lookback window (dev, default: 10m)")
@@ -26,22 +32,54 @@ import asyncclick as click
 @click.option("--no-observability", is_flag=True, help="Disable Loki + Promtail (dev)")
 @click.option("-v", "--verbose", is_flag=True, help="Verbose output")
 @click.pass_context
-async def up(ctx, environment, name, flavour, region, skip_dns, skip_ssl,
-             detach, build, tear_down, tail_logs, service, since, raw,
-             no_observability, verbose):
+async def up(
+    ctx,
+    environment,
+    name,
+    flavour,
+    region,
+    skip_dns,
+    skip_ssl,
+    detach,
+    build,
+    tear_down,
+    tail_logs,
+    service,
+    since,
+    raw,
+    no_observability,
+    verbose,
+):
     """Deploy (remote) or start dev mode (local with --env dev)."""
     if environment in ("dev", "local"):
-        _run_dev(ctx, detach=detach, build=build, tear_down=tear_down,
-                 tail_logs=tail_logs, service=service, since=since,
-                 raw=raw, no_observability=no_observability,
-                 env_name=environment)
+        _run_dev(
+            ctx,
+            detach=detach,
+            build=build,
+            tear_down=tear_down,
+            tail_logs=tail_logs,
+            service=service,
+            since=since,
+            raw=raw,
+            no_observability=no_observability,
+            env_name=environment,
+        )
     else:
-        _run_remote(ctx, environment=environment, name=name, flavour=flavour,
-                    region=region, skip_dns=skip_dns, skip_ssl=skip_ssl,
-                    verbose=verbose)
+        _run_remote(
+            ctx,
+            environment=environment,
+            name=name,
+            flavour=flavour,
+            region=region,
+            skip_dns=skip_dns,
+            skip_ssl=skip_ssl,
+            verbose=verbose,
+        )
 
 
-def _run_remote(ctx, *, environment, name, flavour, region, skip_dns, skip_ssl, verbose):
+def _run_remote(
+    ctx, *, environment, name, flavour, region, skip_dns, skip_ssl, verbose
+):
     """Deploy via the cloud controller API (POST /api/v1/up)."""
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
@@ -69,8 +107,19 @@ def _run_remote(ctx, *, environment, name, flavour, region, skip_dns, skip_ssl, 
                 click.echo(f"Full response: {result}")
 
 
-def _run_dev(ctx, *, detach, build, tear_down, tail_logs, service, since,
-             raw, no_observability, env_name="dev"):
+def _run_dev(
+    ctx,
+    *,
+    detach,
+    build,
+    tear_down,
+    tail_logs,
+    service,
+    since,
+    raw,
+    no_observability,
+    env_name="dev",
+):
     """Local mode via docker compose. Accepts env_name 'dev' or 'local'."""
     project_root = ctx.obj["project_root"]
     # The generated compose is always docker-compose.dev.yml regardless of env_name
@@ -81,12 +130,27 @@ def _run_dev(ctx, *, detach, build, tear_down, tail_logs, service, since,
         project_name = "forktex"
         try:
             from forktex_cloud.manifest.loader import Manifest
+
             manifest = Manifest.load(project_root / "forktex.json", env=env_name)
             project_name = manifest.name or "forktex"
-        except Exception:
-            pass
-        _exec(["docker", "compose", "-p", project_name, "-f", compose_file,
-               "down", "-v", "--remove-orphans"])
+        except (FileNotFoundError, ValueError, KeyError):
+            click.echo(
+                f"Warning: could not load manifest, using project name '{project_name}'",
+                err=True,
+            )
+        _exec(
+            [
+                "docker",
+                "compose",
+                "-p",
+                project_name,
+                "-f",
+                compose_file,
+                "down",
+                "-v",
+                "--remove-orphans",
+            ]
+        )
         return
 
     if tail_logs:
@@ -95,13 +159,17 @@ def _run_dev(ctx, *, detach, build, tear_down, tail_logs, service, since,
             pname = "forktex"
             try:
                 from forktex_cloud.manifest.loader import Manifest
+
                 m = Manifest.load(project_root / "forktex.json", env=env_name)
                 pname = m.name or "forktex"
-            except Exception:
-                pass
+            except (FileNotFoundError, ValueError, KeyError):
+                click.echo(
+                    f"Warning: could not load manifest, using project name '{pname}'",
+                    err=True,
+                )
             _exec(["docker", "compose", "-p", pname, "-f", compose_file, "logs", "-f"])
             return
-        _tail_loki(project_root, service=service, since=since)
+        _tail_loki(project_root, service=service, since=since, env_name=env_name)
         return
 
     from forktex_cloud.bridge.dev_compose import write_dev_compose
@@ -116,13 +184,15 @@ def _run_dev(ctx, *, detach, build, tear_down, tail_logs, service, since,
     secrets_provider = None
     try:
         from forktex_cloud.secrets.factory import get_secrets_provider
+
         secrets_provider = get_secrets_provider(project_root=project_root)
     except (ValueError, ImportError):
         pass
 
     obs_enabled = not no_observability
     compose_path = write_dev_compose(
-        manifest, project_root,
+        manifest,
+        project_root,
         secrets_provider=secrets_provider,
         observability=obs_enabled,
     )
@@ -147,7 +217,10 @@ def _run_dev(ctx, *, detach, build, tear_down, tail_logs, service, since,
 
 
 def _print_port_table(manifest, *, observability: bool = True, env_name: str = "dev"):
-    from forktex_cloud.bridge.dev_compose import _OBSERVABILITY_PORTS, _allocate_host_ports
+    from forktex_cloud.bridge.dev_compose import (
+        _OBSERVABILITY_PORTS,
+        _allocate_host_ports,
+    )
 
     dev_services = manifest.services_for_env(env=env_name)
     reserved = _OBSERVABILITY_PORTS if observability else set()
@@ -174,7 +247,7 @@ def _parse_since(since: str) -> int:
     return 600
 
 
-def _tail_loki(project_root, *, service, since):
+def _tail_loki(project_root, *, service, since, env_name="dev"):
     import time
     from forktex_cloud.bridge.loki import loki_ready, build_logql, tail
     from forktex_cloud.bridge.log_formatter import assign_colors, format_line, COLORS
@@ -199,6 +272,7 @@ def _tail_loki(project_root, *, service, since):
     else:
         try:
             from forktex_cloud.manifest.loader import Manifest
+
             manifest = Manifest.load(project_root / "forktex.json", env=env_name)
             all_ids = [s["id"] for s in manifest.services_for_env(env="dev")]
         except Exception:
@@ -213,7 +287,9 @@ def _tail_loki(project_root, *, service, since):
                 color_map[svc_name] = COLORS[len(color_map) % len(COLORS)]
                 if len(svc_name) > max_name_len:
                     max_name_len = len(svc_name)
-            click.echo(format_line(ts_ns, svc_name, line, color_map[svc_name], max_name_len))
+            click.echo(
+                format_line(ts_ns, svc_name, line, color_map[svc_name], max_name_len)
+            )
     except KeyboardInterrupt:
         click.echo()
 

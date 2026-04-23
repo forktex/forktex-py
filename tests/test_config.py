@@ -41,9 +41,13 @@ class TestProjectConfig:
         config_dir = Path(temp_dir) / ".forktex"
         config_dir.mkdir()
         config_file = config_dir / "config.json"
-        config_file.write_text(json.dumps({
-            "debug": True,
-        }))
+        config_file.write_text(
+            json.dumps(
+                {
+                    "debug": True,
+                }
+            )
+        )
 
         settings = Settings.load(project_root=temp_dir)
         assert settings.debug is True
@@ -52,9 +56,13 @@ class TestProjectConfig:
         """Environment variables take precedence over project config."""
         config_dir = Path(temp_dir) / ".forktex"
         config_dir.mkdir()
-        (config_dir / "config.json").write_text(json.dumps({
-            "debug": False,
-        }))
+        (config_dir / "config.json").write_text(
+            json.dumps(
+                {
+                    "debug": False,
+                }
+            )
+        )
 
         monkeypatch.setenv("FORKTEX_DEBUG", "true")
 
@@ -70,9 +78,13 @@ class TestProjectConfig:
         """get_settings() passes project_root through."""
         config_dir = Path(temp_dir) / ".forktex"
         config_dir.mkdir()
-        (config_dir / "config.json").write_text(json.dumps({
-            "debug": True,
-        }))
+        (config_dir / "config.json").write_text(
+            json.dumps(
+                {
+                    "debug": True,
+                }
+            )
+        )
 
         reset_settings()
         s = get_settings(project_root=temp_dir)

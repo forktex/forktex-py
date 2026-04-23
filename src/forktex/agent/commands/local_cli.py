@@ -21,7 +21,11 @@ def _run(cmd: list[str], cwd: Path) -> int:
 
 
 @click.group("local")
-@click.option("--base-dir", default=None, help="Parent directory containing projects (default: parent of cwd)")
+@click.option(
+    "--base-dir",
+    default=None,
+    help="Parent directory containing projects (default: parent of cwd)",
+)
 @click.pass_context
 async def local(ctx, base_dir):
     """Manage local environments across forktex projects."""
@@ -30,7 +34,9 @@ async def local(ctx, base_dir):
         ctx.obj["base_dir"] = Path(base_dir).resolve()
     else:
         project_root = find_project_root()
-        ctx.obj["base_dir"] = project_root.parent if project_root else Path.cwd().resolve()
+        ctx.obj["base_dir"] = (
+            project_root.parent if project_root else Path.cwd().resolve()
+        )
 
 
 @local.command("up")
@@ -96,7 +102,18 @@ async def down(ctx, projects):
 
         if has_local or has_dev:
             env = "local" if has_local else "dev"
-            rc = _run(["forktex", "cloud", f"--project-dir={d}", "up", "--env", env, "--down"], cwd=d)
+            rc = _run(
+                [
+                    "forktex",
+                    "cloud",
+                    f"--project-dir={d}",
+                    "up",
+                    "--env",
+                    env,
+                    "--down",
+                ],
+                cwd=d,
+            )
         elif (d / "Makefile").exists():
             rc = _run(["make", "local-down"], cwd=d)
         else:
@@ -119,17 +136,31 @@ async def status(ctx, projects):
 
     for d in dirs:
         result = subprocess.run(
-            ["docker", "ps", "--filter", f"label=com.docker.compose.project.working_dir={d}",
-             "--format", "{{.Names}}:{{.Ports}}"],
-            capture_output=True, text=True,
+            [
+                "docker",
+                "ps",
+                "--filter",
+                f"label=com.docker.compose.project.working_dir={d}",
+                "--format",
+                "{{.Names}}:{{.Ports}}",
+            ],
+            capture_output=True,
+            text=True,
         )
         # Also try by project name
         if not result.stdout.strip():
             name = d.name.replace("-", "")
             result = subprocess.run(
-                ["docker", "ps", "--filter", f"name={name}",
-                 "--format", "{{.Names}}|{{.Ports}}"],
-                capture_output=True, text=True,
+                [
+                    "docker",
+                    "ps",
+                    "--filter",
+                    f"name={name}",
+                    "--format",
+                    "{{.Names}}|{{.Ports}}",
+                ],
+                capture_output=True,
+                text=True,
             )
 
         lines = [l for l in result.stdout.strip().splitlines() if l]
@@ -143,6 +174,8 @@ async def status(ctx, projects):
                         if "->" in p:
                             host_part = p.split("->")[0].split(":")[-1]
                             ports.add(host_part)
-            click.echo(f"  {d.name:<18} {len(lines):<10} {', '.join(sorted(ports)) or '-'}")
+            click.echo(
+                f"  {d.name:<18} {len(lines):<10} {', '.join(sorted(ports)) or '-'}"
+            )
         else:
             click.echo(f"  {d.name:<18} {'0':<10} (not running)")

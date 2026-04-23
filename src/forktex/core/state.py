@@ -74,10 +74,13 @@ class StateManager:
         self, session_id: str, history: List[Dict[str, str]]
     ) -> None:
         """Save conversation history for a session."""
-        await self.write_json(f"conversation_{session_id}.json", {
-            "session_id": session_id,
-            "history": history,
-        })
+        await self.write_json(
+            f"conversation_{session_id}.json",
+            {
+                "session_id": session_id,
+                "history": history,
+            },
+        )
 
     async def load_conversation(
         self, session_id: str

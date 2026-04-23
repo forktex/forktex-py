@@ -42,11 +42,12 @@ FSD_VERSION = "1.0.0"  # Compatibility version. Bundled standard.json must match
 
 # ── Data structures ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class ISOMapping:
-    standard: str   # "27001" or "9001"
-    clause: str     # e.g., "A.8.28"
-    control: str    # human-readable name
+    standard: str  # "27001" or "9001"
+    clause: str  # e.g., "A.8.28"
+    control: str  # human-readable name
 
 
 @dataclass
@@ -59,6 +60,7 @@ class ResolveRule:
     file:     Target file (for "field" strategy).
     path:     JSON path within file (for "field" strategy).
     """
+
     strategy: Literal["make", "path", "file-content", "field"]
     any_of: list[str] = field(default_factory=list)
     all_of: list[str] = field(default_factory=list)
@@ -69,10 +71,11 @@ class ResolveRule:
 @dataclass
 class Domain:
     """Organizational concern area. Maps to a docs/ track."""
+
     id: str
     name: str
     description: str
-    track: str                           # docs/ subdirectory
+    track: str  # docs/ subdirectory
     scope: Literal["service", "project", "organization"]
 
 
@@ -87,6 +90,7 @@ class Atom:
     required_targets / optional_targets are derived from make-strategy
     rules for tools that only understand Make targets (e.g., check.py).
     """
+
     id: str
     name: str
     description: str
@@ -117,8 +121,9 @@ class Atom:
 @dataclass
 class FacetAtomRef:
     """Reference to an atom within a facet."""
+
     atom_id: str
-    required: bool = True   # True = gates the facet, False = tracked only
+    required: bool = True  # True = gates the facet, False = tracked only
 
 
 @dataclass
@@ -145,125 +150,210 @@ class Level:
 
 ATOMS: list[Atom] = [
     # ── Dependencies ──
-    Atom("deps", "Dependencies", "Install project dependencies",
-         required_targets=["deps"],
-         optional_targets=["deps-lock"],
-         iso=[ISOMapping("27001", "A.8.9", "Configuration management"),
-              ISOMapping("9001", "7.1", "Resources")]),
-
+    Atom(
+        "deps",
+        "Dependencies",
+        "Install project dependencies",
+        required_targets=["deps"],
+        optional_targets=["deps-lock"],
+        iso=[
+            ISOMapping("27001", "A.8.9", "Configuration management"),
+            ISOMapping("9001", "7.1", "Resources"),
+        ],
+    ),
     # ── Code Quality ──
-    Atom("format", "Format", "Auto-format source code",
-         required_targets=["format"],
-         optional_targets=["format-check"],
-         iso=[ISOMapping("9001", "8.3.4", "Design and development controls")]),
-
-    Atom("lint", "Lint", "Static analysis and code quality checks",
-         required_targets=["lint"],
-         optional_targets=["lint-fix"],
-         iso=[ISOMapping("27001", "A.8.26", "Application security requirements"),
-              ISOMapping("27001", "A.8.28", "Secure coding")]),
-
-    Atom("typecheck", "Type Check", "Static type verification",
-         required_targets=["typecheck"],
-         iso=[ISOMapping("27001", "A.8.27", "Secure system architecture")]),
-
+    Atom(
+        "format",
+        "Format",
+        "Auto-format source code",
+        required_targets=["format"],
+        optional_targets=["format-check"],
+        iso=[ISOMapping("9001", "8.3.4", "Design and development controls")],
+    ),
+    Atom(
+        "lint",
+        "Lint",
+        "Static analysis and code quality checks",
+        required_targets=["lint"],
+        optional_targets=["lint-fix"],
+        iso=[
+            ISOMapping("27001", "A.8.26", "Application security requirements"),
+            ISOMapping("27001", "A.8.28", "Secure coding"),
+        ],
+    ),
+    Atom(
+        "typecheck",
+        "Type Check",
+        "Static type verification",
+        required_targets=["typecheck"],
+        iso=[ISOMapping("27001", "A.8.27", "Secure system architecture")],
+    ),
     # ── Testing ──
-    Atom("test", "Test", "Run test suite (real infrastructure, not mocks)",
-         required_targets=["test"],
-         optional_targets=["test-cov"],
-         iso=[ISOMapping("27001", "A.8.29", "Security testing"),
-              ISOMapping("9001", "8.6", "Release of products"),
-              ISOMapping("9001", "9.1.1", "Monitoring and measurement")]),
-
+    Atom(
+        "test",
+        "Test",
+        "Run test suite (real infrastructure, not mocks)",
+        required_targets=["test"],
+        optional_targets=["test-cov"],
+        iso=[
+            ISOMapping("27001", "A.8.29", "Security testing"),
+            ISOMapping("9001", "8.6", "Release of products"),
+            ISOMapping("9001", "9.1.1", "Monitoring and measurement"),
+        ],
+    ),
     # ── Security ──
-    Atom("audit", "Security Audit", "Dependency vulnerability scanning",
-         required_targets=["audit"],
-         iso=[ISOMapping("27001", "A.8.8", "Technical vulnerability management")]),
-
-    Atom("license", "License Compliance", "Verify license headers and compliance",
-         required_targets=["license-check"],
-         optional_targets=["license-fix", "license-strip"],
-         iso=[ISOMapping("27001", "A.8.12", "Data classification")]),
-
+    Atom(
+        "audit",
+        "Security Audit",
+        "Dependency vulnerability scanning",
+        required_targets=["audit"],
+        iso=[ISOMapping("27001", "A.8.8", "Technical vulnerability management")],
+    ),
+    Atom(
+        "license",
+        "License Compliance",
+        "Verify license headers and compliance",
+        required_targets=["license-check"],
+        optional_targets=["license-fix", "license-strip"],
+        iso=[ISOMapping("27001", "A.8.12", "Data classification")],
+    ),
     # ── Local Environment ──
-    Atom("start", "Start", "Start the project runtime",
-         required_targets=["start", "local", "dev"],
-         optional_targets=["stop", "logs", "local-down", "dev-down", "local-logs", "dev-logs"],
-         iso=[ISOMapping("9001", "7.1.3", "Infrastructure")]),
-
-    Atom("logs", "Logs", "Tail runtime logs",
-         required_targets=["logs", "local-logs", "dev-logs"],
-         optional_targets=["local-logs-api", "dev-logs-api"]),
-
-    Atom("stop", "Stop", "Stop the project runtime",
-         required_targets=["stop", "local-down", "dev-down"],
-         optional_targets=["local-reset", "dev-reset"]),
-
+    Atom(
+        "start",
+        "Start",
+        "Start the project runtime",
+        required_targets=["start", "local", "dev"],
+        optional_targets=[
+            "stop",
+            "logs",
+            "local-down",
+            "dev-down",
+            "local-logs",
+            "dev-logs",
+        ],
+        iso=[ISOMapping("9001", "7.1.3", "Infrastructure")],
+    ),
+    Atom(
+        "logs",
+        "Logs",
+        "Tail runtime logs",
+        required_targets=["logs", "local-logs", "dev-logs"],
+        optional_targets=["local-logs-api", "dev-logs-api"],
+    ),
+    Atom(
+        "stop",
+        "Stop",
+        "Stop the project runtime",
+        required_targets=["stop", "local-down", "dev-down"],
+        optional_targets=["local-reset", "dev-reset"],
+    ),
     # ── Database ──
-    Atom("db-migrate", "DB Migrate", "Run database schema migrations",
-         required_targets=["migrate"],
-         optional_targets=["alembic-auto", "alembic-check", "db-revision"],
-         iso=[ISOMapping("27001", "A.8.32", "Change management")]),
-
-    Atom("db-reset", "DB Reset", "Drop and recreate the database",
-         required_targets=["db-reset"],
-         optional_targets=[]),
-
+    Atom(
+        "db-migrate",
+        "DB Migrate",
+        "Run database schema migrations",
+        required_targets=["migrate"],
+        optional_targets=["alembic-auto", "alembic-check", "db-revision"],
+        iso=[ISOMapping("27001", "A.8.32", "Change management")],
+    ),
+    Atom(
+        "db-reset",
+        "DB Reset",
+        "Drop and recreate the database",
+        required_targets=["db-reset"],
+        optional_targets=[],
+    ),
     # ── Seed Data ──
-    Atom("seed", "Seed", "Populate development data",
-         required_targets=["seed"],
-         optional_targets=["seed-reset", "seed-large", "seed-ultra"]),
-
+    Atom(
+        "seed",
+        "Seed",
+        "Populate development data",
+        required_targets=["seed"],
+        optional_targets=["seed-reset", "seed-large", "seed-ultra"],
+    ),
     # ── Code Generation ──
-    Atom("codegen", "Code Generation", "Generate API clients or other artifacts from schemas",
-         required_targets=["api-client", "openapi"],  # accept either
-         optional_targets=["py-client"]),
-
+    Atom(
+        "codegen",
+        "Code Generation",
+        "Generate API clients or other artifacts from schemas",
+        required_targets=["api-client", "openapi"],  # accept either
+        optional_targets=["py-client"],
+    ),
     # ── Build & Publish ──
-    Atom("build", "Build", "Build software artifacts (Docker, bundle, binary, wheel)",
-         required_targets=["build"],
-         iso=[ISOMapping("9001", "8.5.1", "Control of production")]),
-
-    Atom("publish", "Publish", "Publish artifacts to registry, CDN, or store",
-         required_targets=["publish"],
-         iso=[ISOMapping("9001", "8.6", "Release of products")]),
-
+    Atom(
+        "build",
+        "Build",
+        "Build software artifacts (Docker, bundle, binary, wheel)",
+        required_targets=["build"],
+        iso=[ISOMapping("9001", "8.5.1", "Control of production")],
+    ),
+    Atom(
+        "publish",
+        "Publish",
+        "Publish artifacts to registry, CDN, or store",
+        required_targets=["publish"],
+        iso=[ISOMapping("9001", "8.6", "Release of products")],
+    ),
     # ── Deploy & Operations ──
-    Atom("deploy", "Deploy", "Deploy to target environment",
-         required_targets=["deploy"],
-         iso=[ISOMapping("27001", "A.8.32", "Change management")]),
-
-    Atom("backup", "Backup", "Database and volume backup",
-         required_targets=["backup"],
-         iso=[ISOMapping("27001", "A.8.13", "Information backup")]),
-
-    Atom("rollback", "Rollback", "Revert to previous deployment",
-         required_targets=["rollback"],
-         iso=[ISOMapping("27001", "A.8.32", "Change management")]),
-
-    Atom("monitoring", "Monitoring", "Health checks and observability",
-         required_targets=["health", "status"],  # accept either
-         iso=[ISOMapping("27001", "A.8.15", "Logging")]),
-
+    Atom(
+        "deploy",
+        "Deploy",
+        "Deploy to target environment",
+        required_targets=["deploy"],
+        iso=[ISOMapping("27001", "A.8.32", "Change management")],
+    ),
+    Atom(
+        "backup",
+        "Backup",
+        "Database and volume backup",
+        required_targets=["backup"],
+        iso=[ISOMapping("27001", "A.8.13", "Information backup")],
+    ),
+    Atom(
+        "rollback",
+        "Rollback",
+        "Revert to previous deployment",
+        required_targets=["rollback"],
+        iso=[ISOMapping("27001", "A.8.32", "Change management")],
+    ),
+    Atom(
+        "monitoring",
+        "Monitoring",
+        "Health checks and observability",
+        required_targets=["health", "status"],  # accept either
+        iso=[ISOMapping("27001", "A.8.15", "Logging")],
+    ),
     # ── CI Aggregate ──
-    Atom("ci", "CI Gate", "Full CI pipeline aggregate (format + lint + test + audit)",
-         required_targets=["ci"],
-         iso=[ISOMapping("27001", "A.8.25", "Secure development lifecycle"),
-              ISOMapping("9001", "8.7", "Control of nonconforming outputs")]),
-
+    Atom(
+        "ci",
+        "CI Gate",
+        "Full CI pipeline aggregate (format + lint + test + audit)",
+        required_targets=["ci"],
+        iso=[
+            ISOMapping("27001", "A.8.25", "Secure development lifecycle"),
+            ISOMapping("9001", "8.7", "Control of nonconforming outputs"),
+        ],
+    ),
     # ── Compliance ──
-    Atom("compliance", "Compliance Evidence", "Generate ISO audit artifacts",
-         required_targets=["compliance-report"],
-         iso=[ISOMapping("9001", "9.1", "Monitoring, measurement"),
-              ISOMapping("27001", "A.18.2", "Compliance with security policies")]),
-
+    Atom(
+        "compliance",
+        "Compliance Evidence",
+        "Generate ISO audit artifacts",
+        required_targets=["compliance-report"],
+        iso=[
+            ISOMapping("9001", "9.1", "Monitoring, measurement"),
+            ISOMapping("27001", "A.18.2", "Compliance with security policies"),
+        ],
+    ),
     # ── Help ──
-    Atom("help", "Help", "Self-documenting target listing",
-         required_targets=["help"]),
-
+    Atom("help", "Help", "Self-documenting target listing", required_targets=["help"]),
     # ── Clean ──
-    Atom("clean", "Clean", "Remove build artifacts and caches",
-         required_targets=["clean"]),
+    Atom(
+        "clean",
+        "Clean",
+        "Remove build artifacts and caches",
+        required_targets=["clean"],
+    ),
 ]
 
 ATOMS_BY_ID: dict[str, Atom] = {a.id: a for a in ATOMS}
@@ -274,68 +364,104 @@ ATOMS_BY_ID: dict[str, Atom] = {a.id: a for a in ATOMS}
 # Grounded in reality: L2 should be achievable by network today.
 
 FACETS: list[Facet] = [
-    Facet("code-quality", "Code Quality", "Is the code clean?",
-          atom_refs=[
-              FacetAtomRef("lint", required=True),
-              FacetAtomRef("format", required=False),      # network doesn't have it yet
-              FacetAtomRef("typecheck", required=False),    # not all stacks
-          ]),
-
-    Facet("verification", "Verification", "Is the code correct and safe?",
-          atom_refs=[
-              FacetAtomRef("test", required=True),
-              FacetAtomRef("audit", required=False),        # aspirational, network lacks it
-              FacetAtomRef("license", required=False),      # only some projects need it
-          ]),
-
-    Facet("runtime-control", "Runtime Control", "Can I start, stop, and inspect the runtime?",
-          atom_refs=[
-              FacetAtomRef("start", required=True),
-              FacetAtomRef("stop", required=False),
-              FacetAtomRef("logs", required=False),
-              FacetAtomRef("db-migrate", required=False),   # not all systems have a DB
-              FacetAtomRef("db-reset", required=False),
-              FacetAtomRef("seed", required=False),         # not all systems need seed
-              FacetAtomRef("help", required=False),
-          ]),
-
-    Facet("codegen", "Code Generation", "Are generated artifacts current?",
-          atom_refs=[
-              FacetAtomRef("deps", required=True),
-              FacetAtomRef("codegen", required=False),      # only API+client combos
-          ]),
-
-    Facet("ci-gate", "CI Gate", "Can this merge?",
-          composes_from=["code-quality", "verification"]),
-
-    Facet("build-lifecycle", "Build Lifecycle", "Can I ship it?",
-          atom_refs=[
-              FacetAtomRef("build", required=True),
-              FacetAtomRef("publish", required=False),
-              FacetAtomRef("clean", required=False),
-          ]),
-
-    Facet("deployment", "Deployment", "Is it running safely?",
-          atom_refs=[
-              FacetAtomRef("deploy", required=True),
-              FacetAtomRef("backup", required=False),
-              FacetAtomRef("rollback", required=False),
-              FacetAtomRef("monitoring", required=False),
-          ]),
-
-    Facet("compliance", "Compliance", "Can we pass an audit?",
-          atom_refs=[
-              FacetAtomRef("ci", required=True),
-              FacetAtomRef("compliance", required=False),   # the explicit evidence gen
-              FacetAtomRef("license", required=False),
-          ],
-          composes_from=["ci-gate", "build-lifecycle", "deployment"]),
-
-    Facet("full-dev-lifecycle", "Full Dev Lifecycle", "Everything a developer needs",
-          composes_from=["runtime-control", "codegen", "ci-gate"]),
-
-    Facet("full-automation", "Full Automation", "Everything",
-          composes_from=["full-dev-lifecycle", "build-lifecycle", "deployment", "compliance"]),
+    Facet(
+        "code-quality",
+        "Code Quality",
+        "Is the code clean?",
+        atom_refs=[
+            FacetAtomRef("lint", required=True),
+            FacetAtomRef("format", required=False),  # network doesn't have it yet
+            FacetAtomRef("typecheck", required=False),  # not all stacks
+        ],
+    ),
+    Facet(
+        "verification",
+        "Verification",
+        "Is the code correct and safe?",
+        atom_refs=[
+            FacetAtomRef("test", required=True),
+            FacetAtomRef("audit", required=False),  # aspirational, network lacks it
+            FacetAtomRef("license", required=False),  # only some projects need it
+        ],
+    ),
+    Facet(
+        "runtime-control",
+        "Runtime Control",
+        "Can I start, stop, and inspect the runtime?",
+        atom_refs=[
+            FacetAtomRef("start", required=True),
+            FacetAtomRef("stop", required=False),
+            FacetAtomRef("logs", required=False),
+            FacetAtomRef("db-migrate", required=False),  # not all systems have a DB
+            FacetAtomRef("db-reset", required=False),
+            FacetAtomRef("seed", required=False),  # not all systems need seed
+            FacetAtomRef("help", required=False),
+        ],
+    ),
+    Facet(
+        "codegen",
+        "Code Generation",
+        "Are generated artifacts current?",
+        atom_refs=[
+            FacetAtomRef("deps", required=True),
+            FacetAtomRef("codegen", required=False),  # only API+client combos
+        ],
+    ),
+    Facet(
+        "ci-gate",
+        "CI Gate",
+        "Can this merge?",
+        composes_from=["code-quality", "verification"],
+    ),
+    Facet(
+        "build-lifecycle",
+        "Build Lifecycle",
+        "Can I ship it?",
+        atom_refs=[
+            FacetAtomRef("build", required=True),
+            FacetAtomRef("publish", required=False),
+            FacetAtomRef("clean", required=False),
+        ],
+    ),
+    Facet(
+        "deployment",
+        "Deployment",
+        "Is it running safely?",
+        atom_refs=[
+            FacetAtomRef("deploy", required=True),
+            FacetAtomRef("backup", required=False),
+            FacetAtomRef("rollback", required=False),
+            FacetAtomRef("monitoring", required=False),
+        ],
+    ),
+    Facet(
+        "compliance",
+        "Compliance",
+        "Can we pass an audit?",
+        atom_refs=[
+            FacetAtomRef("ci", required=True),
+            FacetAtomRef("compliance", required=False),  # the explicit evidence gen
+            FacetAtomRef("license", required=False),
+        ],
+        composes_from=["ci-gate", "build-lifecycle", "deployment"],
+    ),
+    Facet(
+        "full-dev-lifecycle",
+        "Full Dev Lifecycle",
+        "Everything a developer needs",
+        composes_from=["runtime-control", "codegen", "ci-gate"],
+    ),
+    Facet(
+        "full-automation",
+        "Full Automation",
+        "Everything",
+        composes_from=[
+            "full-dev-lifecycle",
+            "build-lifecycle",
+            "deployment",
+            "compliance",
+        ],
+    ),
 ]
 
 FACETS_BY_ID: dict[str, Facet] = {f.id: f for f in FACETS}
@@ -350,20 +476,62 @@ FACETS_BY_ID: dict[str, Facet] = {f.id: f for f in FACETS}
 
 LEVELS: list[Level] = [
     Level("L0", "Bootstrap", "New project, nothing yet", []),
-    Level("L1", "Runnable", "Can start, stop, and inspect the runtime",
-          ["runtime-control"]),
-    Level("L2", "Quality", "Has CI quality gates",
-          ["runtime-control", "code-quality", "verification"]),
-    Level("L3", "Shippable", "Can build and publish artifacts",
-          ["runtime-control", "code-quality", "verification", "codegen", "build-lifecycle"]),
-    Level("L4", "Operational", "Automated deploy pipeline",
-          ["runtime-control", "code-quality", "verification", "codegen", "build-lifecycle", "deployment"]),
-    Level("L5", "Auditable", "ISO-ready with evidence",
-          ["runtime-control", "code-quality", "verification", "codegen", "build-lifecycle", "deployment", "compliance"]),
+    Level(
+        "L1",
+        "Runnable",
+        "Can start, stop, and inspect the runtime",
+        ["runtime-control"],
+    ),
+    Level(
+        "L2",
+        "Quality",
+        "Has CI quality gates",
+        ["runtime-control", "code-quality", "verification"],
+    ),
+    Level(
+        "L3",
+        "Shippable",
+        "Can build and publish artifacts",
+        [
+            "runtime-control",
+            "code-quality",
+            "verification",
+            "codegen",
+            "build-lifecycle",
+        ],
+    ),
+    Level(
+        "L4",
+        "Operational",
+        "Automated deploy pipeline",
+        [
+            "runtime-control",
+            "code-quality",
+            "verification",
+            "codegen",
+            "build-lifecycle",
+            "deployment",
+        ],
+    ),
+    Level(
+        "L5",
+        "Auditable",
+        "ISO-ready with evidence",
+        [
+            "runtime-control",
+            "code-quality",
+            "verification",
+            "codegen",
+            "build-lifecycle",
+            "deployment",
+            "compliance",
+        ],
+    ),
 ]
 
 
 # ── Resolution helpers ───────────────────────────────────────────────────────
+
 
 def resolve_facet_required_atoms(facet_id: str) -> list[str]:
     """Resolve only the REQUIRED atom IDs for a facet (recursive)."""
@@ -397,6 +565,7 @@ def check_atom_satisfied(atom_id: str, available_targets: set[str]) -> bool:
 
 def determine_level(available_targets: set[str]) -> str:
     """Determine the highest maturity level from available Make targets."""
+
     def facet_ok(facet_id: str) -> bool:
         required_atoms = resolve_facet_required_atoms(facet_id)
         return all(check_atom_satisfied(a, available_targets) for a in required_atoms)
@@ -410,7 +579,10 @@ def determine_level(available_targets: set[str]) -> str:
 
 # ── Multi-strategy resolution ─────────────────────────────────────────────────
 
-def check_resolve_rule(rule: ResolveRule, *, make_targets: set[str], docs_root: Path | None = None) -> bool:
+
+def check_resolve_rule(
+    rule: ResolveRule, *, make_targets: set[str], docs_root: Path | None = None
+) -> bool:
     """Check if a single resolve rule is satisfied.
 
     Args:
@@ -451,7 +623,9 @@ def check_resolve_rule(rule: ResolveRule, *, make_targets: set[str], docs_root: 
     return False
 
 
-def check_atom_resolved(atom: Atom, *, make_targets: set[str], docs_root: Path | None = None) -> bool:
+def check_atom_resolved(
+    atom: Atom, *, make_targets: set[str], docs_root: Path | None = None
+) -> bool:
     """Check if an atom is satisfied using multi-strategy resolution.
 
     An atom is satisfied if ANY of its resolve rules passes.
@@ -466,7 +640,9 @@ def check_atom_resolved(atom: Atom, *, make_targets: set[str], docs_root: Path |
     return any(t in make_targets for t in atom.required_targets)
 
 
-def load_standard(standard_path: Path) -> tuple[list[Domain], list[Atom], list[Facet], list[Level]]:
+def load_standard(
+    standard_path: Path,
+) -> tuple[list[Domain], list[Atom], list[Facet], list[Level]]:
     """Load the standard from standard.json.
 
     Returns (domains, atoms, facets, levels) with full resolution rules.
@@ -475,8 +651,11 @@ def load_standard(standard_path: Path) -> tuple[list[Domain], list[Atom], list[F
 
     domains = [
         Domain(
-            id=d["id"], name=d["name"], description=d["description"],
-            track=d["track"], scope=d["scope"],
+            id=d["id"],
+            name=d["name"],
+            description=d["description"],
+            track=d["track"],
+            scope=d["scope"],
         )
         for d in data.get("domains", [])
         if not d.get("_comment")
@@ -488,13 +667,15 @@ def load_standard(standard_path: Path) -> tuple[list[Domain], list[Atom], list[F
             continue
         resolve_rules = []
         for r in a.get("resolve", []):
-            resolve_rules.append(ResolveRule(
-                strategy=r["strategy"],
-                any_of=r.get("any_of", []),
-                all_of=r.get("all_of", []),
-                file=r.get("file"),
-                path=r.get("path"),
-            ))
+            resolve_rules.append(
+                ResolveRule(
+                    strategy=r["strategy"],
+                    any_of=r.get("any_of", []),
+                    all_of=r.get("all_of", []),
+                    file=r.get("file"),
+                    path=r.get("path"),
+                )
+            )
         # Derive v1 required_targets from make rules for backward compat
         make_any = []
         for r in resolve_rules:
@@ -505,14 +686,18 @@ def load_standard(standard_path: Path) -> tuple[list[Domain], list[Atom], list[F
             parts = iso_str.split(":")
             if len(parts) == 2:
                 iso_mappings.append(ISOMapping(parts[0], parts[1], ""))
-        atoms.append(Atom(
-            id=a["id"], name=a["name"], description=a["description"],
-            domain=a.get("domain", ""),
-            resolve=resolve_rules,
-            iso=iso_mappings,
-            evidence=a.get("evidence", ""),
-            required_targets=make_any,
-        ))
+        atoms.append(
+            Atom(
+                id=a["id"],
+                name=a["name"],
+                description=a["description"],
+                domain=a.get("domain", ""),
+                resolve=resolve_rules,
+                iso=iso_mappings,
+                evidence=a.get("evidence", ""),
+                required_targets=make_any,
+            )
+        )
 
     facets = []
     for f in data.get("facets", []):
@@ -522,15 +707,24 @@ def load_standard(standard_path: Path) -> tuple[list[Domain], list[Atom], list[F
             FacetAtomRef(atom_id=ar["ref"], required=ar.get("required", True))
             for ar in f.get("atoms", [])
         ]
-        facets.append(Facet(
-            id=f["id"], name=f["name"], question=f["question"],
-            domain=f.get("domain", ""),
-            atom_refs=atom_refs,
-            composes_from=f.get("composesFrom", []),
-        ))
+        facets.append(
+            Facet(
+                id=f["id"],
+                name=f["name"],
+                question=f["question"],
+                domain=f.get("domain", ""),
+                atom_refs=atom_refs,
+                composes_from=f.get("composesFrom", []),
+            )
+        )
 
     levels = [
-        Level(id=lv["id"], name=lv["name"], description=lv["description"], facet_ids=lv["facets"])
+        Level(
+            id=lv["id"],
+            name=lv["name"],
+            description=lv["description"],
+            facet_ids=lv["facets"],
+        )
         for lv in data.get("levels", [])
     ]
 

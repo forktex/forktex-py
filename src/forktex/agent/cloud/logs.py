@@ -9,8 +9,14 @@ import asyncclick as click
 @click.argument("server_id", required=False, default=None)
 @click.option("--service", default=None, help="Filter by service id (e.g. 'api', 'db')")
 @click.option("--lines", type=int, default=50, help="Number of log lines")
-@click.option("--since", default=None, help="Lookback window (e.g. 1h, 30m, 7d). Requires Loki.")
-@click.option("--query", default=None, help="Raw LogQL query (e.g. '{service=\"api\"} |= \"ERROR\"'). Requires Loki.")
+@click.option(
+    "--since", default=None, help="Lookback window (e.g. 1h, 30m, 7d). Requires Loki."
+)
+@click.option(
+    "--query",
+    default=None,
+    help='Raw LogQL query (e.g. \'{service="api"} |= "ERROR"\'). Requires Loki.',
+)
 @click.option("--local", is_flag=True, help="Force local Loki log tailing (dev mode)")
 @click.pass_context
 async def logs(ctx, server_id, service, lines, since, query, local):
@@ -36,7 +42,9 @@ async def logs(ctx, server_id, service, lines, since, query, local):
             server_id = cloud_ctx.current_server
         if not server_id:
             raise click.ClickException("Provide a server_id or set a current server.")
-        _remote_logs(ctx, server_id, service=service, lines=lines, since=since, query=query)
+        _remote_logs(
+            ctx, server_id, service=service, lines=lines, since=since, query=query
+        )
 
 
 def _remote_logs(ctx, server_id, *, service, lines, since, query):
@@ -85,6 +93,8 @@ def _local_logs(ctx, *, service):
                 color_map[svc_name] = COLORS[len(color_map) % len(COLORS)]
                 if len(svc_name) > max_name_len:
                     max_name_len = len(svc_name)
-            click.echo(format_line(ts_ns, svc_name, line, color_map[svc_name], max_name_len))
+            click.echo(
+                format_line(ts_ns, svc_name, line, color_map[svc_name], max_name_len)
+            )
     except KeyboardInterrupt:
         click.echo()

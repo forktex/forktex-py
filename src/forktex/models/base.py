@@ -14,11 +14,13 @@ class ForkTexModel(BaseModel):
     - extra="allow" so forward-compatible fields don't break deserialization
     - populate_by_name=True so both alias and field name work
     """
+
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
 class Identifiable(ForkTexModel):
     """Any model with id + name + description."""
+
     id: str
     name: str
     description: str = ""
@@ -26,6 +28,7 @@ class Identifiable(ForkTexModel):
 
 class Versioned(ForkTexModel):
     """Any model with version tracking."""
+
     version: str = "1.0.0"
     status: Literal["draft", "active", "deprecated", "planning"] = "active"
     updated_at: datetime | None = None
@@ -33,4 +36,5 @@ class Versioned(ForkTexModel):
 
 class Tagged(ForkTexModel):
     """Any model with free-form tags."""
+
     tags: list[str] = []

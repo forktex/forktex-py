@@ -57,8 +57,12 @@ def _discover_repos(root: Path) -> list[dict]:
                 with open(d / FORKTEX_MANIFEST) as f:
                     manifest = json.load(f)
                 cloud_manifest = manifest.get("cloud", manifest)
-                repo_info["manifest_name"] = cloud_manifest.get("metadata", {}).get("name", manifest.get("name", d.name))
-                repo_info["services"] = [s.get("id", "?") for s in cloud_manifest.get("services", [])]
+                repo_info["manifest_name"] = cloud_manifest.get("metadata", {}).get(
+                    "name", manifest.get("name", d.name)
+                )
+                repo_info["services"] = [
+                    s.get("id", "?") for s in cloud_manifest.get("services", [])
+                ]
                 pkg = manifest.get("package")
                 if pkg:
                     repo_info["package"] = pkg.get("name")
@@ -119,8 +123,12 @@ async def ground_status(root_dir: str | None):
     console.print(f"  Found [cyan]{len(repos)}[/cyan] repositories:\n")
 
     for repo in repos:
-        agents_status = "[green]yes[/green]" if repo["has_agents_md"] else "[red]no[/red]"
-        manifest_status = "[green]yes[/green]" if repo["has_forktex_json"] else "[dim]no[/dim]"
+        agents_status = (
+            "[green]yes[/green]" if repo["has_agents_md"] else "[red]no[/red]"
+        )
+        manifest_status = (
+            "[green]yes[/green]" if repo["has_forktex_json"] else "[dim]no[/dim]"
+        )
         pkg = repo.get("package", "")
         pkg_status = f"[cyan]{pkg}[/cyan]" if pkg else "[dim]—[/dim]"
 
@@ -135,9 +143,11 @@ async def ground_status(root_dir: str | None):
     with_agents = sum(1 for r in repos if r["has_agents_md"])
     with_manifest = sum(1 for r in repos if r["has_forktex_json"])
     with_package = sum(1 for r in repos if r.get("package"))
-    console.print(f"\n  [bold]Summary:[/bold] {with_agents}/{len(repos)} with AGENTS.md, "
-                  f"{with_manifest}/{len(repos)} with forktex.json, "
-                  f"{with_package}/{len(repos)} with packages\n")
+    console.print(
+        f"\n  [bold]Summary:[/bold] {with_agents}/{len(repos)} with AGENTS.md, "
+        f"{with_manifest}/{len(repos)} with forktex.json, "
+        f"{with_package}/{len(repos)} with packages\n"
+    )
 
 
 @ground.command(name="repos")
@@ -158,6 +168,7 @@ async def ground_repos(root_dir: str | None, json_out: bool):
 
     if json_out:
         import json as json_mod
+
         console.print(json_mod.dumps(repos, indent=2))
     else:
         for repo in repos:

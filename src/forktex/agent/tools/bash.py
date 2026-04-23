@@ -71,9 +71,19 @@ def create_bash_tools(project_root: str) -> List[Tool]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "command": {"type": "string", "description": "Shell command to execute"},
-                    "timeout": {"type": "integer", "description": "Timeout in seconds", "default": 120},
-                    "cwd": {"type": "string", "description": "Working directory (relative to project root)"},
+                    "command": {
+                        "type": "string",
+                        "description": "Shell command to execute",
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in seconds",
+                        "default": 120,
+                    },
+                    "cwd": {
+                        "type": "string",
+                        "description": "Working directory (relative to project root)",
+                    },
                 },
                 "required": ["command"],
             },

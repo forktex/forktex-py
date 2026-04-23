@@ -45,7 +45,9 @@ def _count_lines(root: Path) -> int:
             if any(part in SKIP_DIRS for part in file_path.parts):
                 continue
             try:
-                total += len(file_path.read_text(encoding="utf-8", errors="ignore").splitlines())
+                total += len(
+                    file_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+                )
             except OSError:
                 continue
     return total
@@ -93,7 +95,11 @@ def _package_node_from_paths(
     child_manifest_path: Path | None,
 ) -> PackageNode:
     package_dir = (project_root / rel_path).resolve()
-    child_data = _load_json(child_manifest_path) if child_manifest_path and child_manifest_path.exists() else {}
+    child_data = (
+        _load_json(child_manifest_path)
+        if child_manifest_path and child_manifest_path.exists()
+        else {}
+    )
     pyproject_path = package_dir / "pyproject.toml"
     pyproject = _load_pyproject(pyproject_path) if pyproject_path.exists() else {}
     project_meta = pyproject.get("project", {})
@@ -116,12 +122,20 @@ def _package_node_from_paths(
         or project_meta.get("description")
         or ""
     )
-    language = base_data.get("language") or ("python" if pyproject_path.exists() else "")
+    language = base_data.get("language") or (
+        "python" if pyproject_path.exists() else ""
+    )
     publishable = bool(base_data.get("publishable", True))
 
-    manifest_path = child_manifest_path if child_manifest_path and child_manifest_path.exists() else project_root / FORKTEX_MANIFEST
+    manifest_path = (
+        child_manifest_path
+        if child_manifest_path and child_manifest_path.exists()
+        else project_root / FORKTEX_MANIFEST
+    )
     rel_manifest_path = str(manifest_path.relative_to(project_root))
-    rel_pyproject_path = str(pyproject_path.relative_to(project_root)) if pyproject_path.exists() else ""
+    rel_pyproject_path = (
+        str(pyproject_path.relative_to(project_root)) if pyproject_path.exists() else ""
+    )
 
     return PackageNode(
         id=name,
@@ -164,7 +178,9 @@ def _discover_domains(project_root: Path) -> list[DomainNode]:
                 rel_path=str(child.relative_to(project_root)),
                 line_count=_count_lines(child),
                 has_makefile=(child / "Makefile").exists(),
-                manifest_path=str((child / FORKTEX_MANIFEST).relative_to(project_root)) if (child / FORKTEX_MANIFEST).exists() else "",
+                manifest_path=str((child / FORKTEX_MANIFEST).relative_to(project_root))
+                if (child / FORKTEX_MANIFEST).exists()
+                else "",
             )
         )
     return domains
@@ -190,7 +206,9 @@ def build_project_graph(project_root: Path) -> ProjectGraph:
                 package_name=entry.get("name", rel_path),
                 rel_path=rel_path,
                 base_data=entry,
-                child_manifest_path=child_by_dir.get((project_root / rel_path).resolve()),
+                child_manifest_path=child_by_dir.get(
+                    (project_root / rel_path).resolve()
+                ),
             )
         )
         seen_paths.add(rel_path)

@@ -57,9 +57,16 @@ class AgentManager:
         """Build a tool server filtered by agent type permissions."""
         # Inject scraper tools if browser is available and agent is a scraper
         extra_tools = None
-        if agent_type.name == "scraper" and self._browser is not None and self._truths_store is not None:
+        if (
+            agent_type.name == "scraper"
+            and self._browser is not None
+            and self._truths_store is not None
+        ):
             from forktex.agent.tools.scraper import create_scraper_tools
-            extra_tools = create_scraper_tools(self._browser, self._truths_store, self.project_root)
+
+            extra_tools = create_scraper_tools(
+                self._browser, self._truths_store, self.project_root
+            )
 
         full_server = FullToolServer(self.project_root, enable_web=True)
 
@@ -72,6 +79,7 @@ class AgentManager:
         filtered.project_root = self.project_root
 
         from forktex.agent.tools.base import ToolRegistry
+
         filtered.registry = ToolRegistry()
 
         for tool in full_server.registry.list_tools():
@@ -104,9 +112,7 @@ class AgentManager:
         if parent_id:
             depth = self._get_spawn_depth(parent_id)
             if depth >= MAX_SPAWN_DEPTH:
-                raise RuntimeError(
-                    f"Max spawn depth ({MAX_SPAWN_DEPTH}) exceeded"
-                )
+                raise RuntimeError(f"Max spawn depth ({MAX_SPAWN_DEPTH}) exceeded")
 
         tool_server = self._build_tool_server(agent_type)
         system = system_prompt or agent_type.system_prompt

@@ -4,9 +4,10 @@ import json
 import pytest
 from pathlib import Path
 
-from forktex_intelligence.config import (
-    IntelligenceSettings,
+from forktex_intelligence.config import IntelligenceSettings
+from forktex.agent.intelligence.settings import (
     get_intelligence_settings,
+    load_intelligence_settings,
     reset_intelligence_settings,
 )
 from forktex_intelligence.streams import SSEEvent, SSEEventType, parse_sse_stream
@@ -35,50 +36,61 @@ class TestIntelligenceSettings:
     def test_load_from_env(self, monkeypatch):
         monkeypatch.setenv("FORKTEX_INTELLIGENCE_ENDPOINT", "http://test:9000")
         monkeypatch.setenv("FORKTEX_INTELLIGENCE_API_KEY", "key-123")
-        s = IntelligenceSettings.load()
+        s = load_intelligence_settings()
         assert s.endpoint == "http://test:9000"
         assert s.api_key == "key-123"
 
     def test_load_from_project_config(self, temp_dir):
         config_dir = Path(temp_dir) / ".forktex"
         config_dir.mkdir()
-        (config_dir / "intelligence.json").write_text(json.dumps({
-            "endpoint": "http://project:8080",
-            "api_key": "proj-key",
-        }))
-        s = IntelligenceSettings.load(project_root=temp_dir)
+        (config_dir / "intelligence.json").write_text(
+            json.dumps(
+                {
+                    "endpoint": "http://project:8080",
+                    "api_key": "proj-key",
+                }
+            )
+        )
+        s = load_intelligence_settings(project_root=temp_dir)
         assert s.endpoint == "http://project:8080"
         assert s.api_key == "proj-key"
 
     def test_load_from_global_config(self, tmp_path, monkeypatch):
-        # Patch get_global_config_dir to use tmp_path
         monkeypatch.setattr(
-            "forktex_intelligence.config._get_global_config_dir",
+            "forktex.agent.intelligence.settings.get_global_config_dir",
             lambda: tmp_path,
         )
-        (tmp_path / "intelligence.json").write_text(json.dumps({
-            "endpoint": "http://global:7070",
-            "api_key": "global-key",
-        }))
-        s = IntelligenceSettings.load()
+        (tmp_path / "intelligence.json").write_text(
+            json.dumps(
+                {
+                    "endpoint": "http://global:7070",
+                    "api_key": "global-key",
+                }
+            )
+        )
+        s = load_intelligence_settings()
         assert s.endpoint == "http://global:7070"
         assert s.api_key == "global-key"
 
     def test_env_overrides_project_config(self, temp_dir, monkeypatch):
         config_dir = Path(temp_dir) / ".forktex"
         config_dir.mkdir()
-        (config_dir / "intelligence.json").write_text(json.dumps({
-            "endpoint": "http://project:8080",
-            "api_key": "proj-key",
-        }))
+        (config_dir / "intelligence.json").write_text(
+            json.dumps(
+                {
+                    "endpoint": "http://project:8080",
+                    "api_key": "proj-key",
+                }
+            )
+        )
         monkeypatch.setenv("FORKTEX_INTELLIGENCE_API_KEY", "env-key")
-        s = IntelligenceSettings.load(project_root=temp_dir)
+        s = load_intelligence_settings(project_root=temp_dir)
         assert s.endpoint == "http://project:8080"
         assert s.api_key == "env-key"
 
     def test_explicit_overrides_win(self, monkeypatch):
         monkeypatch.setenv("FORKTEX_INTELLIGENCE_API_KEY", "env-key")
-        s = IntelligenceSettings.load(api_key="override-key")
+        s = load_intelligence_settings(api_key="override-key")
         assert s.api_key == "override-key"
 
     def test_get_intelligence_settings_cached(self):
@@ -88,16 +100,23 @@ class TestIntelligenceSettings:
         assert s1 is s2
 
     def test_save_global(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+        from forktex.agent.intelligence.settings import save_intelligence_global
+
+        monkeypatch.setattr(
+            "forktex.agent.intelligence.settings.get_global_config_dir",
+            lambda: tmp_path,
+        )
         s = IntelligenceSettings(endpoint="http://test", api_key="abc")
-        s.save_global()
-        saved = json.loads((tmp_path / ".forktex" / "intelligence.json").read_text())
+        save_intelligence_global(s)
+        saved = json.loads((tmp_path / "intelligence.json").read_text())
         assert saved["endpoint"] == "http://test"
         assert saved["api_key"] == "abc"
 
     def test_save_project(self, temp_dir):
+        from forktex.agent.intelligence.settings import save_intelligence_project
+
         s = IntelligenceSettings(endpoint="http://proj", api_key="xyz")
-        s.save_project(temp_dir)
+        save_intelligence_project(s, temp_dir)
         saved = json.loads(
             (Path(temp_dir) / ".forktex" / "intelligence.json").read_text()
         )
@@ -158,7 +177,7 @@ class TestSSEParsing:
     async def test_done_event(self):
         lines = _lines_from(
             "event: done\n",
-            'data: {}\n',
+            "data: {}\n",
             "\n",
         )
         events = [e async for e in parse_sse_stream(lines)]
@@ -189,7 +208,7 @@ class TestSSEParsing:
             'data: {"text": " there"}\n',
             "\n",
             "event: done\n",
-            'data: {}\n',
+            "data: {}\n",
             "\n",
         )
         events = [e async for e in parse_sse_stream(lines)]
