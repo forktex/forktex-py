@@ -12,6 +12,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from forktex_cloud import paths as _cloud_paths
+
 
 class TruthsStore:
     """Per-domain knowledge persisted to disk."""
@@ -19,7 +21,7 @@ class TruthsStore:
     VALID_CATEGORIES = ("selectors", "xpaths", "flows", "field_mappings", "notes")
 
     def __init__(self, project_root: str) -> None:
-        self._root = Path(project_root) / ".forktex" / "scraper" / "truths"
+        self._root = _cloud_paths.scraper_truths_dir(Path(project_root))
         self._root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, domain: str) -> Path:

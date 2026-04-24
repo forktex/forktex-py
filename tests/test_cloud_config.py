@@ -62,14 +62,20 @@ class TestCloudContext:
 class TestCloudSettings:
     def test_load_empty(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "forktex.agent.cloud.settings.get_global_config_dir", lambda: tmp_path
+            "forktex_cloud.paths.global_dir", lambda: tmp_path
+        )
+        monkeypatch.setattr(
+            "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
         )
         ctx = load_cloud_context()
         assert ctx.controller is None
 
     def test_load_global(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "forktex.agent.cloud.settings.get_global_config_dir", lambda: tmp_path
+            "forktex_cloud.paths.global_dir", lambda: tmp_path
+        )
+        monkeypatch.setattr(
+            "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
         )
         (tmp_path / "cloud.json").write_text(
             json.dumps(
@@ -87,7 +93,10 @@ class TestCloudSettings:
 
     def test_load_project_overrides_global(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "forktex.agent.cloud.settings.get_global_config_dir", lambda: tmp_path
+            "forktex_cloud.paths.global_dir", lambda: tmp_path
+        )
+        monkeypatch.setattr(
+            "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
         )
         # Global config
         (tmp_path / "cloud.json").write_text(
@@ -119,7 +128,10 @@ class TestCloudSettings:
 
     def test_save_global(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "forktex.agent.cloud.settings.get_global_config_dir", lambda: tmp_path
+            "forktex_cloud.paths.global_dir", lambda: tmp_path
+        )
+        monkeypatch.setattr(
+            "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
         )
         ctx = CloudContext(
             controller="http://saved",

@@ -7,6 +7,8 @@ import sys
 
 import asyncclick as click
 
+from forktex_cloud import paths as _cloud_paths
+
 
 @click.command()
 @click.option(
@@ -120,7 +122,7 @@ def _run_local(
 ):
     """Run the stack locally via docker compose."""
     project_root = ctx.obj["project_root"]
-    compose_file = str(project_root / ".forktex" / "docker-compose.local.yml")
+    compose_file = str(_cloud_paths.compose_path(project_root, "local"))
     env_name = "local"
 
     if tear_down:
@@ -250,7 +252,7 @@ def _tail_loki(project_root, *, service, since, env_name="local"):
     from forktex_cloud.bridge.loki import loki_ready, build_logql, tail
     from forktex_cloud.bridge.log_formatter import assign_colors, format_line, COLORS
 
-    compose_file = str(project_root / ".forktex" / "docker-compose.local.yml")
+    compose_file = str(_cloud_paths.compose_path(project_root, "local"))
     base_url = "http://localhost:3100"
     if not loki_ready(base_url):
         click.echo("  Loki not reachable — falling back to docker compose logs")

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncclick as click
 
-from forktex.agent.cloud.login import login
 from forktex.agent.cloud.init import init
 from forktex.agent.cloud.validate import validate
 from forktex.agent.cloud.up import up
@@ -41,8 +40,14 @@ async def cloud(ctx, project_dir):
     ctx.obj["cloud_ctx"] = cloud_ctx
 
 
+# Credential verbs (login / logout) — shared shape with intelligence & network.
+from forktex.agent.auth import build_facet_commands, login_cloud as _login_cloud
+
+_cloud_login, _cloud_logout = build_facet_commands("cloud", _login_cloud)
+cloud.add_command(_cloud_login)
+cloud.add_command(_cloud_logout)
+
 # Register all subcommands
-cloud.add_command(login)
 cloud.add_command(init)
 cloud.add_command(validate)
 cloud.add_command(up)

@@ -48,7 +48,7 @@ async def run(task, project, agent_type):
 
     if not settings.is_configured:
         error("Intelligence API not configured.")
-        info("Run [bold]forktex intelligence init[/bold] to set up.")
+        info("Run [bold]forktex intelligence login[/bold] to set up.")
         sys.exit(1)
 
     client = ForktexIntelligenceClient.from_settings(settings)

@@ -21,14 +21,14 @@ Requires Python 3.11+.
 ## Quick Start
 
 ```bash
-# AI agent — interactive chat with tool calling
+# AI agent — interactive chat with tool calling (bare forktex drops you in)
 forktex
 
-# AI agent — single question
-forktex ask "What does this project do?"
+# AI agent — single-shot question (scriptable)
+forktex intelligence ask "What does this project do?"
 
 # AI agent — orchestrated task
-forktex run "Add error handling to src/app.py"
+forktex intelligence run "Add error handling to src/app.py"
 
 # Cloud — start local stack from forktex.json manifest
 forktex cloud up --env local --build
@@ -47,37 +47,58 @@ forktex fsd report
 
 | Pillar | What it does | Key commands |
 |--------|-------------|--------------|
-| **Intelligence** | AI agent with tool calling. Reads code, runs commands, applies patches. | `forktex chat`, `forktex ask`, `forktex run`, `forktex scrape` |
+| **Intelligence** | AI agent with tool calling. Reads code, runs commands, applies patches. | `forktex` (chat), `forktex intelligence ask/run/scrape` |
 | **Cloud** | Deploy and manage infrastructure. Blue-green deploys from `forktex.json` manifests. | `forktex cloud up`, `forktex cloud deploy`, `forktex cloud server` |
+| **Network** | Identity, projects, tasks, worklogs, channels. | `forktex network login`, `forktex network status` |
 | **FSD** | ForkTex Standard for Delivery. Verify compliance, generate ISO audit evidence. | `forktex fsd check`, `forktex fsd report` |
 
 ## CLI Commands
 
+The three facets — **cloud**, **intelligence**, **network** — sit at the same level in the command tree. Each exposes its own operations plus the identical credential pair `login` / `logout`. A top-level `forktex status` aggregates credential state across all three.
+
 ```
-forktex                     Interactive AI chat (default)
-forktex ask "..."           Single question
-forktex run "..."           Orchestrated task
+forktex                      Bare: menu-driven root loop (auto-upgrades to chat)
+forktex status               Aggregate credential state (cloud + intelligence + network)
+forktex info                 Project + environment summary
 
 forktex cloud
-  login                     Configure controller
-  init                      Scaffold forktex.json
-  up / down                 Start/stop stack
-  deploy                    Blue-green deployment
-  server list|create|show   Server management
-  project list|create|show  Project management
-  vault set|get|list        Secret management
-  status / logs / events    Monitoring
+  login / logout             Authenticate / remove credentials
+  init                       Scaffold forktex.json manifest
+  up / down                  Start / stop stack
+  deploy                     Blue-green deployment
+  server | project | vault   Per-resource subgroups
+  status / logs / events     Monitoring
 
-forktex fsd
-  check                     Verify FSD compliance
-  report                    Run gates, generate evidence
-  makefile sync             Generate Makefile from manifest
+forktex intelligence
+  login / logout             Authenticate / remove credentials
+  status                     API health + whoami
+  ask "..."                  Single-shot question
+  run "..."                  Orchestrated task
+  scrape <url>               Agentic browser scraper
+  index-ecosystem            Knowledge ingestion
 
-forktex arch discover       C4 architecture auto-discovery
-forktex overview            Ecosystem overview
-forktex git status-all      Multi-repo git operations
-forktex scrape <url>        AI-driven web scraping
+forktex network
+  login / logout             Authenticate / remove credentials
+  status                     identity_me round-trip
+
+forktex fsd                  Delivery-standard checks + ISO evidence
+forktex arch discover        C4 auto-discovery
+forktex overview             Ecosystem overview
+forktex git status-all       Multi-repo git operations
 ```
+
+## Credentials — one verb, three facets
+
+```bash
+forktex status                                              # aggregate table (all 3 facets)
+forktex cloud login                                         # email/password + org select (or --api-key ftx-…)
+forktex intelligence login                                  # login-or-register + key issue
+forktex network login --endpoint http://localhost:9000 \
+                     --email you@example.com
+forktex <facet> logout [--global]                           # remove saved creds
+```
+
+Every facet understands the same option set: `--endpoint`/`--url`, `--email`, `--password`, `--api-key`, `--global`, `--new-account`. Credentials live at `~/.forktex/{cloud,intelligence,network}.json` (global) or `<project>/.forktex/…` (per-project). See the [forktex directory spec](https://github.com/forktex/cloud/blob/master/docs/forktex-directory-spec.md).
 
 ## Ecosystem
 
@@ -101,23 +122,33 @@ Each SDK is independently versioned and published to PyPI. `forktex` re-exports 
 | `FORKTEX_INTELLIGENCE_API_KEY` | Intelligence API key | *(required for AI features)* |
 | `FORKTEX_DEBUG` | Enable debug output | `false` |
 
-Settings are also read from `~/.forktex/` (global) and `.forktex/` (project-level) config files. Run `forktex intelligence init` and `forktex cloud login` to configure interactively.
+Settings are also read from `~/.forktex/` (global) and `.forktex/` (project-level) config files. Run `forktex <facet> login` to configure each facet interactively.
+
+The full on-disk layout — every file under `.forktex/` and `~/.forktex/`, what writes it, whether it's gitignored — is defined by the [forktex directory spec](https://github.com/forktex/cloud/blob/master/docs/forktex-directory-spec.md) and enforced in code via `forktex_cloud.paths`.
 
 ## Development
 
 ```bash
-# Editable install (pulls SDKs from PyPI)
+# Editable install (pulls forktex-cloud and forktex-intelligence from PyPI)
 python -m venv .venv && source .venv/bin/activate
 pip install -e .[dev]
-
-# Full ecosystem dev (editable SDKs from sibling repos)
-pip install -e ../intelligence/sdk -e ../cloud/sdk -e ../core-py -e .[dev]
 
 # Run tests
 make test
 
 # Regenerate Makefile from FSD manifest
 forktex fsd --project-dir . makefile sync
+```
+
+### Developing against sibling SDK checkouts
+
+Swap the installed `forktex-cloud`, `forktex-intelligence`, and `forktex-network` with editable installs from `../cloud/sdk-py`, `../intelligence/sdk-py`, `../network/sdk-py`:
+
+```bash
+make dev-link-sdks              # editable from siblings
+export FORKTEX_DEV_SIBLING_SDKS=1   # adds "(dev-linked)" to `forktex --version`
+# …iterate on SDK sources — imports pick up changes without a reinstall…
+make dev-unlink-sdks            # restore pinned PyPI versions
 ```
 
 ## License

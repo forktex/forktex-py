@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from forktex_cloud import paths as _cloud_paths
+
 
 class AgentStateStore:
     """Persists agent process metadata to .forktex/agents/history/.
@@ -18,7 +20,7 @@ class AgentStateStore:
     """
 
     def __init__(self, project_root: str) -> None:
-        self._root = Path(project_root) / ".forktex" / "agents" / "history"
+        self._root = _cloud_paths.agents_history_dir(Path(project_root))
 
     def _ensure_dir(self) -> None:
         self._root.mkdir(parents=True, exist_ok=True)

@@ -31,7 +31,7 @@ def test_package_import():
 def test_version():
     from forktex import __version__
 
-    assert __version__ == "0.5.0"
+    assert __version__ == "1.0.0"
 
 
 class TestInitCommand:

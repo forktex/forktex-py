@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from forktex_cloud import paths as _cloud_paths
+
 from forktex.agent.tools.base import Tool, ToolResult
 from forktex.agent.scraper.truths import TruthsStore
 
@@ -144,7 +146,7 @@ def create_scraper_tools(
 ) -> List[Tool]:
     """Create the 12 scraper tools bound to the given browser and truths store."""
 
-    output_dir = Path(project_root) / ".forktex" / "scraper" / "output"
+    output_dir = _cloud_paths.scraper_output_dir(Path(project_root))
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # ── 1. scraper_navigate ─────────────────────────────────────────────

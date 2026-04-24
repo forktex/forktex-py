@@ -7,6 +7,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from forktex_cloud import paths as _cloud_paths
+
 from forktex.core.paths import FORKTEX_MANIFEST
 
 
@@ -14,7 +16,7 @@ SKIP_DIRS = {
     ".git",
     ".venv",
     ".pytest_cache",
-    ".forktex",
+    _cloud_paths.PROJECT_DIRNAME,
     "__pycache__",
     "node_modules",
     "dist",
