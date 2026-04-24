@@ -19,9 +19,20 @@ from rich.prompt import Prompt
 from forktex.agent.ui.console import console, info
 from forktex.agent.ui.display import CLI_VERSION
 
+_CLOUD_IMPORT_ERROR: ModuleNotFoundError | None = None
+
 
 def _get_project_root() -> str:
     return str(Path.cwd().absolute())
+
+
+def _require_cloud_support() -> None:
+    if _CLOUD_IMPORT_ERROR is None:
+        return
+    raise click.ClickException(
+        "Cloud commands are unavailable because the optional "
+        f"dependency { _CLOUD_IMPORT_ERROR.name!r } is not installed."
+    )
 
 
 # =============================================================================
@@ -85,6 +96,7 @@ async def init_cmd(project):
         await ctx.invoke(intel_init, project=project_root, save_global=False)
 
     if choice in ("cloud", "both"):
+        _require_cloud_support()
         info("Setting up Cloud...")
         from forktex.agent.cloud.login import login
 
@@ -125,12 +137,17 @@ async def info_cmd():
     )
 
     # Show cloud config
-    from forktex.agent.cloud.settings import load_cloud_context
-
-    cloud_ctx = load_cloud_context(Path(project_root))
     console.print("\n[bold]Cloud:[/bold]")
-    console.print(f"  Controller: {cloud_ctx.controller or 'not set'}")
-    console.print(f"  Connected: {cloud_ctx.is_connected}")
+    if _CLOUD_IMPORT_ERROR is not None:
+        console.print(
+            f"  Unavailable: missing optional dependency {_CLOUD_IMPORT_ERROR.name!r}"
+        )
+    else:
+        from forktex.agent.cloud.settings import load_cloud_context
+
+        cloud_ctx = load_cloud_context(Path(project_root))
+        console.print(f"  Controller: {cloud_ctx.controller or 'not set'}")
+        console.print(f"  Connected: {cloud_ctx.is_connected}")
 
 
 # Rename info_cmd to 'info' for CLI
@@ -150,9 +167,12 @@ register_intelligence_commands(cli)
 # Cloud Commands
 # =============================================================================
 
-from forktex.agent.cloud import cloud
-
-cli.add_command(cloud)
+try:
+    from forktex.agent.cloud import cloud
+except ModuleNotFoundError as exc:
+    _CLOUD_IMPORT_ERROR = exc
+else:
+    cli.add_command(cloud)
 
 
 # =============================================================================

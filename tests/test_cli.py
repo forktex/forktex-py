@@ -23,6 +23,9 @@ def test_package_import():
 
     assert StateManager is not None
     assert Settings is not None
+    assert get_settings is not None
+    assert generate_id is not None
+    assert current_timestamp is not None
 
 
 def test_version():

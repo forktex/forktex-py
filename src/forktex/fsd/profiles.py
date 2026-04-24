@@ -120,6 +120,39 @@ PROFILE_CATALOG: dict[str, RuntimeProfile] = {
             "compliance",
         ),
     ),
+    "docs/knowledge-directory": RuntimeProfile(
+        id="docs/knowledge-directory",
+        required=(
+            "format",
+            "lint",
+            "test",
+            "ci",
+            "clean",
+            "help",
+        ),
+        optional=("build",),
+        disabled=(
+            "deps",
+            "typecheck",
+            "security-audit",
+            "license",
+            "codegen",
+            "codegen-check",
+            "start",
+            "stop",
+            "logs",
+            "publish",
+            "publish-check",
+            "publish-test",
+            "db-migrate",
+            "db-reset",
+            "seed",
+            "deploy",
+            "backup",
+            "rollback",
+            "monitoring",
+        ),
+    ),
 }
 
 
@@ -137,7 +170,12 @@ def resolve_profile_ids(
     )
     if config and config.profiles:
         return config.profiles
-    return ["package/python-library"] if package_manifest else []
+    if package_manifest:
+        return ["package/python-library"]
+    # Root manifest with no declared profile: infer from `kind`.
+    if manifest.kind == "KnowledgeDirectory":
+        return ["docs/knowledge-directory"]
+    return []
 
 
 def resolve_applicable_atoms(
