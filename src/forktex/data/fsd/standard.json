@@ -237,7 +237,7 @@
       "domain": "infra",
       "description": "Project runtime starts with one command",
       "resolve": [
-        {"strategy": "make", "any_of": ["start", "local", "dev"]}
+        {"strategy": "make", "any_of": ["start", "local"]}
       ],
       "iso": ["9001:7.1.3"],
       "evidence": "Runtime startup output + healthcheck pass"
@@ -248,7 +248,7 @@
       "domain": "infra",
       "description": "Project runtime stops cleanly",
       "resolve": [
-        {"strategy": "make", "any_of": ["stop", "local-down", "dev-down"]}
+        {"strategy": "make", "any_of": ["stop", "local-down"]}
       ],
       "iso": [],
       "evidence": "All runtime processes stopped cleanly"
@@ -259,7 +259,7 @@
       "domain": "infra",
       "description": "Runtime logs observable through one command",
       "resolve": [
-        {"strategy": "make", "any_of": ["logs", "local-logs", "dev-logs"]}
+        {"strategy": "make", "any_of": ["logs", "local-logs"]}
       ],
       "iso": [],
       "evidence": "Log stream"

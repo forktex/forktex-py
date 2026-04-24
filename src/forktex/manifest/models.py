@@ -72,8 +72,6 @@ class ServiceDef(ForkTexModel):
     command: str | None = None
     volumes: list[str] = []
     environments: list[str] | None = None
-    dev_only: bool = Field(False, alias="devOnly")
-    prod_only: bool = Field(False, alias="prodOnly")
     healthcheck: dict[str, Any] | None = None
 
 

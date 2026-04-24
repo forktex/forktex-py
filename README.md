@@ -30,8 +30,8 @@ forktex ask "What does this project do?"
 # AI agent — orchestrated task
 forktex run "Add error handling to src/app.py"
 
-# Cloud — start local dev stack from forktex.json manifest
-forktex cloud up --env dev --build
+# Cloud — start local stack from forktex.json manifest
+forktex cloud up --env local --build
 
 # Cloud — deploy to production
 forktex cloud deploy <server-id>

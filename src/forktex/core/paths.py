@@ -17,7 +17,6 @@ from typing import Optional
 FORKTEX_DIRNAME = ".forktex"
 FORKTEX_MANIFEST = "forktex.json"
 FORKTEX_LOCAL_MANIFEST = "forktex.local.json"
-FORKTEX_DEV_MANIFEST = "forktex.dev.json"
 
 
 def get_global_config_dir() -> Path:

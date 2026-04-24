@@ -12,21 +12,21 @@ import asyncclick as click
 @click.option("--yes", is_flag=True, help="Skip confirmation")
 @click.option("--keep-dns", is_flag=True, help="Keep DNS records")
 @click.option(
-    "--env", "environment", default=None, help="Environment (dev for local teardown)"
+    "--env", "environment", default=None, help="Environment (local for local teardown)"
 )
 @click.pass_context
 async def down(ctx, yes, keep_dns, environment):
-    """Tear down: destroy server + DNS (remote) or stop containers (dev)."""
-    if environment == "dev":
+    """Tear down: destroy server + DNS (remote) or stop containers (local)."""
+    if environment == "local":
         project_root = ctx.obj["project_root"]
-        compose_file = str(project_root / ".forktex" / "docker-compose.dev.yml")
+        compose_file = str(project_root / ".forktex" / "docker-compose.local.yml")
 
         # Resolve project name from manifest for compose isolation
         project_name = "forktex"
         try:
             from forktex_cloud.manifest.loader import Manifest
 
-            manifest = Manifest.load(project_root / "forktex.json", env="dev")
+            manifest = Manifest.load(project_root / "forktex.json", env="local")
             project_name = manifest.name or "forktex"
         except (FileNotFoundError, ValueError, KeyError):
             click.echo(
