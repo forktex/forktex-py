@@ -1,15 +1,33 @@
 [project]
 name = "forktex"
-version = "0.5.0"
+version = "1.0.0"
 description = "CLI, agent, architecture, audit, and SDK toolkit for the ForkTex self-managed software factory"
 authors = [
     {name = "FORKTEX",email = "info@forktex.com"}
 ]
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = [
-    "forktex-intelligence",
-    "forktex-cloud",
+    "forktex-intelligence (>=1.0.0,<2.0.0)",
+    "forktex-cloud (>=1.0.1,<2.0.0)",
+    "forktex-network (>=1.0.0,<2.0.0)",
     "pydantic (>=2.11.10,<3.0.0)",
     "httpx (>=0.27.0,<1.0.0)",
     "aiofiles (>=24.1.0,<25.0.0)",
@@ -37,21 +55,6 @@ forktex = "forktex.agent.cli:main"
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.scripts]
-forktex = "forktex.agent.cli:main"
-
-# Note: forktex-intelligence and forktex-cloud are NOT path-pinned here.
-# They are resolved from whatever is installed in the active environment:
-#   - On PyPI: latest published forktex-intelligence / forktex-cloud
-#   - For local dev across the ecosystem, install the SDKs editable into your env
-#     from their canonical homes (one-time, per environment):
-#       pip install -e ../intelligence/sdk
-#       pip install -e ../cloud/sdk
-#       pip install -e ../core-py
-#       pip install -e ../forktex-documents
-#     then `pip install -e .[dev]` here.
-# This keeps forktex-py independent of any specific sibling layout on disk.
 
 [dependency-groups]
 dev = [

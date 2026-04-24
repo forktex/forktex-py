@@ -57,8 +57,8 @@ class TestIntelligenceSettings:
 
     def test_load_from_global_config(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "forktex.agent.intelligence.settings.get_global_config_dir",
-            lambda: tmp_path,
+            "forktex_cloud.paths.global_intelligence_file",
+            lambda: tmp_path / "intelligence.json",
         )
         (tmp_path / "intelligence.json").write_text(
             json.dumps(
@@ -103,8 +103,8 @@ class TestIntelligenceSettings:
         from forktex.agent.intelligence.settings import save_intelligence_global
 
         monkeypatch.setattr(
-            "forktex.agent.intelligence.settings.get_global_config_dir",
-            lambda: tmp_path,
+            "forktex_cloud.paths.global_intelligence_file",
+            lambda: tmp_path / "intelligence.json",
         )
         s = IntelligenceSettings(endpoint="http://test", api_key="abc")
         save_intelligence_global(s)

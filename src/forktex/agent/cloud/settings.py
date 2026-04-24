@@ -12,13 +12,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from forktex_cloud import paths as _cloud_paths
 from forktex_cloud.config import CloudContext
-from forktex.core.paths import (
-    get_global_config_dir,
-    get_project_config_dir,
-)
-
-_CLOUD_CONFIG_FILENAME = "cloud.json"
 
 
 def load_cloud_context(project_root: Path | None = None) -> CloudContext:
@@ -29,7 +24,7 @@ def load_cloud_context(project_root: Path | None = None) -> CloudContext:
     data: dict[str, Any] = {}
 
     # Global config
-    global_path = get_global_config_dir() / _CLOUD_CONFIG_FILENAME
+    global_path = _cloud_paths.global_cloud_file()
     if global_path.exists():
         try:
             data = json.loads(global_path.read_text())
@@ -38,7 +33,7 @@ def load_cloud_context(project_root: Path | None = None) -> CloudContext:
 
     # Project-level config (overrides global)
     if project_root:
-        project_path = get_project_config_dir(project_root) / _CLOUD_CONFIG_FILENAME
+        project_path = _cloud_paths.project_dir(project_root) / "cloud.json"
         if project_path.exists():
             try:
                 project_data = json.loads(project_path.read_text())
@@ -60,9 +55,9 @@ def load_cloud_context(project_root: Path | None = None) -> CloudContext:
 
 
 def save_cloud_context_global(ctx: CloudContext) -> None:
-    """Persist controller + credentials to ~/.forktex/cloud.json."""
-    path = get_global_config_dir() / _CLOUD_CONFIG_FILENAME
-    path.parent.mkdir(parents=True, exist_ok=True)
+    """Persist controller + credentials to the global cloud config file."""
+    _cloud_paths.ensure_global_dir()
+    path = _cloud_paths.global_cloud_file()
     data = {
         "controller": ctx.controller,
         "account_key": ctx.account_key,
@@ -75,9 +70,9 @@ def save_cloud_context_global(ctx: CloudContext) -> None:
 
 
 def save_cloud_context_project(ctx: CloudContext, project_root: Path) -> None:
-    """Persist project-specific state to .forktex/cloud.json."""
-    path = get_project_config_dir(project_root) / _CLOUD_CONFIG_FILENAME
-    path.parent.mkdir(parents=True, exist_ok=True)
+    """Persist project-specific cloud state to the project cloud config file."""
+    _cloud_paths.ensure_project_dirs(project_root)
+    path = _cloud_paths.project_dir(project_root) / "cloud.json"
     data = {
         "current_project": ctx.current_project,
         "current_server": ctx.current_server,

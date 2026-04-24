@@ -14,6 +14,8 @@ from pathlib import Path
 import asyncclick as click
 from jinja2 import Environment, FileSystemLoader
 
+from forktex_cloud import paths as _cloud_paths
+
 from forktex.core.paths import get_fsd_evidence_dir
 from forktex.fsd.evaluate import AtomStatus, evaluate
 from forktex.fsd.loader import (
@@ -51,7 +53,7 @@ def _find_makefile_targets(makefile_path: Path) -> set[str]:
 
 SKIP_DIRS = {
     ".git",
-    ".forktex",
+    _cloud_paths.PROJECT_DIRNAME,
     ".standard",
     ".github",
     "node_modules",

@@ -13,10 +13,12 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 
-from forktex.core.paths import FORKTEX_DIRNAME, resolve_path
+from forktex_cloud import paths as _cloud_paths
+
+from forktex.core.paths import resolve_path
 
 
-STATE_DIR = FORKTEX_DIRNAME
+STATE_DIR = _cloud_paths.PROJECT_DIRNAME
 
 _state_lock = asyncio.Lock()
 
@@ -29,22 +31,8 @@ class StateManager:
         self.state_dir = self.project_root / STATE_DIR
 
     async def ensure_dir(self) -> Path:
-        """Ensure .forktex/ exists and is in .gitignore."""
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-
-        gitignore_path = self.project_root / ".gitignore"
-        ignore_entry = f"{STATE_DIR}/"
-
-        if gitignore_path.exists():
-            async with aiofiles.open(gitignore_path, "r", encoding="utf-8") as f:
-                content = await f.read()
-            if ignore_entry not in content:
-                async with aiofiles.open(gitignore_path, "a", encoding="utf-8") as f:
-                    await f.write(f"\n# Forktex state\n{ignore_entry}\n")
-        else:
-            async with aiofiles.open(gitignore_path, "w", encoding="utf-8") as f:
-                await f.write(f"# Forktex state\n{ignore_entry}\n")
-
+        """Ensure the canonical ``.forktex/`` dir, gitignore, and schema version."""
+        _cloud_paths.ensure_project_dirs(self.project_root)
         return self.state_dir
 
     async def read_json(self, filename: str) -> Optional[Dict[str, Any]]:

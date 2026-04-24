@@ -4,16 +4,24 @@ forktex.agent.ui.display - Session info, usage display, progress.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, Optional
 
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
+from forktex import __version__ as _BASE_VERSION
 from forktex.agent.ui.console import console, info
 
-
-CLI_VERSION = "0.5.0"
+# Append a `(dev-linked)` suffix when the user has explicitly opted into
+# sibling-SDK editable installs via `make dev-link-sdks`. The env flag is a
+# courtesy signal — it does not influence import resolution.
+CLI_VERSION = (
+    f"{_BASE_VERSION} (dev-linked)"
+    if os.environ.get("FORKTEX_DEV_SIBLING_SDKS")
+    else _BASE_VERSION
+)
 
 # Max characters to show for tool argument values and results
 _ARG_TRUNCATE = 120

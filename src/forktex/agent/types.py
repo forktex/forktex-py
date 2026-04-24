@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
+from forktex_cloud import paths as _cloud_paths
+
 
 @dataclass(frozen=True)
 class AgentType:
@@ -187,7 +189,7 @@ class AgentTypeRegistry:
 
     def load_custom(self, project_root: str) -> None:
         """Load custom agent types from .forktex/agents/types.json."""
-        types_file = Path(project_root) / ".forktex" / "agents" / "types.json"
+        types_file = _cloud_paths.agents_types_file(Path(project_root))
         if not types_file.exists():
             return
 

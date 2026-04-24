@@ -12,13 +12,8 @@ import json
 import os
 from typing import Any, Optional
 
+from forktex_cloud import paths as _cloud_paths
 from forktex_intelligence.config import IntelligenceSettings
-from forktex.core.paths import (
-    get_global_config_dir,
-    get_project_config_dir,
-)
-
-_INTELLIGENCE_CONFIG_FILENAME = "intelligence.json"
 
 # Cached settings
 _settings: Optional[IntelligenceSettings] = None
@@ -40,7 +35,7 @@ def load_intelligence_settings(
     values: dict[str, Any] = {}
 
     # Global config
-    global_path = get_global_config_dir() / _INTELLIGENCE_CONFIG_FILENAME
+    global_path = _cloud_paths.global_intelligence_file()
     if global_path.exists():
         try:
             data = json.loads(global_path.read_text())
@@ -53,9 +48,8 @@ def load_intelligence_settings(
 
     # Project-level config (overrides global)
     if project_root:
-        project_path = (
-            get_project_config_dir(project_root) / _INTELLIGENCE_CONFIG_FILENAME
-        )
+        from pathlib import Path as _P
+        project_path = _cloud_paths.project_dir(_P(project_root)) / "intelligence.json"
         if project_path.exists():
             try:
                 data = json.loads(project_path.read_text())
@@ -101,9 +95,9 @@ def reset_intelligence_settings() -> None:
 
 
 def save_intelligence_global(settings: IntelligenceSettings) -> None:
-    """Persist settings to ~/.forktex/intelligence.json."""
-    path = get_global_config_dir() / _INTELLIGENCE_CONFIG_FILENAME
-    path.parent.mkdir(parents=True, exist_ok=True)
+    """Persist settings to the global intelligence config file."""
+    _cloud_paths.ensure_global_dir()
+    path = _cloud_paths.global_intelligence_file()
     data = {"endpoint": settings.endpoint, "api_key": settings.api_key}
     path.write_text(json.dumps(data, indent=2) + "\n")
 
@@ -111,8 +105,9 @@ def save_intelligence_global(settings: IntelligenceSettings) -> None:
 def save_intelligence_project(
     settings: IntelligenceSettings, project_root: str
 ) -> None:
-    """Persist settings to .forktex/intelligence.json."""
-    path = get_project_config_dir(project_root) / _INTELLIGENCE_CONFIG_FILENAME
-    path.parent.mkdir(parents=True, exist_ok=True)
+    """Persist settings to the project intelligence config file."""
+    from pathlib import Path as _P
+    _cloud_paths.ensure_project_dirs(_P(project_root))
+    path = _cloud_paths.project_dir(_P(project_root)) / "intelligence.json"
     data = {"endpoint": settings.endpoint, "api_key": settings.api_key}
     path.write_text(json.dumps(data, indent=2) + "\n")

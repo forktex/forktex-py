@@ -18,8 +18,10 @@ import asyncclick as click
 async def down(ctx, yes, keep_dns, environment):
     """Tear down: destroy server + DNS (remote) or stop containers (local)."""
     if environment == "local":
+        from forktex_cloud import paths as _cloud_paths
+
         project_root = ctx.obj["project_root"]
-        compose_file = str(project_root / ".forktex" / "docker-compose.local.yml")
+        compose_file = str(_cloud_paths.compose_path(project_root, "local"))
 
         # Resolve project name from manifest for compose isolation
         project_name = "forktex"

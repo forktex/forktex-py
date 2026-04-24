@@ -20,12 +20,12 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel
 
-from forktex.core.paths import get_global_config_dir, get_project_config_dir
+from forktex_cloud import paths as _cloud_paths
 
 
 def _load_toml_config() -> Dict[str, Any]:
-    """Load configuration from ~/.forktex/config.toml if it exists."""
-    config_path = get_global_config_dir() / "config.toml"
+    """Load configuration from the global config.toml if it exists."""
+    config_path = _cloud_paths.global_config_file()
     if not config_path.exists():
         return {}
     try:
@@ -43,10 +43,10 @@ def _load_toml_config() -> Dict[str, Any]:
 
 
 def _load_project_config(project_root: Optional[str]) -> Dict[str, Any]:
-    """Load .forktex/config.json from the project root if it exists."""
+    """Load the project config.json from the project root if it exists."""
     if not project_root:
         return {}
-    config_path = get_project_config_dir(project_root) / "config.json"
+    config_path = _cloud_paths.project_config_file(Path(project_root))
     if not config_path.exists():
         return {}
     try:

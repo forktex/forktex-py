@@ -2,7 +2,7 @@
   "manifestVersion": "1.0.0",
   "name": "forktex-py",
   "description": "ForkTex Python repo — the CLI, agent, architecture discovery, FSD audit, and orchestration toolkit (single-package repo)",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "fsd": {
     "version": "1.0.0",
     "profiles": [
@@ -12,7 +12,56 @@
     "atoms": {
       "test": {
         "commands": [
-          "pytest tests/ --ignore=tests/test_cloud_client.py -q"
+          "pytest tests/ -q"
+        ]
+      },
+      "build": {
+        "targets": ["build"],
+        "description": "Build sdist + wheel into dist/ and verify metadata with twine check",
+        "commands": [
+          "rm -rf dist/",
+          "python3 -m build",
+          "python3 -m twine check dist/*"
+        ]
+      },
+      "publish-test": {
+        "targets": ["publish-test"],
+        "description": "Upload dist/ to TestPyPI (https://test.pypi.org) for rehearsal. SDK deps must already be on TestPyPI.",
+        "commands": [
+          "python3 -m twine upload --repository testpypi dist/*"
+        ]
+      },
+      "publish": {
+        "targets": ["publish"],
+        "description": "Upload dist/ to production PyPI (irreversible per-version)",
+        "commands": [
+          "python3 -m twine upload dist/*"
+        ]
+      },
+      "dev-link-sdks": {
+        "targets": ["dev-link-sdks"],
+        "description": "pip install -e the three sibling SDK repos (cloud/intelligence/network) for local development against source trees",
+        "commands": [
+          "@bash -c 'for d in ../cloud/sdk-py ../intelligence/sdk-py ../network/sdk-py; do [ -d \"$$d\" ] || { echo \"missing: $$d\"; exit 1; }; done'",
+          "pip install --break-system-packages -e ../cloud/sdk-py -e ../intelligence/sdk-py -e ../network/sdk-py",
+          "@echo 'linked. export FORKTEX_DEV_SIBLING_SDKS=1 to flag the dev-linked banner on forktex --version'"
+        ]
+      },
+      "dev-unlink-sdks": {
+        "targets": ["dev-unlink-sdks"],
+        "description": "Reinstall the three SDKs from their pinned PyPI versions, restoring the published surface",
+        "commands": [
+          "pip install --break-system-packages --force-reinstall --no-deps forktex-cloud forktex-intelligence forktex-network"
+        ]
+      },
+      "dev-install": {
+        "targets": ["dev-install"],
+        "description": "One-shot editable install of the four ecosystem packages (cloud, intelligence, network SDKs + forktex-py CLI) from sibling source trees",
+        "commands": [
+          "@bash -c 'for d in ../cloud/sdk-py ../intelligence/sdk-py ../network/sdk-py; do [ -d \"$$d\" ] || { echo \"missing: $$d\"; exit 1; }; done'",
+          "pip install --break-system-packages -e ../cloud/sdk-py -e ../intelligence/sdk-py -e ../network/sdk-py -e .",
+          "@echo ''",
+          "@echo 'installed. run \"export FORKTEX_DEV_SIBLING_SDKS=1\" to flag the dev-linked banner on forktex --version.'"
         ]
       }
     }
@@ -21,7 +70,7 @@
     {
       "name": "forktex",
       "path": ".",
-      "version": "0.5.0",
+      "version": "1.0.0",
       "publishable": true,
       "language": "python",
       "registry": "https://pypi.org",

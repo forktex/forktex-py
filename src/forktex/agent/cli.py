@@ -1,10 +1,14 @@
 """
 forktex.agent.cli - CLI dispatcher for Forktex.
 
-Commands:
-- Intelligence commands: chat, ask, run
-- Cloud commands: cloud ...
-- Core commands: init, info
+Top-level shape (all three facets are peers):
+
+    forktex                          bare REPL / menu
+    forktex status                   aggregate credential state (all 3 facets)
+    forktex cloud <…>                cloud operations + sync / disconnect
+    forktex intelligence <…>         intelligence operations + sync / disconnect
+    forktex network <…>              network operations + sync / disconnect
+    forktex fsd / arch / git / local / overview / present / agents / info
 """
 # ruff: noqa: E402
 
@@ -14,7 +18,6 @@ from pathlib import Path
 
 import asyncclick as click
 from rich.panel import Panel
-from rich.prompt import Prompt
 
 from forktex.agent.ui.console import console, info
 from forktex.agent.ui.display import CLI_VERSION
@@ -45,63 +48,20 @@ def _require_cloud_support() -> None:
 @click.option("--project", "-d", default=None, help="Project directory")
 @click.pass_context
 async def cli(ctx, project):
-    """Forktex - Development Toolkit
+    """Forktex — unified CLI across cloud, intelligence, and network.
 
-    AI-powered development assistant, cloud infrastructure management,
-    and core development utilities.
-
-    Run without a subcommand to start interactive chat.
+    Run with no subcommand to open the menu-driven root loop
+    (auto-upgrades to the intelligence chat REPL when reachable).
     """
     if ctx.invoked_subcommand is None:
-        from forktex.agent.intelligence.cli.chat import chat as _chat_fn
+        from forktex.agent.root_loop import run as _root_run
 
-        await ctx.invoke(_chat_fn, project=project)
+        await _root_run(project=project)
 
 
 # =============================================================================
 # Core Commands
 # =============================================================================
-
-
-@cli.command(name="init")
-@click.option("--project", "-d", default=None, help="Project directory")
-async def init_cmd(project):
-    """Interactive setup wizard.
-
-    Configures Intelligence API and/or Cloud services for this project.
-    """
-    project_root = project or _get_project_root()
-
-    console.print(
-        Panel.fit(
-            "[bold]Forktex Setup[/bold]\n\n"
-            "Configure Forktex for this project.\n"
-            f"Project root: [cyan]{project_root}[/cyan]",
-            border_style="blue",
-        )
-    )
-    console.print()
-
-    choice = Prompt.ask(
-        "[bold]What would you like to configure?[/bold]",
-        choices=["intelligence", "cloud", "both"],
-        default="intelligence",
-    )
-
-    if choice in ("intelligence", "both"):
-        info("Setting up Intelligence API...")
-        from forktex.agent.intelligence.cli.init import init_cmd as intel_init
-
-        ctx = click.get_current_context()
-        await ctx.invoke(intel_init, project=project_root, save_global=False)
-
-    if choice in ("cloud", "both"):
-        _require_cloud_support()
-        info("Setting up Cloud...")
-        from forktex.agent.cloud.login import login
-
-        ctx = click.get_current_context()
-        await ctx.invoke(login)
 
 
 @cli.command()
@@ -115,7 +75,6 @@ async def info_cmd():
         f"Project Root: {project_root}",
         f"Python: {sys.version.split()[0]}",
         f"Platform: {sys.platform}",
-        "Installed modules: intelligence, cloud, agent",
     ]
 
     console.print(
@@ -126,7 +85,6 @@ async def info_cmd():
         )
     )
 
-    # Show intelligence config
     from forktex.agent.intelligence.settings import get_intelligence_settings
 
     settings = get_intelligence_settings(project_root=project_root)
@@ -136,7 +94,6 @@ async def info_cmd():
         f"  API Key: {'***' + settings.api_key[-4:] if settings.api_key else 'not set'}"
     )
 
-    # Show cloud config
     console.print("\n[bold]Cloud:[/bold]")
     if _CLOUD_IMPORT_ERROR is not None:
         console.print(
@@ -150,12 +107,20 @@ async def info_cmd():
         console.print(f"  Connected: {cloud_ctx.is_connected}")
 
 
-# Rename info_cmd to 'info' for CLI
 info_cmd.name = "info"
 
 
 # =============================================================================
-# Intelligence Commands
+# Top-level `forktex status` — aggregate credential state across facets
+# =============================================================================
+
+from forktex.agent.auth import status_cmd as _status_cmd
+
+cli.add_command(_status_cmd)
+
+
+# =============================================================================
+# Intelligence facet (chat, ask, run, scrape, index-ecosystem, sync, disconnect, status)
 # =============================================================================
 
 from forktex.agent.intelligence.cli import register_intelligence_commands
@@ -164,7 +129,7 @@ register_intelligence_commands(cli)
 
 
 # =============================================================================
-# Cloud Commands
+# Cloud facet
 # =============================================================================
 
 try:
@@ -176,7 +141,16 @@ else:
 
 
 # =============================================================================
-# Agent Commands
+# Network facet
+# =============================================================================
+
+from forktex.agent.network import network as network_group
+
+cli.add_command(network_group)
+
+
+# =============================================================================
+# Cross-cutting groups (agents, fsd, arch, overview, present, git, local)
 # =============================================================================
 
 from forktex.agent.commands.agents import agents
@@ -187,37 +161,13 @@ agents.add_command(ground)
 agents.add_command(root_agent)
 cli.add_command(agents)
 
-
-# =============================================================================
-# Scraper Command
-# =============================================================================
-
-from forktex.agent.scraper.cli import scrape
-
-cli.add_command(scrape)
-
-
-# =============================================================================
-# FSD Commands (ForkTex Standard for Delivery)
-# =============================================================================
-
 from forktex.agent.fsd import fsd
 
 cli.add_command(fsd)
 
-
-# =============================================================================
-# Git Commands (multi-project operations)
-# =============================================================================
-
 from forktex.agent.commands.git_cli import git
 
 cli.add_command(git)
-
-
-# =============================================================================
-# Architecture Commands (C4 model auto-discovery)
-# =============================================================================
 
 from forktex.agent.fsd.arch_cli import arch
 
@@ -230,11 +180,6 @@ cli.add_command(overview)
 from forktex.agent.fsd.present import present
 
 cli.add_command(present)
-
-
-# =============================================================================
-# Local Commands (multi-project local environment)
-# =============================================================================
 
 from forktex.agent.commands.local_cli import local
 

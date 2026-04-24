@@ -30,7 +30,7 @@ def _build_intelligence_client(project_root: Optional[str] = None):
     if not settings.is_configured:
         error("Intelligence API not configured.")
         info(
-            "Run [bold]forktex intelligence init[/bold] to set up your API endpoint and key."
+            "Run [bold]forktex intelligence login[/bold] to set up your API endpoint and key."
         )
         sys.exit(1)
 
@@ -208,7 +208,7 @@ async def ask(prompt, project):
 
     except RuntimeError as e:
         error(str(e))
-        info("Run [bold]forktex intelligence init[/bold] to configure.")
+        info("Run [bold]forktex intelligence login[/bold] to configure.")
         sys.exit(1)
     except Exception as e:
         error(f"Request failed: {e}")
