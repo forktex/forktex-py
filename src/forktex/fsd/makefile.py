@@ -85,9 +85,29 @@ def _normalize_profile_atom_ids(
 
     atoms = []
     for atom in standard.atoms:
-        if applicable is not None and atom.id not in applicable:
+        override = (
+            config.atoms.get(atom.id)
+            if config and atom.id in config.atoms
+            else None
+        )
+        explicitly_enabled = bool(
+            override
+            and not override.disabled
+            and (
+                override.commands
+                or override.targets
+                or override.aliases
+                or override.description
+            )
+        )
+        if applicable is not None and atom.id not in applicable and not explicitly_enabled:
             continue
-        if atom.id in disabled:
+        if atom.id in disabled and not explicitly_enabled:
+            continue
+        # Skip atoms that don't use the `make` resolve strategy: they're
+        # satisfied by filesystem paths, manifest fields, or file content,
+        # so a Make target for them is meaningless noise.
+        if not atom.make_targets:
             continue
         atoms.append(atom.id)
     return atoms
@@ -160,7 +180,27 @@ def _loop_lines(
 
 
 def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
-    _, subpaths = _package_paths(manifest)
+    root_paths, subpaths = _package_paths(manifest)
+    has_python = bool(root_paths) or bool(subpaths)
+
+    # Python-shaped defaults only make sense when the manifest actually
+    # declares python packages. For non-python root manifests (e.g. a
+    # KnowledgeDirectory), emit a TODO stub and let `fsd.atoms[*].commands`
+    # in the manifest supply the real body via _override_commands().
+    python_specific = {
+        "deps",
+        "format",
+        "lint",
+        "typecheck",
+        "test",
+        "security-audit",
+        "build",
+        "publish",
+        "publish-check",
+        "publish-test",
+    }
+    if not has_python and atom_id in python_specific:
+        return [f'@echo "TODO: configure {atom_id} for $(PROJECT_NAME)"']
 
     if atom_id == "deps":
         return _deps_lines(manifest)
@@ -343,39 +383,107 @@ def _render_target(
     return lines
 
 
-def _root_secondary_targets() -> list[str]:
-    return [
-        "format-check: ## Check formatting without rewriting files",
-        "\truff format --check src/ tests/",
-        "\t@for pkg in $(SUBPACKAGES); do \\",
-        "\t\truff format --check $$pkg/src/ $$pkg/tests/ 2>/dev/null || true; \\",
-        "\tdone",
-        "",
-        "lint-fix: ## Lint and auto-fix where possible",
-        "\truff check --fix src/ tests/",
-        "\t@for pkg in $(SUBPACKAGES); do \\",
-        "\t\truff check --fix $$pkg/src/ $$pkg/tests/ 2>/dev/null || true; \\",
-        "\tdone",
-        "",
-        "test-cov: ## Run tests with coverage",
-        "\tpytest tests/ --cov=src --cov-report=term-missing",
-        "",
-        "deps-lock: ## Lock dependencies",
-        "\tpoetry lock",
-        "",
-        "local: start",
-        "",
-        "dev: start",
-        "",
-        "local-down: stop",
-        "",
-        "dev-down: stop",
-        "",
-        "local-logs: logs",
-        "",
-        "dev-logs: logs",
-        "",
-    ]
+def _declared_target_names(
+    atoms: list[Atom],
+    custom: list[tuple[Atom, AtomOverride]],
+    *,
+    manifest: ForktexManifest,
+    package_manifest: ForktexManifest | None = None,
+) -> set[str]:
+    names: set[str] = set()
+    for atom in atoms:
+        target, aliases = _make_target_names(
+            atom,
+            _get_atom_override(manifest, atom.id, package_manifest=package_manifest),
+        )
+        names.add(target)
+        names.update(aliases)
+    for synthetic, override in custom:
+        target, aliases = _make_target_names(synthetic, override)
+        names.add(target)
+        names.update(aliases)
+    return names
+
+
+def _root_secondary_targets(
+    manifest: ForktexManifest,
+    *,
+    existing_targets: set[str],
+) -> tuple[list[str], list[str]]:
+    root_paths, subpaths = _package_paths(manifest)
+    has_root_python = bool(root_paths)
+    has_workspace_runtime = bool(root_paths or subpaths)
+    if not has_workspace_runtime:
+        # Non-python root manifests (e.g. KnowledgeDirectory) don't need
+        # ruff/pytest/poetry secondaries, and their start/stop/logs atoms
+        # are typically disabled by the profile so the alias rules would
+        # dangle. Emit nothing.
+        return [], []
+
+    lines: list[str] = []
+    phony: list[str] = []
+
+    if has_root_python and "format-check" not in existing_targets:
+        lines.extend(
+            [
+                "format-check: ## Check formatting without rewriting files",
+                "\truff format --check src/ tests/",
+                "\t@for pkg in $(SUBPACKAGES); do \\",
+                "\t\truff format --check $$pkg/src/ $$pkg/tests/ 2>/dev/null || true; \\",
+                "\tdone",
+                "",
+            ]
+        )
+        phony.append("format-check")
+
+    if has_root_python and "lint-fix" not in existing_targets:
+        lines.extend(
+            [
+                "lint-fix: ## Lint and auto-fix where possible",
+                "\truff check --fix src/ tests/",
+                "\t@for pkg in $(SUBPACKAGES); do \\",
+                "\t\truff check --fix $$pkg/src/ $$pkg/tests/ 2>/dev/null || true; \\",
+                "\tdone",
+                "",
+            ]
+        )
+        phony.append("lint-fix")
+
+    if has_root_python and "test-cov" not in existing_targets:
+        lines.extend(
+            [
+                "test-cov: ## Run tests with coverage",
+                "\tpytest tests/ --cov=src --cov-report=term-missing",
+                "",
+            ]
+        )
+        phony.append("test-cov")
+
+    if has_root_python and "deps-lock" not in existing_targets:
+        lines.extend(
+            [
+                "deps-lock: ## Lock dependencies",
+                "\tpoetry lock",
+                "",
+            ]
+        )
+        phony.append("deps-lock")
+
+    for alias in ("local", "dev", "local-down", "dev-down", "local-logs", "dev-logs"):
+        if alias in existing_targets:
+            continue
+        target = {
+            "local": "start",
+            "dev": "start",
+            "local-down": "stop",
+            "dev-down": "stop",
+            "local-logs": "logs",
+            "dev-logs": "logs",
+        }[alias]
+        lines.extend([f"{alias}: {target}", ""])
+        phony.append(alias)
+
+    return lines, phony
 
 
 def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> str:
@@ -395,6 +503,7 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
     lines = [
         "# Generated by `forktex fsd makefile sync`",
         "# Unit: root project",
+        ".DEFAULT_GOAL := help",
         f"PROJECT_NAME := {manifest.project_name or manifest.name or 'project'}",
         f"SUBPACKAGES := {' '.join(subpaths)}" if subpaths else "SUBPACKAGES :=",
         f"PUBLISHABLE_PACKAGES := {' '.join(publishable_paths)}"
@@ -422,12 +531,25 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         )
         lines.append("")
 
-    lines.extend(_root_secondary_targets())
+    declared_targets = _declared_target_names(atoms, custom, manifest=manifest)
+    secondary_lines, secondary_phony = _root_secondary_targets(
+        manifest, existing_targets=declared_targets
+    )
+    lines.extend(secondary_lines)
     custom_target_names = [_make_target_names(s, o)[0] for s, o in custom]
-    extra_targets = [
-        "install-global: ## Install the latest local forktex CLI globally in editable mode",
-        "\tpip install --break-system-packages -e .",
-        "",
+    root_paths, subpaths = _package_paths(manifest)
+    has_root_python = bool(root_paths)
+    extra_targets: list[str] = []
+    if has_root_python and "install-global" not in declared_targets:
+        extra_targets.extend(
+            [
+                "install-global: ## Install the latest local forktex CLI globally in editable mode",
+                "\tpip install --break-system-packages -e .",
+                "",
+            ]
+        )
+        secondary_phony.append("install-global")
+    extra_targets.append(
         ".PHONY: "
         + " ".join(
             _dedupe(
@@ -436,40 +558,45 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
                     for atom in atoms
                 ]
                 + custom_target_names
-                + [
-                    "local",
-                    "dev",
-                    "local-down",
-                    "dev-down",
-                    "local-logs",
-                    "dev-logs",
-                    "format-check",
-                    "lint-fix",
-                    "test-cov",
-                    "deps-lock",
-                    "install-global",
-                ]
+                + secondary_phony
             )
-        ),
-    ]
+        )
+    )
     lines.extend(extra_targets)
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _package_secondary_targets(src_dir: str = "src") -> list[str]:
+def _package_secondary_targets(
+    src_dir: str = "src",
+    *,
+    existing_targets: set[str],
+) -> tuple[list[str], list[str]]:
     """Secondary targets emitted in every package Makefile.
 
     These are not FSD atoms, but they're load-bearing for `make ci` (which
     calls `make format-check`) and for everyday package development.
     """
-    return [
-        "format-check: ## Check formatting without rewriting files",
-        f"\truff format --check {src_dir}/ tests/ 2>/dev/null || ruff format --check {src_dir}/",
-        "",
-        "lint-fix: ## Lint and auto-fix where possible",
-        f"\truff check --fix {src_dir}/ tests/ 2>/dev/null || ruff check --fix {src_dir}/",
-        "",
-    ]
+    lines: list[str] = []
+    phony: list[str] = []
+    if "format-check" not in existing_targets:
+        lines.extend(
+            [
+                "format-check: ## Check formatting without rewriting files",
+                f"\truff format --check {src_dir}/ tests/ 2>/dev/null || ruff format --check {src_dir}/",
+                "",
+            ]
+        )
+        phony.append("format-check")
+    if "lint-fix" not in existing_targets:
+        lines.extend(
+            [
+                "lint-fix: ## Lint and auto-fix where possible",
+                f"\truff check --fix {src_dir}/ tests/ 2>/dev/null || ruff check --fix {src_dir}/",
+                "",
+            ]
+        )
+        phony.append("lint-fix")
+    return lines, phony
 
 
 def generate_package_makefile(
@@ -501,6 +628,7 @@ def generate_package_makefile(
     lines = [
         "# Generated by `forktex fsd makefile sync`",
         "# Unit: package",
+        ".DEFAULT_GOAL := help",
         f"PROJECT_NAME := {package_manifest.project_name or package_manifest.name or 'package'}",
         "",
     ]
@@ -528,7 +656,16 @@ def generate_package_makefile(
         )
         lines.append("")
 
-    lines.extend(_package_secondary_targets(src_dir))
+    declared_targets = _declared_target_names(
+        atoms,
+        custom,
+        manifest=manifest,
+        package_manifest=package_manifest,
+    )
+    secondary_lines, secondary_phony = _package_secondary_targets(
+        src_dir, existing_targets=declared_targets
+    )
+    lines.extend(secondary_lines)
 
     custom_target_names = [_make_target_names(s, o)[0] for s, o in custom]
     phony_targets = _dedupe(
@@ -542,7 +679,7 @@ def generate_package_makefile(
             for atom in atoms
         ]
         + custom_target_names
-        + ["format-check", "lint-fix"]
+        + secondary_phony
     )
     lines.append(".PHONY: " + " ".join(phony_targets))
     return "\n".join(lines).rstrip() + "\n"
