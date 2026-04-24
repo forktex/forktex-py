@@ -62,16 +62,14 @@ async def up(ctx, projects, build):
 
         # Check for forktex.local.json overlay
         has_local = (d / "forktex.local.json").exists()
-        has_dev = (d / "forktex.dev.json").exists()
 
-        if has_local or has_dev:
-            env = "local" if has_local else "dev"
-            cmd = ["forktex", "cloud", f"--project-dir={d}", "up", "--env", env, "-d"]
+        if has_local:
+            cmd = ["forktex", "cloud", f"--project-dir={d}", "up", "--env", "local", "-d"]
             if build:
                 cmd.append("--build")
             rc = _run(cmd, cwd=d)
             if rc == 0:
-                click.echo(f"    started (via forktex cloud up --env {env})")
+                click.echo("    started (via forktex cloud up --env local)")
             else:
                 click.echo(f"    FAILED (exit {rc})")
         else:
@@ -98,10 +96,8 @@ async def down(ctx, projects):
 
     for d in dirs:
         has_local = (d / "forktex.local.json").exists()
-        has_dev = (d / "forktex.dev.json").exists()
 
-        if has_local or has_dev:
-            env = "local" if has_local else "dev"
+        if has_local:
             rc = _run(
                 [
                     "forktex",
@@ -109,7 +105,7 @@ async def down(ctx, projects):
                     f"--project-dir={d}",
                     "up",
                     "--env",
-                    env,
+                    "local",
                     "--down",
                 ],
                 cwd=d,

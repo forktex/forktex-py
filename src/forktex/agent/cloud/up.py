@@ -1,4 +1,4 @@
-"""forktex cloud up — hybrid: dev mode (local) or production (remote)."""
+"""forktex cloud up — hybrid: local mode or production (remote)."""
 
 from __future__ import annotations
 
@@ -13,23 +13,23 @@ import asyncclick as click
     "--env",
     "environment",
     default=None,
-    help="Environment overlay (e.g. dev, staging, production)",
+    help="Environment overlay (e.g. local, staging, production)",
 )
 @click.option("--name", default=None, help="Override project name")
 @click.option("--flavour", default=None, help="Override infrastructure flavour")
 @click.option("--region", default=None, help="Override infrastructure region")
 @click.option("--skip-dns", is_flag=True, help="Skip DNS setup")
 @click.option("--skip-ssl", is_flag=True, help="Skip SSL provisioning")
-@click.option("-d", "--detach", is_flag=True, help="Run containers in background (dev)")
-@click.option("--build", is_flag=True, help="Rebuild images before starting (dev)")
+@click.option("-d", "--detach", is_flag=True, help="Run containers in background (local)")
+@click.option("--build", is_flag=True, help="Rebuild images before starting (local)")
 @click.option(
-    "--down", "tear_down", is_flag=True, help="Stop and remove containers (dev)"
+    "--down", "tear_down", is_flag=True, help="Stop and remove containers (local)"
 )
-@click.option("--logs", "tail_logs", is_flag=True, help="Tail logs (dev)")
-@click.option("--service", default=None, help="Filter logs by service (dev)")
-@click.option("--since", default="10m", help="Log lookback window (dev, default: 10m)")
-@click.option("--raw", is_flag=True, help="Use docker compose logs directly (dev)")
-@click.option("--no-observability", is_flag=True, help="Disable Loki + Promtail (dev)")
+@click.option("--logs", "tail_logs", is_flag=True, help="Tail logs (local)")
+@click.option("--service", default=None, help="Filter logs by service (local)")
+@click.option("--since", default="10m", help="Log lookback window (local, default: 10m)")
+@click.option("--raw", is_flag=True, help="Use docker compose logs directly (local)")
+@click.option("--no-observability", is_flag=True, help="Disable Loki + Promtail (local)")
 @click.option("-v", "--verbose", is_flag=True, help="Verbose output")
 @click.pass_context
 async def up(
@@ -50,9 +50,9 @@ async def up(
     no_observability,
     verbose,
 ):
-    """Deploy (remote) or start dev mode (local with --env dev)."""
-    if environment in ("dev", "local"):
-        _run_dev(
+    """Deploy (remote) or start local mode (--env local)."""
+    if environment == "local":
+        _run_local(
             ctx,
             detach=detach,
             build=build,
@@ -62,7 +62,6 @@ async def up(
             since=since,
             raw=raw,
             no_observability=no_observability,
-            env_name=environment,
         )
     else:
         _run_remote(
@@ -107,7 +106,7 @@ def _run_remote(
                 click.echo(f"Full response: {result}")
 
 
-def _run_dev(
+def _run_local(
     ctx,
     *,
     detach,
@@ -118,12 +117,11 @@ def _run_dev(
     since,
     raw,
     no_observability,
-    env_name="dev",
 ):
-    """Local mode via docker compose. Accepts env_name 'dev' or 'local'."""
+    """Run the stack locally via docker compose."""
     project_root = ctx.obj["project_root"]
-    # The generated compose is always docker-compose.dev.yml regardless of env_name
-    compose_file = str(project_root / ".forktex" / "docker-compose.dev.yml")
+    compose_file = str(project_root / ".forktex" / "docker-compose.local.yml")
+    env_name = "local"
 
     if tear_down:
         # Resolve project name for compose isolation
@@ -172,7 +170,7 @@ def _run_dev(
         _tail_loki(project_root, service=service, since=since, env_name=env_name)
         return
 
-    from forktex_cloud.bridge.dev_compose import write_dev_compose
+    from forktex_cloud.bridge.local_compose import write_local_compose
     from forktex_cloud.manifest.loader import Manifest, ManifestError
 
     manifest_path = project_root / "forktex.json"
@@ -190,7 +188,7 @@ def _run_dev(
         pass
 
     obs_enabled = not no_observability
-    compose_path = write_dev_compose(
+    compose_path = write_local_compose(
         manifest,
         project_root,
         secrets_provider=secrets_provider,
@@ -211,24 +209,24 @@ def _run_dev(
     if obs_enabled:
         click.echo("  Observability:")
         click.echo("    Loki:     http://localhost:3100 (log aggregation)")
-        click.echo("    Logs:     forktex cloud up --env dev --logs")
+        click.echo("    Logs:     forktex cloud up --env local --logs")
         click.echo()
     _exec(up_cmd)
 
 
-def _print_port_table(manifest, *, observability: bool = True, env_name: str = "dev"):
-    from forktex_cloud.bridge.dev_compose import (
+def _print_port_table(manifest, *, observability: bool = True, env_name: str = "local"):
+    from forktex_cloud.bridge.local_compose import (
         _OBSERVABILITY_PORTS,
         _allocate_host_ports,
     )
 
-    dev_services = manifest.services_for_env(env=env_name)
+    local_services = manifest.services_for_env(env=env_name)
     reserved = _OBSERVABILITY_PORTS if observability else set()
-    ports = _allocate_host_ports(dev_services, reserved=reserved)
+    ports = _allocate_host_ports(local_services, reserved=reserved)
     click.echo()
     click.echo(f"  {'Service':<16} {'Type':<14} {'Port':<8} {'Host'}")
     click.echo(f"  {'─' * 52}")
-    for svc in dev_services:
+    for svc in local_services:
         sid = svc["id"]
         svc_type = svc.get("type", "compute")
         container_port = svc.get("port", 80)
@@ -247,12 +245,12 @@ def _parse_since(since: str) -> int:
     return 600
 
 
-def _tail_loki(project_root, *, service, since, env_name="dev"):
+def _tail_loki(project_root, *, service, since, env_name="local"):
     import time
     from forktex_cloud.bridge.loki import loki_ready, build_logql, tail
     from forktex_cloud.bridge.log_formatter import assign_colors, format_line, COLORS
 
-    compose_file = str(project_root / ".forktex" / "docker-compose.dev.yml")
+    compose_file = str(project_root / ".forktex" / "docker-compose.local.yml")
     base_url = "http://localhost:3100"
     if not loki_ready(base_url):
         click.echo("  Loki not reachable — falling back to docker compose logs")
@@ -274,7 +272,7 @@ def _tail_loki(project_root, *, service, since, env_name="dev"):
             from forktex_cloud.manifest.loader import Manifest
 
             manifest = Manifest.load(project_root / "forktex.json", env=env_name)
-            all_ids = [s["id"] for s in manifest.services_for_env(env="dev")]
+            all_ids = [s["id"] for s in manifest.services_for_env(env=env_name)]
         except Exception:
             all_ids = []
 

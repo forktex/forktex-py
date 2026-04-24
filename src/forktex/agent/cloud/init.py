@@ -38,4 +38,4 @@ async def init(ctx, kind, name, force):
     click.echo("Next steps:")
     click.echo(f"  1. Edit {path.name} to configure your deployment")
     click.echo("  2. forktex cloud validate")
-    click.echo("  3. forktex cloud up --env dev")
+    click.echo("  3. forktex cloud up --env local")

@@ -212,7 +212,7 @@ forktex run "Fix the auth bug"       # Full orchestration</pre>
   <h2>Cloud (Infrastructure)</h2>
   <p>Deploy from <code>forktex.json</code> manifests. Blue-green deployments, DNS, SSL, vault secrets.</p>
   <pre>forktex cloud login                  # Connect to controller
-forktex cloud up --env dev --build   # Start local stack
+forktex cloud up --env local --build   # Start local stack
 forktex cloud deploy &lt;server-id&gt;     # Deploy to production
 forktex cloud logs &lt;server-id&gt;       # View logs
 forktex cloud server list            # List servers</pre>
@@ -295,7 +295,7 @@ forktex git status-all</pre>
   config.json                # Project configuration
   cloud.json                 # Cloud context (project, server, env)
   intelligence.json          # Intelligence API settings
-  docker-compose.dev.yml     # Generated dev compose
+  docker-compose.local.yml     # Generated dev compose
   fsd/evidence/              # ISO audit evidence (gitignored)
   architecture/              # C4 architecture snapshots
   agents/history/            # Agent session state

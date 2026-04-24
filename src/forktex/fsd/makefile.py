@@ -469,16 +469,13 @@ def _root_secondary_targets(
         )
         phony.append("deps-lock")
 
-    for alias in ("local", "dev", "local-down", "dev-down", "local-logs", "dev-logs"):
+    for alias in ("local", "local-down", "local-logs"):
         if alias in existing_targets:
             continue
         target = {
             "local": "start",
-            "dev": "start",
             "local-down": "stop",
-            "dev-down": "stop",
             "local-logs": "logs",
-            "dev-logs": "logs",
         }[alias]
         lines.extend([f"{alias}: {target}", ""])
         phony.append(alias)
