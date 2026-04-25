@@ -1,3 +1,26 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """Comprehensive smoke tests for forktex.
 
 Covers:
@@ -8,12 +31,8 @@ Covers:
 - Core library imports
 """
 
-import json
-import os
 import subprocess
-import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -290,9 +309,6 @@ class TestCLISmoke:
         from forktex import (
             StateManager,
             Settings,
-            get_settings,
-            generate_id,
-            current_timestamp,
         )
 
         assert StateManager is not None
@@ -314,21 +330,20 @@ class TestCoreLibraryImports:
 
     def test_core_imports(self):
         from forktex.core.state import StateManager
-        from forktex.core.utils import generate_id, current_timestamp
-        from forktex.core.paths import get_global_config_dir, get_project_config_dir
+        from forktex.core.utils import generate_id
 
         assert StateManager is not None
         assert generate_id is not None
 
     def test_config_import(self):
-        from forktex.config import Settings, get_settings
+        from forktex.config import Settings
 
         assert Settings is not None
 
     def test_intelligence_library_imports(self):
         from forktex_intelligence.config import IntelligenceSettings
         from forktex_intelligence.client.client import ForktexIntelligenceClient
-        from forktex_intelligence.streams import SSEEvent, SSEEventType
+        from forktex_intelligence.streams import SSEEvent
 
         assert IntelligenceSettings is not None
         assert ForktexIntelligenceClient is not None
@@ -340,15 +355,8 @@ class TestCoreLibraryImports:
             Response,
             StructuredResponse,
             StreamChunks,
-            IntelligenceSettings,
-            ForktexIntelligenceClient,
-            IntelligenceAPIError,
             ChatMessage,
-            ChatResponse,
             ToolCallInfo,
-            UsageInfo,
-            SSEEvent,
-            SSEEventType,
         )
 
         assert Intelligence is not None
@@ -363,17 +371,8 @@ class TestCoreLibraryImports:
         from forktex_intelligence import (
             Intelligence,
             Response,
-            StructuredResponse,
-            StreamChunks,
             IntelligenceSettings,
             ForktexIntelligenceClient,
-            IntelligenceAPIError,
-            ChatMessage,
-            ChatResponse,
-            ToolCallInfo,
-            UsageInfo,
-            SSEEvent,
-            SSEEventType,
         )
 
         assert Intelligence is not None
@@ -385,15 +384,9 @@ class TestCoreLibraryImports:
         """Verify that forktex_cloud standalone package imports work."""
         from forktex_cloud import (
             ForktexCloudClient,
-            CloudAPIError,
             CloudContext,
             Manifest,
-            ManifestError,
             ProjectRead,
-            ServerRead,
-            HealthRead,
-            TokenResponse,
-            EventRead,
         )
 
         assert ForktexCloudClient is not None

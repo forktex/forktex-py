@@ -1,7 +1,31 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """forktex.agent.cloud — Cloud CLI command group.
 
 Registers as a subcommand of the main ``forktex`` CLI.
 """
+# ruff: noqa: E402
 
 from __future__ import annotations
 
@@ -40,12 +64,12 @@ async def cloud(ctx, project_dir):
     ctx.obj["cloud_ctx"] = cloud_ctx
 
 
-# Credential verbs (login / logout) — shared shape with intelligence & network.
-from forktex.agent.auth import build_facet_commands, login_cloud as _login_cloud
+# Credential verbs (connect / disconnect) — shared shape with intelligence & network.
+from forktex.agent.auth import build_facet_commands, connect_cloud as _connect_cloud
 
-_cloud_login, _cloud_logout = build_facet_commands("cloud", _login_cloud)
-cloud.add_command(_cloud_login)
-cloud.add_command(_cloud_logout)
+_cloud_connect, _cloud_disconnect = build_facet_commands("cloud", _connect_cloud)
+cloud.add_command(_cloud_connect)
+cloud.add_command(_cloud_disconnect)
 
 # Register all subcommands
 cloud.add_command(init)

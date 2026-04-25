@@ -1,3 +1,26 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """forktex chat / forktex ask — Interactive chat and single-question commands.
 
 These commands communicate with the ForkTex Intelligence API.
@@ -11,7 +34,6 @@ from pathlib import Path
 from typing import Optional
 
 import asyncclick as click
-from rich.panel import Panel
 
 from forktex.agent.ui.console import console, info, error, spinner, render_markdown
 
@@ -30,7 +52,7 @@ def _build_intelligence_client(project_root: Optional[str] = None):
     if not settings.is_configured:
         error("Intelligence API not configured.")
         info(
-            "Run [bold]forktex intelligence login[/bold] to set up your API endpoint and key."
+            "Run [bold]forktex intelligence connect[/bold] to set up your API endpoint and key."
         )
         sys.exit(1)
 
@@ -59,14 +81,19 @@ def _build_agent_loop(client, tool_server, system=None, on_tool_event=None):
 @click.command()
 @click.option("--project", "-d", default=None, help="Project directory")
 async def chat(project):
-    """Start an interactive chat session via the Intelligence API."""
-    from forktex_intelligence.streams import SSEEventType
-    from forktex.agent.ui.display import show_welcome, handle_tool_event
+    """Start an interactive chat session via the Intelligence API.
 
+    Layout is driven by `prompt_toolkit`: input pinned at the bottom, slash
+    commands autocomplete on Tab, service cards toggle with `Ctrl+K`.
+    See `forktex/agent/root_loop/chat_app.py` for the layout code.
+    """
     project_root = project or _get_project_root()
 
     client = _build_intelligence_client(project_root)
     tool_server = _build_tool_server(project_root)
+
+    from forktex.agent.ui.display import handle_tool_event
+
     agent_loop = _build_agent_loop(
         client,
         tool_server,
@@ -78,7 +105,7 @@ async def chat(project):
         on_tool_event=handle_tool_event,
     )
 
-    # Auto-resolve org from API key
+    # Auto-resolve org from API key (network-bound; do it before entering the app).
     if not client.org_id:
         try:
             await client.whoami()
@@ -86,94 +113,22 @@ async def chat(project):
             error(f"Could not resolve org from API key: {e}")
             sys.exit(1)
 
-    show_welcome()
-    info(f"Project: {project_root}")
-    info(f"Endpoint: {client._base_url}")
-    info("Type your message and press Enter. Use Ctrl+C to exit.")
-    info("Commands: /clear, /tools, /help")
-    console.print()
+    from forktex.agent.root_loop.chat_app import run_chat
 
-    # Main REPL loop
-    while True:
-        try:
-            user_input = console.input("[bold cyan]You:[/bold cyan] ").strip()
+    seed = (
+        f"forktex chat\n"
+        f"endpoint: {client._base_url}\n"
+        f"project:  {project_root}\n"
+        f"press /help or Tab for commands · Ctrl+D exits\n"
+    )
 
-            if not user_input:
-                continue
-
-            # Slash commands
-            if user_input.startswith("/"):
-                cmd = user_input.lower().split()[0]
-                if cmd == "/clear":
-                    agent_loop.conversation.clear()
-                    info("Conversation cleared.")
-                    continue
-                elif cmd == "/tools":
-                    tools = tool_server.list_tools()
-                    console.print(
-                        Panel(
-                            "\n".join(f"  {t}" for t in tools),
-                            title=f"Local Tools ({len(tools)})",
-                            border_style="blue",
-                        )
-                    )
-                    continue
-                elif cmd == "/help":
-                    console.print(
-                        Panel(
-                            "[bold]Commands:[/bold]\n\n"
-                            "  /clear    Clear conversation history\n"
-                            "  /tools    List available local tools\n"
-                            "  /help     Show this help\n"
-                            "  Ctrl+C    Exit chat",
-                            title="Help",
-                            border_style="blue",
-                        )
-                    )
-                    continue
-                else:
-                    info(f"Unknown command: {cmd}")
-                    continue
-
-            # Stream response via agent loop (handles tool calls automatically)
-            console.print(f"\n[bold green]Assistant:[/bold green]")
-            full_text = ""
-            try:
-                async for event in agent_loop.chat_stream(user_input):
-                    if event.event == SSEEventType.DELTA:
-                        console.print(event.delta_text, end="")
-                        full_text += event.delta_text
-                    elif event.event == SSEEventType.USAGE:
-                        pass  # Could display token counts
-                    elif event.event == SSEEventType.ERROR:
-                        error(event.error_message)
-                    elif event.event == SSEEventType.DONE:
-                        pass  # Stream complete for this turn (may loop for tools)
-            except Exception as e:
-                from forktex_intelligence.client.client import IntelligenceAPIError
-
-                if isinstance(e, IntelligenceAPIError):
-                    error(f"API error ({e.status_code}): {e.detail}")
-                else:
-                    error(f"Stream error: {e}")
-
-            if full_text:
-                console.print()  # Newline after streaming
-
-        except KeyboardInterrupt:
-            console.print("\n")
-            break
-        except EOFError:
-            break
-
-    # Cleanup
     try:
-        await client.close()
-    except Exception:
-        pass
-
-    console.print()
-    info("Session ended.")
+        await run_chat(agent_loop, tool_server, project_root, seed_welcome=seed)
+    finally:
+        try:
+            await client.close()
+        except Exception:
+            pass
 
 
 @click.command()
@@ -208,7 +163,7 @@ async def ask(prompt, project):
 
     except RuntimeError as e:
         error(str(e))
-        info("Run [bold]forktex intelligence login[/bold] to configure.")
+        info("Run [bold]forktex intelligence connect[/bold] to configure.")
         sys.exit(1)
     except Exception as e:
         error(f"Request failed: {e}")

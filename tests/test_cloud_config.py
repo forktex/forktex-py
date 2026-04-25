@@ -1,8 +1,30 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """Tests for CloudContext (data model) and cloud settings persistence."""
 
 import json
 import pytest
-from pathlib import Path
 
 from forktex_cloud.config import CloudContext
 from forktex.agent.cloud.settings import (
@@ -61,9 +83,7 @@ class TestCloudContext:
 
 class TestCloudSettings:
     def test_load_empty(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "forktex_cloud.paths.global_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("forktex_cloud.paths.global_dir", lambda: tmp_path)
         monkeypatch.setattr(
             "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
         )
@@ -71,9 +91,7 @@ class TestCloudSettings:
         assert ctx.controller is None
 
     def test_load_global(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "forktex_cloud.paths.global_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("forktex_cloud.paths.global_dir", lambda: tmp_path)
         monkeypatch.setattr(
             "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
         )
@@ -92,9 +110,7 @@ class TestCloudSettings:
         assert ctx.org_id == "org-1"
 
     def test_load_project_overrides_global(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "forktex_cloud.paths.global_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("forktex_cloud.paths.global_dir", lambda: tmp_path)
         monkeypatch.setattr(
             "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
         )
@@ -127,9 +143,7 @@ class TestCloudSettings:
         assert ctx.current_server == "srv-1"
 
     def test_save_global(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "forktex_cloud.paths.global_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("forktex_cloud.paths.global_dir", lambda: tmp_path)
         monkeypatch.setattr(
             "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
         )

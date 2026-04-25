@@ -1,3 +1,26 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """Generate and sync Makefiles from the atom catalog."""
 
 from __future__ import annotations
@@ -86,9 +109,7 @@ def _normalize_profile_atom_ids(
     atoms = []
     for atom in standard.atoms:
         override = (
-            config.atoms.get(atom.id)
-            if config and atom.id in config.atoms
-            else None
+            config.atoms.get(atom.id) if config and atom.id in config.atoms else None
         )
         explicitly_enabled = bool(
             override
@@ -100,7 +121,11 @@ def _normalize_profile_atom_ids(
                 or override.description
             )
         )
-        if applicable is not None and atom.id not in applicable and not explicitly_enabled:
+        if (
+            applicable is not None
+            and atom.id not in applicable
+            and not explicitly_enabled
+        ):
             continue
         if atom.id in disabled and not explicitly_enabled:
             continue
@@ -140,8 +165,20 @@ def _make_target_names(
     return canonical[0], (override.aliases if override else [])
 
 
-def _make_target_comment(atom: Atom, target: str) -> str:
-    return f"{target}: ## {atom.description}"
+def _make_target_comment(
+    atom: Atom, target: str, override: AtomOverride | None = None
+) -> str:
+    """Pick the description rendered into the Makefile help comment.
+
+    A manifest override's description takes precedence over the standard
+    atom's description, so authors can retitle a built-in atom (e.g.
+    relabel ``codegen`` to "Not applicable" for projects that don't ship
+    generated code) without forking the FSD catalog.
+    """
+    description = (
+        override.description if override and override.description else atom.description
+    )
+    return f"{target}: ## {description}"
 
 
 def _package_paths(manifest: ForktexManifest) -> tuple[list[str], list[str]]:
@@ -369,8 +406,9 @@ def _render_target(
     target: str,
     aliases: list[str],
     commands: list[str],
+    override: AtomOverride | None = None,
 ) -> list[str]:
-    lines = [_make_target_comment(atom, target)]
+    lines = [_make_target_comment(atom, target, override)]
     lines.extend(
         f"\t{line}" if not line.startswith("\t") else line for line in commands
     )
@@ -509,21 +547,45 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         "",
     ]
 
+    # Resolve custom atoms first so the standard-atom loop can skip any
+    # atom whose primary make-target collides with a custom override.
+    # Without this, the standard's ``license`` atom (make_targets =
+    # ['license-check', 'license-fix']) and a custom ``license-check``
+    # override would both emit a ``license-check:`` rule, leaving two
+    # definitions in the generated Makefile.
+    custom = _custom_atoms(manifest, standard)
+    custom_target_collisions: set[str] = set()
+    for synthetic, override in custom:
+        ctarget, caliases = _make_target_names(synthetic, override)
+        custom_target_collisions.add(ctarget)
+        custom_target_collisions.update(caliases)
+
     for atom in atoms:
         override = _get_atom_override(manifest, atom.id)
         target, aliases = _make_target_names(atom, override)
+        if target in custom_target_collisions:
+            continue
         commands = _override_commands(_root_atom_commands(atom.id, manifest), override)
         lines.extend(
-            _render_target(atom, target=target, aliases=aliases, commands=commands)
+            _render_target(
+                atom,
+                target=target,
+                aliases=aliases,
+                commands=commands,
+                override=override,
+            )
         )
         lines.append("")
 
-    custom = _custom_atoms(manifest, standard)
     for synthetic, override in custom:
         target, aliases = _make_target_names(synthetic, override)
         lines.extend(
             _render_target(
-                synthetic, target=target, aliases=aliases, commands=override.commands
+                synthetic,
+                target=target,
+                aliases=aliases,
+                commands=override.commands,
+                override=override,
             )
         )
         lines.append("")
@@ -630,25 +692,43 @@ def generate_package_makefile(
         "",
     ]
 
+    custom = _custom_atoms(manifest, standard, package_manifest=package_manifest)
+    custom_target_collisions: set[str] = set()
+    for synthetic, override in custom:
+        ctarget, caliases = _make_target_names(synthetic, override)
+        custom_target_collisions.add(ctarget)
+        custom_target_collisions.update(caliases)
+
     for atom in atoms:
         override = _get_atom_override(
             manifest, atom.id, package_manifest=package_manifest
         )
         target, aliases = _make_target_names(atom, override)
+        if target in custom_target_collisions:
+            continue
         commands = _override_commands(
             _package_atom_commands(atom.id, src_dir), override
         )
         lines.extend(
-            _render_target(atom, target=target, aliases=aliases, commands=commands)
+            _render_target(
+                atom,
+                target=target,
+                aliases=aliases,
+                commands=commands,
+                override=override,
+            )
         )
         lines.append("")
 
-    custom = _custom_atoms(manifest, standard, package_manifest=package_manifest)
     for synthetic, override in custom:
         target, aliases = _make_target_names(synthetic, override)
         lines.extend(
             _render_target(
-                synthetic, target=target, aliases=aliases, commands=override.commands
+                synthetic,
+                target=target,
+                aliases=aliases,
+                commands=override.commands,
+                override=override,
             )
         )
         lines.append("")

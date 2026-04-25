@@ -1,3 +1,28 @@
+<!--
+  Copyright (C) 2026 FORKTEX S.R.L.
+  
+  SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+  
+  This file is part of ForkTex Python.
+  
+  For commercial licensing -- including use in proprietary products, SaaS
+  deployments, or any context where AGPL obligations cannot be met -- you
+  MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+  
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU Affero General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+  
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU Affero General Public License for more details.
+  
+  You should have received a copy of the GNU Affero General Public License
+  along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -211,7 +236,7 @@ forktex run "Fix the auth bug"       # Full orchestration</pre>
 <section id="cloud">
   <h2>Cloud (Infrastructure)</h2>
   <p>Deploy from <code>forktex.json</code> manifests. Blue-green deployments, DNS, SSL, vault secrets.</p>
-  <pre>forktex cloud login                  # Connect to controller
+  <pre>forktex cloud connect                  # Connect to controller
 forktex cloud up --env local --build   # Start local stack
 forktex cloud deploy &lt;server-id&gt;     # Deploy to production
 forktex cloud logs &lt;server-id&gt;       # View logs
@@ -271,7 +296,7 @@ forktex fsd check    # Verify compliance</pre>
 
   <div class="pattern">
     <h4>Deployment</h4>
-    <pre>forktex cloud login
+    <pre>forktex cloud connect
 forktex cloud deploy &lt;server&gt;
 forktex cloud status &lt;server&gt;
 forktex cloud logs &lt;server&gt;</pre>

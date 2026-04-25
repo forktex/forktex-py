@@ -1,3 +1,26 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """Intelligence config persistence — load/save IntelligenceSettings from .forktex/ files.
 
 IntelligenceSettings (from forktex_intelligence SDK) is a pure data model.
@@ -49,6 +72,7 @@ def load_intelligence_settings(
     # Project-level config (overrides global)
     if project_root:
         from pathlib import Path as _P
+
         project_path = _cloud_paths.project_dir(_P(project_root)) / "intelligence.json"
         if project_path.exists():
             try:
@@ -107,6 +131,7 @@ def save_intelligence_project(
 ) -> None:
     """Persist settings to the project intelligence config file."""
     from pathlib import Path as _P
+
     _cloud_paths.ensure_project_dirs(_P(project_root))
     path = _cloud_paths.project_dir(_P(project_root)) / "intelligence.json"
     data = {"endpoint": settings.endpoint, "api_key": settings.api_key}

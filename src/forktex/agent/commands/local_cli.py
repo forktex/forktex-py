@@ -1,3 +1,26 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """forktex local — Multi-project local environment management.
 
 Start, stop, and manage local environments across forktex projects.
@@ -7,7 +30,6 @@ Each project's ports are defined in its forktex.local.json overlay.
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
 import asyncclick as click
@@ -64,7 +86,15 @@ async def up(ctx, projects, build):
         has_local = (d / "forktex.local.json").exists()
 
         if has_local:
-            cmd = ["forktex", "cloud", f"--project-dir={d}", "up", "--env", "local", "-d"]
+            cmd = [
+                "forktex",
+                "cloud",
+                f"--project-dir={d}",
+                "up",
+                "--env",
+                "local",
+                "-d",
+            ]
             if build:
                 cmd.append("--build")
             rc = _run(cmd, cwd=d)
@@ -159,7 +189,7 @@ async def status(ctx, projects):
                 text=True,
             )
 
-        lines = [l for l in result.stdout.strip().splitlines() if l]
+        lines = [ln for ln in result.stdout.strip().splitlines() if ln]
         if lines:
             ports = set()
             for line in lines:

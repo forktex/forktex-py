@@ -19,31 +19,32 @@ lint: ## Static analysis catches bugs, anti-patterns, and security issues
 		ruff check $$pkg/src/ $$pkg/tests/ 2>/dev/null || true; \
 	done
 
-typecheck: ## Static type system verifies interface correctness
-	python -m pyright src/ 2>/dev/null || python -m mypy src/
+typecheck: ## Static type system verifies interface correctness (pyright; install via dev deps)
+	python3 -m pyright src/
 
 test: ## Automated tests verify behavior against real infrastructure
 	pytest tests/ -q
-
-audit: ## Dependencies scanned for known vulnerabilities
-	pip-audit 2>/dev/null || echo "pip-audit not installed, skipping"
-
-license-check: ## Source headers and dependency licenses verified
-	@echo "TODO: implement license for $(PROJECT_NAME)"
 
 deps: ## Project dependencies installed and locked to reproducible versions
 	pip install --break-system-packages -e . 2>/dev/null || \
 	pip install -e .
 
-codegen: ## Typed API clients or other artifacts generated from schemas
-	@echo "TODO: implement codegen for $(PROJECT_NAME)"
+codegen: ## Not applicable: forktex-py has no schema-derived artifacts
+	@echo 'codegen: not applicable for forktex-py (pure Python CLI, no generated code)'
 
-codegen-check: ## Generated artifacts are in sync with their source schemas (CI gate)
-	@echo "TODO: implement codegen-check for $(PROJECT_NAME)"
+codegen-check: ## Not applicable: forktex-py has no generated artifacts to verify
+	@echo 'codegen-check: not applicable for forktex-py'
 
-ci: ## Aggregate quality gate: format + lint + test + audit
-	@$(MAKE) format-check lint test
-	@echo "CI passed for $(PROJECT_NAME)"
+ci: ## Aggregate quality gate before publish: format-check + lint + license-check + audit + test + build
+	@$(MAKE) format-check
+	@$(MAKE) lint
+	@$(MAKE) license-check
+	@$(MAKE) audit
+	@$(MAKE) test
+	@$(MAKE) build
+	@echo ''
+	@echo 'CI passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'
+	@echo '(make typecheck reports cross-SDK type drifts; tracked separately)'
 
 start: ## Project runtime starts with one command
 	@$(MAKE) deps
@@ -59,12 +60,12 @@ stop: ## Project runtime stops cleanly
 logs: ## Runtime logs observable through one command
 	@echo "$(PROJECT_NAME) has no managed runtime logs to stream."
 
-build: ## Software artifacts built (Docker image, bundle, binary)
+build: ## Build sdist + wheel into dist/ and verify metadata with twine check
 	rm -rf dist/
 	python3 -m build
 	python3 -m twine check dist/*
 
-publish: ## Artifacts published to registry, CDN, or store
+publish: ## Upload dist/ to production PyPI (irreversible per-version)
 	python3 -m twine upload dist/*
 
 clean: ## Build artifacts and caches removable
@@ -82,6 +83,9 @@ help: ## Available targets self-documented
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
+audit: ## Scan installed Python deps for known CVEs (pip-audit; install via dev deps)
+	pip-audit --skip-editable
+
 publish-test: ## Upload dist/ to TestPyPI (https://test.pypi.org) for rehearsal. SDK deps must already be on TestPyPI.
 	python3 -m twine upload --repository testpypi dist/*
 
@@ -98,6 +102,21 @@ dev-install: ## One-shot editable install of the four ecosystem packages (cloud,
 	pip install --break-system-packages -e ../cloud/sdk-py -e ../intelligence/sdk-py -e ../network/sdk-py -e .
 	@echo ''
 	@echo 'installed. run "export FORKTEX_DEV_SIBLING_SDKS=1" to flag the dev-linked banner on forktex --version.'
+
+installer-build: ## Bundle scripts/install.sh + install.ps1 with _install_core.py inlined into dist/install/ for hosting
+	python3 scripts/build_installers.py
+
+installer-test: ## Run the installer across Linux distros via Docker (ubuntu/fedora/arch). Requires installer-build first.
+	bash scripts/install_test.sh
+
+license-check: ## Verify every source file carries the current AGPL-3.0 + Commercial dual-license header (CI gate)
+	python3 scripts/license_headers.py check
+
+license-fix: ## Add or update the dual-license header on every source file (idempotent)
+	python3 scripts/license_headers.py fix
+
+license-strip: ## Remove the dual-license header from every source file (use before license model changes)
+	python3 scripts/license_headers.py strip
 
 format-check: ## Check formatting without rewriting files
 	ruff format --check src/ tests/
@@ -126,4 +145,4 @@ local-logs: logs
 install-global: ## Install the latest local forktex CLI globally in editable mode
 	pip install --break-system-packages -e .
 
-.PHONY: format lint typecheck test audit license-check deps codegen codegen-check ci start stop logs build publish clean help publish-test dev-link-sdks dev-unlink-sdks dev-install format-check lint-fix test-cov deps-lock local local-down local-logs install-global
+.PHONY: format lint typecheck test audit license-check deps codegen codegen-check ci start stop logs build publish clean help publish-test dev-link-sdks dev-unlink-sdks dev-install installer-build installer-test license-fix license-strip format-check lint-fix test-cov deps-lock local local-down local-logs install-global
