@@ -1,3 +1,26 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """
 forktex.agent.ui.display - Session info, usage display, progress.
 """
@@ -5,13 +28,12 @@ forktex.agent.ui.display - Session info, usage display, progress.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.text import Text
 
 from forktex import __version__ as _BASE_VERSION
+from forktex.agent.ui.branding import render_row
 from forktex.agent.ui.console import console, info
 
 # Append a `(dev-linked)` suffix when the user has explicitly opted into
@@ -29,6 +51,8 @@ _RESULT_TRUNCATE = 300
 
 
 def show_welcome() -> None:
+    console.print(render_row(["cloud", "intelligence", "network"]))
+    console.print()
     console.print(
         Panel.fit(
             "[bold cyan]Forktex[/bold cyan] - AI-Powered Development Assistant\n"

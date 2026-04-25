@@ -1,6 +1,29 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """``forktex intelligence`` command group.
 
-All intelligence-driven verbs live under this group so the three facets
+All intelligence-driven verbs live under this group so the three services
 (cloud / intelligence / network) sit at the same level:
 
 - ``intelligence ask <text>`` — single-shot question (scriptable).
@@ -8,7 +31,7 @@ All intelligence-driven verbs live under this group so the three facets
 - ``intelligence scrape <url>`` — agentic browser scraper.
 - ``intelligence index-ecosystem`` — knowledge ingestion.
 - ``intelligence status`` — API reachability + whoami.
-- ``intelligence login`` / ``intelligence logout`` — credential management.
+- ``intelligence connect`` / ``intelligence disconnect`` — credential management.
 
 For interactive chat, just run bare ``forktex`` — the root loop auto-opens
 the chat REPL when intelligence is reachable.
@@ -18,7 +41,10 @@ from __future__ import annotations
 
 import asyncclick as click
 
-from forktex.agent.auth import build_facet_commands, login_intelligence as _login_intelligence
+from forktex.agent.auth import (
+    build_facet_commands,
+    connect_intelligence as _connect_intelligence,
+)
 from forktex.agent.commands.index_ecosystem import index_ecosystem
 from forktex.agent.intelligence.cli.chat import ask
 from forktex.agent.intelligence.cli.run import run
@@ -28,9 +54,9 @@ from forktex.agent.ui.console import console, error, info
 
 @click.group()
 async def intelligence():
-    """ForkTex Intelligence — ask, run, scrape, index, login.
+    """ForkTex Intelligence — ask, run, scrape, index, connect.
 
-    Credentials are captured via ``forktex intelligence login``.
+    Credentials are captured via ``forktex intelligence connect``.
     For interactive chat, run bare ``forktex``.
     """
     pass
@@ -53,8 +79,10 @@ async def status_cmd(project):
         f"[bold]API Key:[/bold] {'***' + settings.api_key[-4:] if settings.api_key else '[dim]not set[/dim]'}"
     )
 
-    if not getattr(settings, "is_configured", False) and not (settings.endpoint and settings.api_key):
-        info("Not configured. Run: forktex intelligence login")
+    if not getattr(settings, "is_configured", False) and not (
+        settings.endpoint and settings.api_key
+    ):
+        info("Not configured. Run: forktex intelligence connect")
         return
 
     client = ForktexIntelligenceClient(settings.endpoint, settings.api_key)
@@ -75,15 +103,17 @@ async def status_cmd(project):
         await client.close()
 
 
-# Credential verbs (login / logout) — shared shape with cloud & network.
-_intel_login, _intel_logout = build_facet_commands("intelligence", _login_intelligence)
+# Credential verbs (connect / disconnect) — shared shape with cloud & network.
+_intel_connect, _intel_disconnect = build_facet_commands(
+    "intelligence", _connect_intelligence
+)
 
 intelligence.add_command(ask)
 intelligence.add_command(run)
 intelligence.add_command(scrape)
 intelligence.add_command(index_ecosystem)
-intelligence.add_command(_intel_login)
-intelligence.add_command(_intel_logout)
+intelligence.add_command(_intel_connect)
+intelligence.add_command(_intel_disconnect)
 
 
 def register_intelligence_commands(cli: click.Group) -> None:

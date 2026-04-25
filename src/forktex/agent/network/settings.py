@@ -1,14 +1,37 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """Network settings persistence — load/save NetworkSettings from .forktex/ files.
 
 Mirrors the cloud/intelligence settings pattern. Schema fields:
 
 - ``endpoint`` — base URL (e.g. ``https://network.forktex.com`` or ``http://localhost:9000``).
-- ``jwt_token`` — captured on ``forktex network login``; used as ``Authorization: Bearer``.
+- ``jwt_token`` — captured on ``forktex network connect``; used as ``Authorization: Bearer``.
 - ``principal_email`` — the email that produced the token (display-only).
 - ``authenticated_at`` — ISO-8601 UTC timestamp of last successful auth.
 
 Token refresh is out of scope: when the token expires, the status probe
-surfaces ``reachable=False`` and the user re-runs ``forktex network login``.
+surfaces ``reachable=False`` and the user re-runs ``forktex network connect``.
 """
 
 from __future__ import annotations
@@ -67,7 +90,9 @@ def load_network_settings(
         if v is not None:
             values[k] = v
 
-    return NetworkSettings(**{k: v for k, v in values.items() if k in NetworkSettings.__dataclass_fields__})
+    return NetworkSettings(
+        **{k: v for k, v in values.items() if k in NetworkSettings.__dataclass_fields__}
+    )
 
 
 def save_network_global(settings: NetworkSettings) -> None:

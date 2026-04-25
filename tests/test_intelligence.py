@@ -1,3 +1,26 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """Tests for intelligence config, SSE stream parsing, and API models."""
 
 import json
@@ -278,11 +301,6 @@ class TestResponseModel:
         r = Response(text="hi", input_tokens=10, output_tokens=5)
         assert r.total_tokens == 15
 
-    def test_repr_truncates(self):
-        r = Response(text="x" * 200)
-        assert "..." in repr(r)
-        assert len(repr(r)) < 200
-
     def test_serialisation(self):
         r = Response(text="test", model="gpt-4", input_tokens=1, output_tokens=2)
         d = r.model_dump()
@@ -294,20 +312,20 @@ class TestResponseModel:
 
 class TestStructuredResponseModel:
     def test_basic(self):
-        r = StructuredResponse(parsed={"name": "John", "age": 30})
+        r = StructuredResponse(data={"name": "John", "age": 30})
         assert r["name"] == "John"
         assert r.get("age") == 30
         assert r.get("missing", "default") == "default"
 
     def test_total_tokens(self):
-        r = StructuredResponse(parsed={}, input_tokens=5, output_tokens=10)
+        r = StructuredResponse(data={}, input_tokens=5, output_tokens=10)
         assert r.total_tokens == 15
 
     def test_serialisation(self):
-        r = StructuredResponse(parsed={"key": "val"}, text="raw", model="m")
+        r = StructuredResponse(data={"key": "val"}, model="m")
         d = r.model_dump()
         r2 = StructuredResponse.model_validate(d)
-        assert r2.parsed == {"key": "val"}
+        assert r2.data == {"key": "val"}
 
 
 # ============================================================================

@@ -1,3 +1,26 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 """forktex intelligence index-ecosystem — Index ecosystem knowledge for RAG.
 
 Indexes AGENTS.md files, ecosystem.json, architecture data, and library
@@ -14,7 +37,6 @@ Usage:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import asyncclick as click
@@ -126,7 +148,7 @@ async def index_ecosystem(root_dir: str | None, collection: str, dry_run: bool):
         size = full.stat().st_size if exists else 0
         console.print(f"  {status_icon} {rel_path:<60} [{label}] ({size:,} bytes)")
 
-    existing = [(p, l) for p, l in all_files if (root / p).exists()]
+    existing = [(p, label) for p, label in all_files if (root / p).exists()]
     console.print(f"\n  [bold]{len(existing)}/{len(all_files)}[/bold] files found")
 
     if dry_run:
@@ -138,7 +160,7 @@ async def index_ecosystem(root_dir: str | None, collection: str, dry_run: bool):
 
     try:
         async with Intelligence() as ai:
-            info(f"Connected to Intelligence API")
+            info("Connected to Intelligence API")
 
             # Create or find collection
             collections_resp = await ai.list_collections()
@@ -193,11 +215,11 @@ async def index_ecosystem(root_dir: str | None, collection: str, dry_run: bool):
             console.print(
                 f"\n[bold green]Indexed {uploaded}/{len(existing)} files into '{collection}'[/bold green]"
             )
-            console.print(f"\nAgents can now search this knowledge:")
+            console.print("\nAgents can now search this knowledge:")
             console.print(
-                f"  [cyan]forktex ask 'What database does the network platform use?'[/cyan]"
+                "  [cyan]forktex ask 'What database does the network platform use?'[/cyan]"
             )
-            console.print(f"  [cyan]forktex ask 'How are workflows structured?'[/cyan]")
+            console.print("  [cyan]forktex ask 'How are workflows structured?'[/cyan]")
 
     except Exception as e:
         error(f"Intelligence API error: {e}")
