@@ -4,6 +4,13 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-04-26
+
+### Docs
+
+- **README rewritten as a consumer-facing landing page.** Leads with what `forktex` does on its own (chat REPL + agents, tool registry, `arch discover`, `fsd check/report`) before introducing the three platforms — cloud, intelligence, network — as peer "server connections" with the same `connect`/`disconnect` verbs. Brand assets wired up: `./docs/banner.svg` for the header (GitHub-only; PyPI requires absolute URLs), and the hosted `cloud.forktex.com/assets/forktex-{cloud,intelligence,network}-icon-*.svg` SVGs for the three-platform card.
+- **Technical lore moved to `./docs/`.** New `docs/cli-reference.md` (full command tree + slash commands + keybindings + a built-in-vs-platform matrix), `docs/credentials.md`, `docs/configuration.md` (env vars, ecosystem, brand asset URL), `docs/development.md` (`make ci`, license headers, sibling-SDK editable installs).
+
 ## [1.0.1] — 2026-04-25
 
 ### Security

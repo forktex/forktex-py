@@ -2,7 +2,7 @@
   "manifestVersion": "1.0.0",
   "name": "forktex-py",
   "description": "ForkTex Python repo — the CLI, agent, architecture discovery, FSD audit, and orchestration toolkit (single-package repo)",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "fsd": {
     "version": "1.0.1",
     "profiles": [
@@ -148,7 +148,7 @@
     {
       "name": "forktex",
       "path": ".",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "publishable": true,
       "language": "python",
       "registry": "https://pypi.org",
