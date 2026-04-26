@@ -128,4 +128,6 @@ def test_no_unsupported_python_versions_listed(source: str):
 
     for v in versions:
         major, minor = (int(p) for p in v.split("."))
-        assert major == 3 and 12 <= minor <= 20, f"{source} lists implausible version: {v}"
+        assert major == 3 and 12 <= minor <= 20, (
+            f"{source} lists implausible version: {v}"
+        )
