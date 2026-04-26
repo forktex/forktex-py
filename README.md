@@ -1,10 +1,18 @@
-# forktex
+<p align="center">
+  <img src="./docs/banner.svg" alt="forktex" height="96">
+</p>
 
-[![PyPI](https://img.shields.io/pypi/v/forktex.svg)](https://pypi.org/project/forktex/)
-[![Python](https://img.shields.io/pypi/pyversions/forktex.svg)](https://pypi.org/project/forktex/)
-[![License](https://img.shields.io/pypi/l/forktex.svg)](https://github.com/forktex/forktex-py/blob/master/LICENSE)
+<p align="center">
+  <a href="https://pypi.org/project/forktex/"><img src="https://img.shields.io/pypi/v/forktex.svg" alt="PyPI"></a>
+  <a href="https://pypi.org/project/forktex/"><img src="https://img.shields.io/pypi/pyversions/forktex.svg" alt="Python"></a>
+  <a href="https://github.com/forktex/forktex-py/blob/master/LICENSE"><img src="https://img.shields.io/pypi/l/forktex.svg" alt="License"></a>
+</p>
 
-AI-powered development toolkit: agent, cloud infrastructure, delivery standard enforcement, and architecture discovery in a single `forktex` command.
+<p align="center"><em>A local AI-engineering CLI. Optionally talks to three ForkTex platforms.</em></p>
+
+`forktex` ships as a single binary. By itself it gives you an agent that reads your repo, runs commands, writes patches, audits your delivery standard, and discovers your architecture — no account required. Plug in any of the three ForkTex platforms (cloud, intelligence, network) and the same CLI gains LLM reasoning, infra deploys, and identity / projects / channels.
+
+---
 
 ## Install
 
@@ -20,204 +28,194 @@ curl -sSL install.forktex.com/sh | sh
 iwr -useb install.forktex.com/ps | iex
 ```
 
-The installer detects Python ≥ 3.12, prefers `pipx` (isolated install), falls back to `pip --user`, and seeds `~/.forktex/` (POSIX) or `%APPDATA%/forktex/` (Windows) automatically. If your system Python is older it prints OS-specific install hints (deadsnakes, brew, winget, dnf).
+The installer detects Python ≥ 3.12, prefers `pipx` (isolated install), falls back to `pip --user`, and seeds the config directory automatically.
 
-**Manual**:
+**Manual:**
 
 ```bash
-pipx install forktex             # recommended — isolates deps
-# or
+pipx install forktex      # recommended — isolates deps
 pip install --user forktex
-# Optional: web scraping support (Playwright)
-pipx install forktex[web] && playwright install
 ```
 
-**Requires Python 3.12+.** Tested on 3.12, 3.13, 3.14. Covers Ubuntu 24.04 LTS, Fedora 41+, Homebrew Python on macOS, and Windows 3.12+. Debian 12 stable users on system Python need `apt install -t bookworm-backports python3.12` or deadsnakes.
+Requires **Python 3.12+**. Tested on 3.12 / 3.13 / 3.14.
 
-## Quick Start
+---
+
+## Built-in — works with zero credentials
+
+Everything in this section runs without connecting to any platform. The CLI ships its own agents, tools, architecture mapper, and delivery-standard checker.
+
+### 🎛  Chat REPL with agents
+
+Bare `forktex` opens the menu. The two heavyweight agents live under `forktex agents`:
 
 ```bash
-# AI agent — interactive chat with tool calling (bare forktex drops you in)
-forktex
+forktex                  # menu (auto-upgrades to chat when intelligence is connected)
+forktex agents root      # persistent ecosystem-aware agent — reads AGENTS.md,
+                         # the C4 snapshot, and your full project context as system prompt
+forktex agents ground    # regenerate AGENTS.md across sibling repos
+forktex agents list      # history of agent runs
+forktex agents show <id> # inspect one run
+```
 
-# AI agent — single-shot question (scriptable)
+### 🛠  A real tool surface, not a wrapper
+
+The agent calls into a single tool registry — the same shape an MCP server would expose, just in-process:
+
+| Tool        | What it covers |
+|-------------|----------------|
+| filesystem  | `read_file`, `write_file`, `patch_file`, `delete_file`, `list_directory`, `glob_search`, `grep_search` |
+| bash        | command execution with streaming output and timeouts |
+| git         | `status`, `log`, `diff`, `blame`, `commit`, `push` |
+| web         | DuckDuckGo `web_search` + Playwright-rendered `web_fetch` |
+| scraper     | 12-tool stateful browser session (navigate, click, type, fill, screenshot, …) |
+
+> **About MCP:** the CLI itself is *MCP-style* (one registry, structured calls) but does not run an MCP server. The MCP endpoint lives on the platform side — see [`cloud`](#three-platforms--one-cli) and its `/api/mcp`.
+
+### 🗺  Architecture discovery
+
+```bash
+forktex arch discover
+```
+
+Parses `forktex.json` (containers/services), `pyproject.toml` + `package.json` (tech stack), the filesystem (components), and Git metadata, and emits a C4 model as a JSON snapshot, a Structurizr DSL file, and an interactive HTML visualization with topology graph, port inventory, and dependency edges.
+
+### ✅  ForkTex Standard for Delivery
+
+```bash
+forktex fsd check          # profile-driven Make-target audit (per-atom, per-facet, per-level)
+forktex fsd report         # ISO-grade JSON + HTML evidence
+forktex fsd makefile sync  # regenerate Makefile from forktex.json atoms (don't hand-edit)
+```
+
+`fsd check` evaluates each project against profiles like `workspace/python-monorepo` or `package/python-library`, runs the atom commands defined in `forktex.json`, and reports satisfied / failed / skipped per atom plus per-level achievement.
+
+---
+
+## Three platforms · One CLI
+
+Three platforms sit on the same shelf — each speaks the same `connect` / `disconnect` verbs, each lives at `forktex <platform> …`, each has a Python SDK, and each exposes an MCP endpoint at `/api/mcp` so AI assistants can read and write directly with the user's permissions.
+
+<table>
+<tr>
+<td align="center" width="33%">
+  <img src="https://cloud.forktex.com/assets/forktex-cloud-icon-BR2uDJyk.svg" height="64" alt="ForkTex Cloud"><br>
+  <strong>cloud</strong><br>
+  <sub>infra & deploys</sub>
+</td>
+<td align="center" width="33%">
+  <img src="https://cloud.forktex.com/assets/forktex-intelligence-icon-COh1kdep.svg" height="64" alt="ForkTex Intelligence"><br>
+  <strong>intelligence</strong><br>
+  <sub>LLM, embeddings, search</sub>
+</td>
+<td align="center" width="33%">
+  <img src="https://cloud.forktex.com/assets/forktex-network-icon-DKrK_c7g.svg" height="64" alt="ForkTex Network"><br>
+  <strong>network</strong><br>
+  <sub>identity, projects, channels</sub>
+</td>
+</tr>
+<tr>
+<td>
+
+```bash
+forktex cloud connect
+forktex cloud up --env local
+forktex cloud deploy <id>
+```
+
+Bring up local stacks; blue-green deploy from `forktex.json`.
+
+</td>
+<td>
+
+```bash
+forktex intelligence connect
+forktex intelligence ask  "..."
+forktex intelligence run  "..."
+```
+
+LLM, embeddings, agentic runs.
+
+</td>
+<td>
+
+```bash
+forktex network connect
+forktex network status
+```
+
+Identity, projects, tasks, worklogs.
+
+</td>
+</tr>
+</table>
+
+> 🧠 **Intelligence is what makes `forktex` chat smart.** The built-in agents above run with or without it; connect intelligence and bare `forktex` upgrades into a streaming chat REPL backed by an LLM. Cloud and network sit on the same level — connect any, all, or none.
+
+### Three ways to reach a platform
+
+```
+       ╭──────────────╮     ╭──────────────╮     ╭──────────────╮
+       │  ☁  cloud    │     │  🧠 intelligence │     │  🕸  network  │
+       ╰──────┬───────╯     ╰──────┬───────╯     ╰──────┬───────╯
+              │                    │                    │
+              └────────────────────┼────────────────────┘
+                                   │
+              ┌────────────────────┼────────────────────┐
+              │                    │                    │
+        ╭─────┴─────╮        ╭─────┴─────╮        ╭─────┴─────╮
+        │  forktex  │        │ /api/mcp  │        │   pip /   │
+        │    CLI    │        │   (MCP)   │        │    SDK    │
+        ╰─────┬─────╯        ╰─────┬─────╯        ╰─────┬─────╯
+              │                    │                    │
+            you             AI assistants        your codebase
+```
+
+| | Path | One-liner |
+|---|------|-----------|
+| 💻 | **`forktex` CLI** | `forktex` drops you in. Fastest path for humans — chat, deploy, audit, all in one binary. |
+| 🤖 | **MCP** (`/api/mcp`) | AI assistants read and write through Model Context Protocol with the credentials of the user who connected them. |
+| 🔌 | **Python SDK** | `pip install forktex-cloud  ·  forktex-intelligence  ·  forktex-network` — same auth, same shapes. |
+
+> Same data model on every path. A row created by an MCP-connected agent, a script using the SDK, and you typing `forktex network …` are indistinguishable to the platform.
+
+---
+
+## 60-second tour
+
+```bash
+# Built-in (no platform needed)
+forktex agents root                            # ecosystem-aware local agent
+forktex arch discover                          # C4 model as JSON / DSL / HTML
+forktex fsd check                              # delivery-standard audit
+
+# Connect a platform (idempotent — login or register)
+forktex intelligence connect
+forktex cloud connect --api-key ftx-…
+forktex network connect --endpoint http://localhost:9000 --email you@example.com
+
+# Now the smart things light up
+forktex                                        # bare → chat REPL (intelligence)
 forktex intelligence ask "What does this project do?"
-
-# AI agent — orchestrated task
-forktex intelligence run "Add error handling to src/app.py"
-
-# Cloud — start local stack from forktex.json manifest
-forktex cloud up --env local --build
-
-# Cloud — deploy to production
-forktex cloud deploy <server-id>
-
-# FSD — check delivery standard compliance
-forktex fsd check
-
-# FSD — generate ISO audit evidence
-forktex fsd report
+forktex cloud up --env local --build           # bring infra up from forktex.json
+forktex status --json | jq '.intelligence.connected'
 ```
 
-## Pillars
+---
 
-| Pillar | What it does | Key commands |
-|--------|-------------|--------------|
-| **Intelligence** | AI agent with tool calling. Reads code, runs commands, applies patches. | `forktex` (chat), `forktex intelligence ask/run/scrape` |
-| **Cloud** | Deploy and manage infrastructure. Blue-green deploys from `forktex.json` manifests. | `forktex cloud up`, `forktex cloud deploy`, `forktex cloud server` |
-| **Network** | Identity, projects, tasks, worklogs, channels. | `forktex network connect`, `forktex network status` |
-| **FSD** | ForkTex Standard for Delivery. Verify compliance, generate ISO audit evidence. | `forktex fsd check`, `forktex fsd report` |
+## Documentation
 
-The bare `forktex` menu shows each service in its brand colour with a terminal-native ASCII rendering of its mark — cloud as a full 8-arm radial, intelligence as a head-with-body, network as a diagonal X.
+| Topic | Where |
+|-------|-------|
+| Full CLI reference (every verb, every slash command, every keybind) | [docs/cli-reference.md](docs/cli-reference.md) |
+| Credentials — verbs, options, on-disk layout | [docs/credentials.md](docs/credentials.md) |
+| Configuration — env vars, manifest, ecosystem layout | [docs/configuration.md](docs/configuration.md) |
+| Development — `make ci`, license headers, sibling SDK editable installs | [docs/development.md](docs/development.md) |
 
-## CLI Commands
-
-Three services — **cloud**, **intelligence**, **network** — sit at the same level in the command tree. Each exposes its own operations plus the identical credential pair `connect` / `disconnect`. A top-level `forktex status` aggregates credential state across all three.
-
-```
-forktex                      Bare: menu-driven root loop (auto-upgrades to chat)
-forktex status               Aggregate credential state (cloud + intelligence + network)
-forktex info                 Project + environment summary
-
-forktex cloud
-  connect / disconnect       Authenticate / remove credentials
-  init                       Scaffold forktex.json manifest
-  up / down                  Start / stop stack
-  deploy                     Blue-green deployment
-  server | project | vault   Per-resource subgroups
-  status / logs / events     Monitoring
-
-forktex intelligence
-  connect / disconnect       Authenticate / remove credentials
-  status                     API health + whoami
-  ask "..."                  Single-shot question
-  run "..."                  Orchestrated task
-  scrape <url>               Agentic browser scraper
-  index-ecosystem            Knowledge ingestion
-
-forktex network
-  connect / disconnect       Authenticate / remove credentials
-  status                     identity_me round-trip
-
-forktex fsd                  Delivery-standard checks + ISO evidence
-forktex arch discover        C4 auto-discovery
-forktex overview             Ecosystem overview
-forktex git status-all       Multi-repo git operations
-```
-
-## Chat REPL
-
-Bare `forktex` opens the menu; if intelligence is reachable, pressing Enter drops you into the chat REPL (a full-screen `prompt_toolkit` app).
-
-**Slash commands** (type `/` for a live dropdown; Tab accepts):
-
-```
-/help          show this list
-/status        aggregate credential state
-/connect       <service> [--new]   idempotent login-or-register
-/disconnect    <service>           remove saved credentials
-/cards         toggle service cards (hidden by default)
-/clear         clear visible buffer
-/history       show full transcript
-/tools         list local tool-server tools
-/menu          exit chat back to menu
-/quit          exit forktex
-```
-
-**Keybindings (quick-casts)**:
-
-```
-Ctrl+K   toggle service cards                Ctrl+L   clear visible buffer
-Ctrl+H   show full transcript                Ctrl+D   exit to menu
-Tab      autocomplete slash / service        Enter    submit
-```
-
-**Menu keys (pre-chat)**: `c` / `i` / `n` drill into service help, `s` status, `r` refresh probes, `h` hide cards, `q` quit, `Enter` → chat (when intelligence reachable). Typing `/` opens the same live dropdown as in chat.
-
-## Credentials — one verb, three services
-
-```bash
-forktex status                                              # aggregate table (all 3 services)
-forktex cloud connect                                       # email/password + org select (or --api-key ftx-…)
-forktex intelligence connect                                # idempotent: login or register, then issue key
-forktex intelligence connect --new                          # force register
-forktex network connect --endpoint http://localhost:9000 \
-                        --email you@example.com
-forktex <service> disconnect [--global]                     # remove saved creds
-```
-
-Every service understands the same option set: `--endpoint`/`--url`, `--email`, `--password`, `--api-key`, `--global`, `--new`. Credentials live at `~/.forktex/{cloud,intelligence,network}.json` (global) or `<project>/.forktex/…` (per-project). See the [forktex directory spec](https://github.com/forktex/cloud/blob/master/docs/forktex-directory-spec.md).
-
-## Ecosystem
-
-```
-forktex-core             Shared PostgreSQL/Redis primitives
-forktex-cloud            Cloud platform SDK (httpx client)
-forktex-intelligence     Intelligence API SDK (LLM, embeddings, search)
-forktex-network          Network platform SDK (identity, projects, channels)
-      |        |        |        |
-      +--------+--------+--------+
-                       |
-                  forktex          CLI + agent + FSD (this package)
-```
-
-Each SDK is independently versioned and published to PyPI. `forktex` re-exports their surfaces under `forktex.cloud`, `forktex.intelligence`, and `forktex.network` as convenience shims.
-
-## Configuration
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `FORKTEX_INTELLIGENCE_ENDPOINT` | Intelligence API endpoint | `https://intelligence.forktex.com/api` |
-| `FORKTEX_INTELLIGENCE_API_KEY` | Intelligence API key | *(required for AI features)* |
-| `FORKTEX_DEBUG` | Enable debug output | `false` |
-
-Settings are also read from `~/.forktex/` (global) and `.forktex/` (project-level) config files. Run `forktex <service> connect` to configure each service interactively.
-
-The full on-disk layout — every file under `.forktex/` and `~/.forktex/`, what writes it, whether it's gitignored — is defined by the [forktex directory spec](https://github.com/forktex/cloud/blob/master/docs/forktex-directory-spec.md) and enforced in code via `forktex_cloud.paths`.
-
-## Development
-
-```bash
-# Editable install with the dev group (pytest, ruff, pyright, pip-audit, respx)
-poetry install --with dev
-
-# Run tests
-make test
-
-# Run the full publish gate (format-check + lint + license-check + audit + test + build)
-make ci
-
-# Regenerate Makefile from forktex.json
-forktex fsd makefile sync
-```
-
-`make ci` is the single command that gates a publish: it format-checks, lints, verifies dual-license headers across every source file, audits dependencies for known CVEs, runs the test suite, and builds the wheel + sdist with `twine check` — finishing with a *"safe to: make publish-test  /  make publish"* banner. The same chain runs in GitHub Actions on every push and PR across Python 3.12 / 3.13 / 3.14.
-
-### License headers
-
-Every source file carries the AGPL-3.0 + Commercial dual-license SPDX header, applied idempotently via:
-
-```bash
-make license-check    # CI gate — fails if any source file is missing the header
-make license-fix      # add or refresh headers across src/, tests/, scripts/
-make license-strip    # remove headers (used before license-model changes)
-```
-
-### Developing against sibling SDK checkouts
-
-Swap the installed `forktex-cloud`, `forktex-intelligence`, and `forktex-network` with editable installs from `../cloud/sdk-py`, `../intelligence/sdk-py`, `../network/sdk-py`:
-
-```bash
-make dev-link-sdks              # editable from siblings
-export FORKTEX_DEV_SIBLING_SDKS=1   # adds "(dev-linked)" to `forktex --version`
-# …iterate on SDK sources — imports pick up changes without a reinstall…
-make dev-unlink-sdks            # restore pinned PyPI versions
-```
+---
 
 ## License
 
 Dual-licensed — **AGPL-3.0-or-later** for open-source use, **commercial** for everything else (proprietary products, SaaS without source release, redistribution in closed-source form). See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE) for the full terms.
 
-Commercial licensing inquiries: info@forktex.com.
-
-The 1.0.0 release on PyPI remains under MIT; from **1.0.1** onwards the package ships AGPL-3.0+Commercial.
+Commercial licensing inquiries: **info@forktex.com**.

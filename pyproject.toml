@@ -23,7 +23,7 @@
 
 [project]
 name = "forktex"
-version = "1.0.1"
+version = "0.2.3"
 description = "CLI, agent, architecture, audit, and SDK toolkit for the ForkTex self-managed software factory"
 authors = [
     {name = "FORKTEX",email = "info@forktex.com"}
@@ -50,9 +50,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "forktex-intelligence (>=1.0.0,<2.0.0)",
-    "forktex-cloud (>=1.0.1,<2.0.0)",
-    "forktex-network (>=1.0.0,<2.0.0)",
+    "forktex-intelligence (>=0.2.3,<0.3.0)",
+    "forktex-cloud (>=0.2.3,<0.3.0)",
+    "forktex-network (>=0.2.3,<0.3.0)",
     "pydantic (>=2.11.10,<3.0.0)",
     "httpx (>=0.27.0,<1.0.0)",
     "aiofiles (>=24.1.0,<25.0.0)",

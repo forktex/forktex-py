@@ -317,7 +317,7 @@ class TestCLISmoke:
     def test_version(self):
         from forktex import __version__
 
-        assert __version__ == "1.0.0"
+        assert __version__ == "0.2.3"
 
 
 # ============================================================================

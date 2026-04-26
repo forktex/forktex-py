@@ -41,7 +41,7 @@ CLI:
     forktex chat
 """
 
-__version__ = "1.0.0"
+__version__ = "0.2.3"
 __author__ = "Forktex Team"
 
 # Core library exports — always available, no optional deps
