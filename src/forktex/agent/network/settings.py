@@ -110,7 +110,7 @@ def save_network_project(settings: NetworkSettings, project_root: Path) -> None:
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError, OSError:
         return {}
     return data if isinstance(data, dict) else {}
 

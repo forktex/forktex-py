@@ -308,7 +308,7 @@ def _detect_tech_from_dir(d: Path) -> list[Technology]:
             if "next" in deps:
                 techs.append(Technology("Next.js", category=TechCategory.FRAMEWORK))
             techs.append(Technology("pnpm", category=TechCategory.PACKAGE_MANAGER))
-        except (json.JSONDecodeError, KeyError):
+        except json.JSONDecodeError, KeyError:
             pass
 
     return techs
@@ -344,7 +344,7 @@ def _read_deps(d: Path, limit: int = 20) -> list[Dependency]:
             pkg = json.loads(pkg_json.read_text())
             for name, ver in list(pkg.get("dependencies", {}).items())[:limit]:
                 deps.append(Dependency(name, ver))
-        except (json.JSONDecodeError, KeyError):
+        except json.JSONDecodeError, KeyError:
             pass
 
     return deps[:limit]
@@ -596,7 +596,7 @@ def _discover_library_edges(base_dir: Path) -> list[Relationship]:
             )
             for src, tgt in edges
         ]
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError, OSError:
         return []
 
 

@@ -94,7 +94,7 @@ def _load_architecture(root: Path) -> str:
             containers = len(sys.get("containers", []))
             summary_lines.append(f"  - {name}: {level}, {containers} containers")
         return "\n".join(summary_lines)
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError, OSError:
         return ""
 
 
@@ -120,7 +120,7 @@ def _load_libraries(root: Path) -> str:
                 lines.append(f"  {a} → {b}")
 
         return "\n".join(lines)
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError, OSError:
         return ""
 
 

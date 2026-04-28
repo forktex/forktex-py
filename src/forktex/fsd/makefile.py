@@ -260,9 +260,11 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
     if atom_id == "typecheck":
         return ["python -m pyright src/ 2>/dev/null || python -m mypy src/"]
     if atom_id == "test":
-        lines = ["pytest tests/ -x -q"]
+        lines = ["poetry run pytest tests/ -x -q"]
         for pkg in subpaths:
-            lines.append(f"cd {pkg} && pytest tests/ -x -q 2>/dev/null || true")
+            lines.append(
+                f"cd {pkg} && poetry run pytest tests/ -x -q 2>/dev/null || true"
+            )
         return lines
     if atom_id == "security-audit":
         return ['pip-audit 2>/dev/null || echo "pip-audit not installed, skipping"']
@@ -349,7 +351,7 @@ def _package_atom_commands(atom_id: str, src_dir: str = "src") -> list[str]:
             f"python -m pyright {src_dir}/ 2>/dev/null || python -m mypy {src_dir}/"
         ]
     if atom_id == "test":
-        return ["pytest tests/ -x -q 2>/dev/null || pytest -x -q"]
+        return ["poetry run pytest tests/ -x -q 2>/dev/null || poetry run pytest -x -q"]
     if atom_id == "security-audit":
         return ['pip-audit 2>/dev/null || echo "pip-audit not installed, skipping"']
     if atom_id == "build":
@@ -491,7 +493,7 @@ def _root_secondary_targets(
         lines.extend(
             [
                 "test-cov: ## Run tests with coverage",
-                "\tpytest tests/ --cov=src --cov-report=term-missing",
+                "\tpoetry run pytest tests/ --cov=src --cov-report=term-missing",
                 "",
             ]
         )

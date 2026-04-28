@@ -3,7 +3,7 @@
 # Usage:
 #     iwr -useb install.forktex.com/ps | iex
 #
-# Finds a Python >= 3.12 via the `py` launcher (preferred) or `python.exe`
+# Finds a Python >= 3.14 via the `py` launcher (preferred) or `python.exe`
 # on PATH and hands control to the inlined `_install_core.py`.
 
 $ErrorActionPreference = "Stop"
@@ -23,8 +23,8 @@ function Resolve-Python {
 
 $pythonInfo = Resolve-Python
 if (-not $pythonInfo) {
-    Write-Host "forktex installer: Python is required (>= 3.12)." -ForegroundColor Red
-    Write-Host "  install:  winget install Python.Python.3.12"
+    Write-Host "forktex installer: Python is required (>= 3.14)." -ForegroundColor Red
+    Write-Host "  install:  winget install Python.Python.3.14"
     Write-Host "  or visit: https://www.python.org/downloads/windows/"
     exit 2
 }

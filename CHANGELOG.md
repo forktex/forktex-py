@@ -4,14 +4,18 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 
 ## [Unreleased]
 
-## [0.2.4] — 2026-04-26
+## [0.2.5] — 2026-04-28
+
+### Fixed
+
+- **`make test` now runs against the project venv (Python 3.14) via `poetry run pytest`** — previously the bare `pytest` resolved to the system interpreter (Python 3.12), which couldn't parse PEP 758 unparenthesized `except` clauses (`except json.JSONDecodeError, OSError:`) that ruff emits when targeting 3.14. Tests collected with nine `SyntaxError`s on a fresh checkout. The `test` and `test-cov` atoms in `src/forktex/fsd/makefile.py` and the `test` override in `forktex.json` were updated, and the Makefile re-synced with `forktex fsd makefile sync`.
 
 ### Docs
 
 - **README rewritten as a consumer-facing landing page.** Leads with what `forktex` does on its own (chat REPL + agents, tool registry, `arch discover`, `fsd check/report`) before introducing the three platforms — cloud, intelligence, network — as peer "server connections" with the same `connect`/`disconnect` verbs. Brand assets wired up: `./docs/banner.svg` for the header (GitHub-only; PyPI requires absolute URLs), and the hosted `cloud.forktex.com/assets/forktex-{cloud,intelligence,network}-icon-*.svg` SVGs for the three-platform card.
 - **Technical lore moved to `./docs/`.** New `docs/cli-reference.md` (full command tree + slash commands + keybindings + a built-in-vs-platform matrix), `docs/credentials.md`, `docs/configuration.md` (env vars, ecosystem, brand asset URL), `docs/development.md` (`make ci`, license headers, sibling-SDK editable installs).
 
-## [1.0.1] — 2026-04-25
+## [0.2.3] — 2026-04-25
 
 ### Security
 
@@ -19,7 +23,7 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 
 ### Changed — licensing (breaking for downstream re-distributors)
 
-- **Re-licensed AGPL-3.0 + Commercial dual.** The CLI moves from MIT (1.0.0) to AGPL-3.0-or-later with a parallel commercial offering — matching the model used by `forktex/network`. `LICENSE` and `NOTICE` ship at the repo root; every source file carries an SPDX-stamped header. Commercial licensing inquiries: info@forktex.com. The 1.0.0 wheel on PyPI remains under MIT for users who pinned it.
+- **Re-licensed AGPL-3.0 + Commercial dual.** The CLI moves from to AGPL-3.0-or-later with a parallel commercial offering; every source file carries an SPDX-stamped header. Commercial licensing inquiries: info@forktex.com.
 
 ### Added
 
@@ -79,7 +83,7 @@ forktex ask "…"                              forktex intelligence ask "…"
 
 On-disk credential files are unchanged (`~/.forktex/{cloud,intelligence,network}.json`). Nothing to migrate for existing data.
 
-## [1.0.0] — 2026-04-24
+## [0.2.2] — 2026-04-24
 
 V1 release. Classifier flipped to `Production/Stable`. SemVer contract guaranteed from this point: breaking changes require a new major.
 

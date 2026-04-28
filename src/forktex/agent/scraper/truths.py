@@ -58,7 +58,7 @@ class TruthsStore:
             return None
         try:
             return json.loads(p.read_text())
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             return None
 
     def save_entry(
@@ -105,6 +105,6 @@ class TruthsStore:
             try:
                 data = json.loads(p.read_text())
                 domains.append(data.get("domain", p.stem))
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 domains.append(p.stem)
         return domains

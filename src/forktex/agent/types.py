@@ -235,7 +235,7 @@ class AgentTypeRegistry:
                 )
                 self._types[agent_type.name] = agent_type
 
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             pass
 
     def __contains__(self, name: str) -> bool:

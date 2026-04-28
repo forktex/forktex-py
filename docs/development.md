@@ -14,7 +14,7 @@ poetry install --with dev    # editable install + pytest, ruff, pyright, pip-aud
 format-check → lint → license-check → audit → test → build
 ```
 
-It format-checks, lints, verifies dual-license headers across every source file, audits dependencies for known CVEs, runs the test suite, and builds the wheel + sdist with `twine check` — finishing with a *"safe to: make publish-test  /  make publish"* banner. The same chain runs in GitHub Actions on every push and PR across Python 3.12 / 3.13 / 3.14.
+It format-checks, lints, verifies dual-license headers across every source file, audits dependencies for known CVEs, runs the test suite, and builds the wheel + sdist with `twine check` — finishing with a *"safe to: make publish-test  /  make publish"* banner. The same chain runs in GitHub Actions on every push and PR across Python 3.14.
 
 ```bash
 make test        # tests only

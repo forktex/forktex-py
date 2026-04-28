@@ -48,7 +48,8 @@ async def events(ctx, project_id, limit):
 
     items = items[:limit]
     for ev in items:
-        ts = ev.created_at.isoformat(timespec="seconds") if ev.created_at else ""
+        # SDK models expose camelCase attribute names (no snake-case alias).
+        ts = ev.createdAt.isoformat(timespec="seconds") if ev.createdAt else ""
         action = ev.action or "?"
         status = ev.status or "?"
         details = ev.details or ""
