@@ -43,8 +43,8 @@ if [ ! -f "$DIST/install.sh" ]; then
 fi
 
 # row:<label> image bootstrap
-# Floor is Python 3.12. ubuntu-22.04 + python:3.11-slim are *expected-to-fail*
-# (they verify the wrapper's "Python ≥ 3.12 required" rejection path renders).
+# Floor is Python 3.14. ubuntu-22.04 + python:3.11-slim are *expected-to-fail*
+# (they verify the wrapper's "Python ≥ 3.14 required" rejection path renders).
 ROWS=(
     "ubuntu-24.04|ubuntu:24.04|apt-get update -qq && apt-get install -y -qq curl python3 python3-venv pipx"
     "fedora-41|fedora:41|dnf install -y -q python3 python3-pip pipx"
@@ -75,7 +75,7 @@ for row in "${ROWS[@]}"; do
     echo
     echo "── $label ($image) ──"
 
-    # TestPyPI fallback for now — real PyPI once 1.0.0 is promoted.
+    # TestPyPI fallback for now — real PyPI once the package is published.
     env_flag="-e FORKTEX_INDEX_URL=https://test.pypi.org/simple/"
 
     if docker run --rm $env_flag \
@@ -97,7 +97,7 @@ for row in "${ROWS[@]}"; do
     fi
 done
 
-# Negative-path checks: installer must reject Python < 3.12 cleanly.
+# Negative-path checks: installer must reject Python < 3.14 cleanly.
 for row in "${NEGATIVE_ROWS[@]}"; do
     label="${row%%|*}"
     rest="${row#*|}"
@@ -120,13 +120,13 @@ for row in "${NEGATIVE_ROWS[@]}"; do
             exit 99
         " 2>&1) && rc=$? || rc=$?
 
-    if [ "$rc" = "2" ] && echo "$out" | grep -q "Python >= 3.12"; then
+    if [ "$rc" = "2" ] && echo "$out" | grep -q "Python >= 3.14"; then
         pass=$((pass+1))
         echo "✓ $label (rejected with rc=2 + correct hint)"
     else
         fail=$((fail+1))
         failures+=("$label (got rc=$rc)")
-        echo "✗ $label  expected rc=2 + 'Python >= 3.12' message"
+        echo "✗ $label  expected rc=2 + 'Python >= 3.14' message"
         echo "$out" | tail -8
     fi
 done

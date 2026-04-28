@@ -89,7 +89,7 @@ def _discover_repos(root: Path) -> list[dict]:
                 pkg = manifest.get("package")
                 if pkg:
                     repo_info["package"] = pkg.get("name")
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 pass
 
         # Check for client/web subdirectories

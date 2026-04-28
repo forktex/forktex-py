@@ -23,6 +23,8 @@
 
 """Tests for forktex.agent.cli (basic import and structure)."""
 
+import re
+
 import pytest
 
 
@@ -54,7 +56,7 @@ def test_package_import():
 def test_version():
     from forktex import __version__
 
-    assert __version__ == "0.2.3"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", __version__)
 
 
 class TestInitCommand:

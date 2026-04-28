@@ -23,7 +23,7 @@ typecheck: ## Static type system verifies interface correctness (pyright; instal
 	python3 -m pyright src/
 
 test: ## Automated tests verify behavior against real infrastructure
-	pytest tests/ -q
+	poetry run pytest tests/ -q
 
 deps: ## Project dependencies installed and locked to reproducible versions
 	pip install --break-system-packages -e . 2>/dev/null || \
@@ -84,7 +84,7 @@ help: ## Available targets self-documented
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 audit: ## Scan installed Python deps for known CVEs (pip-audit; install via dev deps)
-	pip-audit --skip-editable
+	poetry run pip-audit --skip-editable
 
 publish-test: ## Upload dist/ to TestPyPI (https://test.pypi.org) for rehearsal. SDK deps must already be on TestPyPI.
 	python3 -m twine upload --repository testpypi dist/*
@@ -131,7 +131,7 @@ lint-fix: ## Lint and auto-fix where possible
 	done
 
 test-cov: ## Run tests with coverage
-	pytest tests/ --cov=src --cov-report=term-missing
+	poetry run pytest tests/ --cov=src --cov-report=term-missing
 
 deps-lock: ## Lock dependencies
 	poetry lock

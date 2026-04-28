@@ -23,7 +23,7 @@
 
 [project]
 name = "forktex"
-version = "0.2.4"
+version = "0.2.5"
 description = "CLI, agent, architecture, audit, and SDK toolkit for the ForkTex self-managed software factory"
 authors = [
     {name = "FORKTEX",email = "info@forktex.com"}
@@ -31,7 +31,7 @@ authors = [
 readme = "README.md"
 license = "AGPL-3.0-only"
 license-files = ["LICENSE", "NOTICE"]
-requires-python = ">=3.12"
+requires-python = ">=3.14,<4.0"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -39,8 +39,6 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Software Development",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -84,12 +82,13 @@ build-backend = "poetry.core.masonry.api"
 
 [dependency-groups]
 dev = [
-    "pytest (>=8.4.2,<9.0.0)",
+    "pytest (>=9.0.3,<10.0.0)",
     "pytest-asyncio (>=1.2.0,<2.0.0)",
     "ruff (>=0.8.0)",
     "respx (>=0.21.0)",
     "pyright (>=1.1.350)",
     "pip-audit (>=2.7.0)",
+    "pygments (>=2.20.0)",
 ]
 
 [tool.pytest.ini_options]

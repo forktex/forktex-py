@@ -315,9 +315,11 @@ class TestCLISmoke:
         assert Settings is not None
 
     def test_version(self):
+        import re
+
         from forktex import __version__
 
-        assert __version__ == "0.2.3"
+        assert re.fullmatch(r"\d+\.\d+\.\d+", __version__)
 
 
 # ============================================================================

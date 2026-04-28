@@ -51,7 +51,7 @@ def load_cloud_context(project_root: Path | None = None) -> CloudContext:
     if global_path.exists():
         try:
             data = json.loads(global_path.read_text())
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             pass
 
     # Project-level config (overrides global)
@@ -61,7 +61,7 @@ def load_cloud_context(project_root: Path | None = None) -> CloudContext:
             try:
                 project_data = json.loads(project_path.read_text())
                 data.update(project_data)
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 pass
 
     return CloudContext(

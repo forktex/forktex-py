@@ -69,7 +69,7 @@ def _readme_versions() -> tuple[str, set[str]]:
     """Return (lower bound, tested versions) from README.md."""
     text = (REPO_ROOT / "README.md").read_text()
 
-    lower_match = re.search(r"Requires Python (\d+\.\d+)\+", text)
+    lower_match = re.search(r"Requires\s+\**Python\s+(\d+\.\d+)\+", text)
     assert lower_match, "README missing 'Requires Python X.Y+' marker"
 
     tested_match = re.search(r"Tested on ((?:\d+\.\d+)(?:,\s*\d+\.\d+)*)", text)
@@ -118,7 +118,7 @@ def test_lower_bound_is_in_supported_set():
 
 @pytest.mark.parametrize("source", ["pyproject", "readme", "ci"])
 def test_no_unsupported_python_versions_listed(source: str):
-    """All declared versions must be plausible (3.12+, not yet released > 3.20)."""
+    """All declared versions must be plausible (3.14+, not yet released > 3.20)."""
     if source == "pyproject":
         _, versions = _pyproject_versions()
     elif source == "readme":
@@ -128,6 +128,6 @@ def test_no_unsupported_python_versions_listed(source: str):
 
     for v in versions:
         major, minor = (int(p) for p in v.split("."))
-        assert major == 3 and 12 <= minor <= 20, (
+        assert major == 3 and 14 <= minor <= 20, (
             f"{source} lists implausible version: {v}"
         )

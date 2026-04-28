@@ -28,7 +28,7 @@
 # Usage:
 #     curl -sSL install.forktex.com/sh | sh
 #
-# This wrapper finds a Python ≥ 3.12 and hands control to the inlined
+# This wrapper finds a Python ≥ 3.14 and hands control to the inlined
 # `_install_core.py`. The inlining is done by `scripts/build_installers.py`
 # at publish time so the hosted script is self-contained.
 
@@ -40,11 +40,11 @@ if command -v python3 >/dev/null 2>&1; then
 elif command -v python >/dev/null 2>&1; then
     PY="python"
 else
-    printf '\033[31m✗\033[0m forktex installer: Python is required (>= 3.12).\n' >&2
-    printf '  macOS:   brew install python@3.12\n' >&2
-    printf '  Ubuntu:  sudo apt install python3.12 python3.12-venv\n' >&2
-    printf '  Debian:  sudo apt install -t bookworm-backports python3.12  (or use deadsnakes)\n' >&2
-    printf '  Fedora:  sudo dnf install python3.12\n' >&2
+    printf '\033[31m✗\033[0m forktex installer: Python is required (>= 3.14).\n' >&2
+    printf '  macOS:   brew install python@3.14\n' >&2
+    printf '  Ubuntu:  sudo apt install python3.14 python3.14-venv\n' >&2
+    printf '  Debian:  sudo apt install -t bookworm-backports python3.14  (or use deadsnakes)\n' >&2
+    printf '  Fedora:  sudo dnf install python3.14\n' >&2
     printf '  Arch:    sudo pacman -S python\n' >&2
     exit 2
 fi

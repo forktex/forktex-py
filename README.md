@@ -28,7 +28,7 @@ curl -sSL install.forktex.com/sh | sh
 iwr -useb install.forktex.com/ps | iex
 ```
 
-The installer detects Python ≥ 3.12, prefers `pipx` (isolated install), falls back to `pip --user`, and seeds the config directory automatically.
+The installer detects Python ≥ 3.14, prefers `pipx` (isolated install), falls back to `pip --user`, and seeds the config directory automatically.
 
 **Manual:**
 
@@ -37,7 +37,7 @@ pipx install forktex      # recommended — isolates deps
 pip install --user forktex
 ```
 
-Requires **Python 3.12+**. Tested on 3.12 / 3.13 / 3.14.
+Requires **Python 3.14+**. Tested on 3.14.
 
 ---
 

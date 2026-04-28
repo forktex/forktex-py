@@ -27,7 +27,7 @@ Inlined into `install.sh` and `install.ps1` by `build_installers.py` at
 publish time so the hosted one-liners remain self-contained.
 
 Flow:
-    1. Verify Python >= 3.12.
+    1. Verify Python >= 3.14.
     2. Pick install strategy in this order:
          (a) `pipx install forktex`                              [preferred]
          (b) `python -m pip install --user forktex`              [fallback]

@@ -162,7 +162,7 @@ def _run_local(
 
             manifest = Manifest.load(project_root / "forktex.json", env=env_name)
             project_name = manifest.name or "forktex"
-        except (FileNotFoundError, ValueError, KeyError):
+        except FileNotFoundError, ValueError, KeyError:
             click.echo(
                 f"Warning: could not load manifest, using project name '{project_name}'",
                 err=True,
@@ -191,7 +191,7 @@ def _run_local(
 
                 m = Manifest.load(project_root / "forktex.json", env=env_name)
                 pname = m.name or "forktex"
-            except (FileNotFoundError, ValueError, KeyError):
+            except FileNotFoundError, ValueError, KeyError:
                 click.echo(
                     f"Warning: could not load manifest, using project name '{pname}'",
                     err=True,
@@ -215,7 +215,7 @@ def _run_local(
         from forktex_cloud.secrets.factory import get_secrets_provider
 
         secrets_provider = get_secrets_provider(project_root=project_root)
-    except (ValueError, ImportError):
+    except ValueError, ImportError:
         pass
 
     obs_enabled = not no_observability
@@ -281,10 +281,24 @@ def _tail_loki(project_root, *, service, since, env_name="local"):
     from forktex_cloud.bridge.loki import loki_ready, build_logql, tail
     from forktex_cloud.bridge.log_formatter import assign_colors, format_line, COLORS
 
+    # Cloud's stack publishes Loki on a non-default host port (3110)
+    # so it can coexist with other forktex stacks that also default to
+    # 3100. Read the canonical constant from the SDK so the two stay
+    # in lock-step. Older SDK builds without this symbol fall back
+    # to 3100.
+    try:
+        from forktex_cloud.bridge.local_compose import loki_host_port
+
+        host_port = loki_host_port()
+    except ImportError:
+        host_port = 3100
+
     compose_file = str(_cloud_paths.compose_path(project_root, "local"))
-    base_url = "http://localhost:3100"
+    base_url = f"http://localhost:{host_port}"
     if not loki_ready(base_url):
-        click.echo("  Loki not reachable — falling back to docker compose logs")
+        click.echo(
+            f"  Loki not reachable on {base_url} — falling back to docker compose logs"
+        )
         _exec(["docker", "compose", "-f", compose_file, "logs", "-f"])
         return
 
