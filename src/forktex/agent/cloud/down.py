@@ -53,7 +53,7 @@ async def down(ctx, yes, keep_dns, environment):
 
             manifest = Manifest.load(project_root / "forktex.json", env="local")
             project_name = manifest.name or "forktex"
-        except FileNotFoundError, ValueError, KeyError:
+        except (FileNotFoundError, ValueError, KeyError):
             click.echo(
                 f"Warning: could not load manifest, using project name '{project_name}'",
                 err=True,

@@ -66,7 +66,7 @@ def load_intelligence_settings(
                 for key in IntelligenceSettings.model_fields:
                     if key in data:
                         values[key] = data[key]
-        except json.JSONDecodeError, OSError:
+        except (json.JSONDecodeError, OSError):
             pass
 
     # Project-level config (overrides global)
@@ -81,7 +81,7 @@ def load_intelligence_settings(
                     for key in IntelligenceSettings.model_fields:
                         if key in data:
                             values[key] = data[key]
-            except json.JSONDecodeError, OSError:
+            except (json.JSONDecodeError, OSError):
                 pass
 
     # Environment variables

@@ -102,7 +102,7 @@ class ResolveRule(ForkTexModel):
                 for part in (self.path or "").split("."):
                     data = data.get(part) if isinstance(data, dict) else None
                 return data is not None
-            except json.JSONDecodeError, AttributeError:
+            except (json.JSONDecodeError, AttributeError):
                 return False
 
         if self.strategy == "file-content" and _root:

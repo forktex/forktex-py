@@ -355,5 +355,5 @@ async def run_chat(
 
     try:
         return await app.run_async() or "quit"
-    except KeyboardInterrupt, EOFError:
+    except (KeyboardInterrupt, EOFError):
         return "quit"
