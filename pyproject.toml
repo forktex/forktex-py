@@ -1,14 +1,75 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 [project]
 name = "forktex"
-version = "0.1.3"
-description = "Official Python library to interact with Forktex API"
+version = "0.2.5"
+description = "CLI, agent, architecture, audit, and SDK toolkit for the ForkTex self-managed software factory"
 authors = [
-    {name = "Alex Doc",email = "alexandru.dochian@forktex.com"}
+    {name = "FORKTEX",email = "info@forktex.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.11"
-dependencies = [
+license = "AGPL-3.0-only"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.14,<4.0"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
+dependencies = [
+    "forktex-intelligence (>=0.2.3,<0.3.0)",
+    "forktex-cloud (>=0.2.3,<0.3.0)",
+    "forktex-network (>=0.2.3,<0.3.0)",
+    "pydantic (>=2.11.10,<3.0.0)",
+    "httpx (>=0.27.0,<1.0.0)",
+    "aiofiles (>=24.1.0,<25.0.0)",
+    "anyio (>=4.11.0,<5.0.0)",
+    "httpx-sse (>=0.4.0,<1.0.0)",
+    "pyyaml>=6.0",
+    "cryptography (>=46.0.6,<47.0.0)",
+    "asyncclick (>=8.3.0.4,<9.0.0.0)",
+    "rich (>=14.1.0,<15.0.0)",
+    "prompt_toolkit (>=3.0,<4.0)",
+    "playwright (>=1.40.0,<2.0.0)",
+    "jinja2 (>=3.1.0,<4.0.0)",
+]
+
+[project.optional-dependencies]
+web = ["fastapi>=0.115.0", "uvicorn[standard]>=0.30.0"]
+
+[project.scripts]
+forktex = "forktex.agent.cli:main"
 
 [project.urls]
 "Homepage" = "https://forktex.com"
@@ -18,3 +79,18 @@ dependencies = [
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.0.3,<10.0.0)",
+    "pytest-asyncio (>=1.2.0,<2.0.0)",
+    "ruff (>=0.8.0)",
+    "respx (>=0.21.0)",
+    "pyright (>=1.1.350)",
+    "pip-audit (>=2.7.0)",
+    "pygments (>=2.20.0)",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

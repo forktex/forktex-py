@@ -1,2 +1,19 @@
 __pycache__
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
 dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# local Claude Code state (per-user)
+.claude/
+
+# generated forktex state (per V1 spec)
+.forktex/**
+!.forktex/.version

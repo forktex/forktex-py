@@ -1,0 +1,451 @@
+<!--
+  Copyright (C) 2026 FORKTEX S.R.L.
+  
+  SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+  
+  This file is part of ForkTex Python.
+  
+  For commercial licensing -- including use in proprietary products, SaaS
+  deployments, or any context where AGPL obligations cannot be met -- you
+  MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+  
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU Affero General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+  
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU Affero General Public License for more details.
+  
+  You should have received a copy of the GNU Affero General Public License
+  along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ workspace.name }} — Architecture</title>
+<style>
+  :root { --bg:#0d1117; --s:#161b22; --s2:#1c2333; --b:#30363d; --t:#e6edf3; --tm:#8b949e;
+          --a:#58a6ff; --g:#3fb950; --p:#d2a8ff; --w:#d29922; --r:#f85149;
+          --compute:#2a7fc1; --persist:#1a6d3a; --observe:#6c5ce7; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--t);font-family:Inter,-apple-system,sans-serif;line-height:1.6;padding:0}
+
+  /* Nav breadcrumb */
+  .breadcrumb{background:var(--s);border-bottom:1px solid var(--b);padding:.75rem 2rem;display:flex;align-items:center;gap:.5rem;position:sticky;top:0;z-index:10}
+  .breadcrumb a{color:var(--a);text-decoration:none;font-size:.9rem;cursor:pointer}
+  .breadcrumb a:hover{text-decoration:underline}
+  .breadcrumb .sep{color:var(--tm)}
+  .breadcrumb .current{color:var(--t);font-weight:600}
+
+  .container{max-width:1200px;margin:0 auto;padding:2rem}
+  h1{font-size:2rem;margin-bottom:.25rem}h1 span{color:var(--a)}
+  .meta{color:var(--tm);margin-bottom:1.5rem;font-size:.9rem}
+  h2{font-size:1.3rem;color:var(--a);margin:2rem 0 .75rem;padding-bottom:.25rem;border-bottom:1px solid var(--b)}
+  h3{font-size:1.05rem;margin:1.25rem 0 .5rem}
+  p{margin-bottom:.75rem;color:var(--tm)}
+  strong{color:var(--t)}
+  code{font-family:'JetBrains Mono',monospace;font-size:.85em}
+  table{width:100%;border-collapse:collapse;margin:.75rem 0;font-size:.9rem}
+  th{background:var(--s2);color:var(--a);text-align:left;padding:.5rem .75rem;font-weight:600;border-bottom:2px solid var(--b)}
+  td{padding:.4rem .75rem;border-bottom:1px solid var(--b);color:var(--tm)}
+  tr:hover td{background:var(--s)}
+  td code{color:var(--g);background:var(--s2);padding:.1em .3em;border-radius:3px}
+
+  /* Clickable cards for drill-down */
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem;margin:1rem 0}
+  .card{background:var(--s);border:1px solid var(--b);border-radius:8px;padding:1.25rem;cursor:pointer;transition:border-color .15s}
+  .card:hover{border-color:var(--a)}
+  .card.no-click{cursor:default}
+  .card.no-click:hover{border-color:var(--b)}
+  .card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem}
+  .card-title{font-weight:700;font-size:1.05rem}
+  .card-badge{padding:.15rem .5rem;border-radius:999px;font-size:.75rem;font-weight:600;border:1px solid}
+  .card-badge.level{color:var(--g);border-color:var(--g)}
+  .card-badge.compute{color:var(--compute);border-color:var(--compute)}
+  .card-badge.persistence{color:var(--persist);border-color:var(--persist)}
+  .card-badge.component{color:var(--p);border-color:var(--p)}
+
+  /* Service bars inside cards */
+  .svc-list{display:flex;flex-direction:column;gap:.3rem;margin-top:.5rem}
+  .svc{display:flex;align-items:center;gap:.5rem;padding:.3rem .5rem;border-radius:4px;font-size:.85rem;background:var(--s2)}
+  .svc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .svc-dot.compute{background:var(--compute)}
+  .svc-dot.persistence{background:var(--persist)}
+  .svc-name{font-weight:600;min-width:60px}
+  .svc-tech{color:var(--tm);flex:1}
+  .svc-port{font-family:'JetBrains Mono',monospace;color:var(--a);font-size:.8rem}
+
+  /* Tech badges */
+  .tech{display:inline-block;padding:.1rem .4rem;border-radius:3px;font-size:.75rem;margin:.1rem;background:var(--s2);color:var(--tm);border:1px solid var(--b)}
+  .tech.language{color:var(--w);border-color:var(--w)}
+  .tech.framework{color:var(--a);border-color:var(--a)}
+  .tech.database{color:var(--g);border-color:var(--g)}
+  .tech.cache{color:var(--r);border-color:var(--r)}
+
+  /* Component list */
+  .comp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.5rem;margin:.5rem 0}
+  .comp{background:var(--s2);border:1px solid var(--b);border-radius:4px;padding:.5rem .75rem;font-size:.85rem}
+  .comp .name{font-weight:600;color:var(--p)}
+  .comp .desc{color:var(--tm);font-size:.8rem}
+  .comp .files{font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--tm);margin-top:.25rem}
+
+  /* Level indicator */
+  .c4-level{display:inline-block;padding:.15rem .4rem;border-radius:3px;font-size:.7rem;font-weight:700;background:var(--s2);color:var(--tm);margin-left:.5rem}
+
+  .git-badge{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .6rem;border-radius:4px;font-size:.75rem;background:var(--s2);border:1px solid var(--b)}
+  .git-branch{color:var(--g);font-weight:600}.git-hash{font-family:'JetBrains Mono',monospace;color:var(--tm)}.git-dirty{color:var(--w)}
+  .pkg-list{display:flex;flex-wrap:wrap;gap:.4rem;margin:.5rem 0}
+  .pkg{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .5rem;border-radius:4px;font-size:.8rem;background:var(--s2);border:1px solid var(--b)}
+  .pkg .name{color:var(--a);font-weight:600}.pkg .ver{color:var(--tm);font-family:'JetBrains Mono',monospace;font-size:.75rem}
+  .graph-wrap{background:var(--s);border:1px solid var(--b);border-radius:8px;margin:1rem 0;padding:1rem;overflow-x:auto}
+  .graph-wrap svg{min-height:200px}
+  .graph-node rect{fill:var(--s2);stroke:var(--b);stroke-width:1.5;rx:6;cursor:pointer;transition:stroke .15s}
+  .graph-node:hover rect{stroke:var(--a)}
+  .graph-node text{fill:var(--t);font-size:11px;font-family:Inter,sans-serif;pointer-events:none}
+  .graph-edge line{stroke:var(--tm);stroke-width:1.5;opacity:.5;marker-end:url(#arrow)}
+  .loc-bar{height:4px;border-radius:2px;background:var(--a);opacity:.6;margin-top:.2rem}
+  .stats{display:flex;gap:2rem;flex-wrap:wrap;margin:1rem 0;padding:1rem;background:var(--s);border:1px solid var(--b);border-radius:8px}
+  .stat{text-align:center}.stat .num{font-size:1.8rem;font-weight:700;color:var(--a)}.stat .label{font-size:.75rem;color:var(--tm);text-transform:uppercase;letter-spacing:.05em}
+
+  footer{text-align:center;padding:2rem 0;color:var(--tm);font-size:.8rem;border-top:1px solid var(--b);margin-top:2rem}
+</style>
+</head>
+<body>
+
+<!-- Breadcrumb -->
+<div class="breadcrumb">
+  <a onclick="showLevel('context')">{{ workspace.name }}</a>
+  <span class="sep" id="bc-sep-1" style="display:none">/</span>
+  <a id="bc-system" style="display:none" onclick="showLevel('container')"></a>
+  <span class="sep" id="bc-sep-2" style="display:none">/</span>
+  <span class="current" id="bc-container" style="display:none"></span>
+</div>
+
+<div class="container">
+
+<!-- LEVEL 1: System Context (default view) -->
+<div id="view-context">
+  <h1><span>{{ workspace.name }}</span> <span class="c4-level">C4 Level 1 — Context</span></h1>
+  <div class="meta">
+    Auto-discovered from filesystem, git, and forktex.json &mdash; {{ generated_at }}
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="num">{{ workspace.systems | length }}</div><div class="label">Systems</div></div>
+    <div class="stat"><div class="num">{{ total_containers }}</div><div class="label">Containers</div></div>
+    <div class="stat"><div class="num">{{ total_ports }}</div><div class="label">Ports</div></div>
+    <div class="stat"><div class="num">{{ total_packages }}</div><div class="label">Packages</div></div>
+    <div class="stat"><div class="num">{{ "{:,}".format(total_lines) }}</div><div class="label">Lines of Code</div></div>
+  </div>
+
+  {% if edges_json and edges_json != '[]' %}
+  <h2>Dependency Graph</h2>
+  <div class="graph-wrap" id="dep-graph"></div>
+  {% endif %}
+
+  <h2>Systems</h2>
+  <div class="cards">
+    {% for sys in workspace.systems %}
+    <div class="card" onclick="showSystem('{{ sys.id }}')">
+      <div class="card-header">
+        <span class="card-title">{{ sys.name }}</span>
+        <span class="card-badge level">{{ sys.fsd_level }}</span>
+      </div>
+      <p style="font-size:.9rem;color:var(--tm)">
+        {% if sys.provider %}{{ sys.provider }} / {{ sys.region }}{% endif %}
+        {% if sys.domains %}&mdash; {{ sys.domains[0] }}{% endif %}
+      </p>
+      {% if sys.git %}
+      <div class="git-badge">
+        <span class="git-branch">{{ sys.git.branch }}</span>
+        <span class="git-hash">{{ sys.git.last_commit_hash }}</span>
+        {% if sys.git.dirty %}<span class="git-dirty">*</span>{% endif %}
+      </div>
+      {% endif %}
+      {% if sys.packages %}
+      <div class="pkg-list">
+        {% for p in sys.packages %}
+        <div class="pkg"><span class="name">{{ p.name }}</span><span class="ver">v{{ p.version }}</span></div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="svc-list">
+        {% for c in sys.containers %}
+        <div class="svc">
+          <div class="svc-dot {{ c.service_type.value }}"></div>
+          <span class="svc-name">{{ c.id }}</span>
+          <span class="svc-tech">{{ c.tech_summary }}</span>
+          {% if c.primary_port %}<span class="svc-port">:{{ c.primary_port.host }}</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if all_ports %}
+  <h2>Port Allocation</h2>
+  <table>
+    <tr><th>System</th><th>Service</th><th>Host Port</th><th>Container Port</th><th>Type</th></tr>
+    {% for p in all_ports %}
+    <tr>
+      <td><strong>{{ p.system }}</strong></td>
+      <td>{{ p.service }}</td>
+      <td><code>:{{ p.host_port }}</code></td>
+      <td><code>:{{ p.container_port }}</code></td>
+      <td>{{ p.type }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+
+<!-- LEVEL 2: Container view (per system, hidden by default) -->
+{% for sys in workspace.systems %}
+<div id="view-system-{{ sys.id }}" style="display:none">
+  <h1><span>{{ sys.name }}</span> <span class="c4-level">C4 Level 2 — Container</span></h1>
+  <div class="meta">
+    FSD {{ sys.fsd_level }}
+    {% if sys.deploy_strategy %}&mdash; {{ sys.deploy_strategy }} deployment{% endif %}
+    {% if sys.domains %}&mdash; {{ sys.domains[0] }}{% endif %}
+  </div>
+
+  <h2>Containers</h2>
+  <div class="cards">
+    {% for c in sys.containers %}
+    <div class="card {% if c.components %}{% else %}no-click{% endif %}" {% if c.components %}onclick="showContainer('{{ sys.id }}', '{{ c.id }}')"{% endif %}>
+      <div class="card-header">
+        <span class="card-title">{{ c.id }}</span>
+        <span class="card-badge {{ c.service_type.value }}">{{ c.service_type.value }}</span>
+      </div>
+      <div>
+        {% for t in c.technology %}
+        <span class="tech {{ t.category.value }}">{{ t.name }}{% if t.version %} {{ t.version }}{% endif %}</span>
+        {% endfor %}
+      </div>
+      {% if c.primary_port %}
+      <p style="font-size:.85rem;margin-top:.5rem"><code>:{{ c.primary_port.host }} &rarr; :{{ c.primary_port.container }}</code>
+      {% if c.health %} &mdash; health: <code>{{ c.health.path }}</code>{% endif %}</p>
+      {% endif %}
+      {% if c.components %}
+      <p style="font-size:.8rem;color:var(--p);margin-top:.25rem">{{ c.components | length }} component(s) &mdash; click to drill in</p>
+      {% endif %}
+      {% if c.dependencies %}
+      <p style="font-size:.8rem;color:var(--tm)">{{ c.dependencies | length }} dependencies</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if sys.relationships %}
+  <h2>Relationships</h2>
+  <table>
+    <tr><th>From</th><th>To</th><th>Description</th><th>Protocol</th></tr>
+    {% for r in sys.relationships %}
+    <tr><td>{{ r.source_id }}</td><td>{{ r.target_id }}</td><td>{{ r.description }}</td><td>{{ r.protocol }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endfor %}
+
+<!-- LEVEL 3: Component view (per container, hidden by default) -->
+{% for sys in workspace.systems %}
+{% for c in sys.containers %}
+{% if c.components %}
+<div id="view-container-{{ sys.id }}-{{ c.id }}" style="display:none">
+  <h1><span>{{ sys.name }}</span> / {{ c.id }} <span class="c4-level">C4 Level 3 — Component</span></h1>
+  <div class="meta">
+    {{ c.tech_summary }}
+    {% if c.primary_port %}&mdash; <code>:{{ c.primary_port.host }}</code>{% endif %}
+    &mdash; {{ c.components | length }} components
+    &mdash; {{ c.components | map(attribute='line_count') | sum | default(0) }} lines of code
+  </div>
+
+  <h2>Components</h2>
+  <div class="comp-grid">
+    {% for comp in c.components %}
+    <div class="comp">
+      <div class="name">{{ comp.name }}{% if comp.line_count %} <span style="color:var(--tm);font-weight:400;font-size:.75rem">{{ comp.line_count }} LoC</span>{% endif %}</div>
+      <div class="desc">{{ comp.description }}</div>
+      {% if comp.line_count %}
+      <div class="loc-bar" style="width:{{ [comp.line_count / 50, 100] | min }}%"></div>
+      {% endif %}
+      {% if comp.files %}
+      <div class="files">{{ comp.files | join(', ') }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if c.dependencies %}
+  <h2>Dependencies (top {{ c.dependencies | length }})</h2>
+  <table>
+    <tr><th>Package</th><th>Version</th></tr>
+    {% for d in c.dependencies %}
+    <tr><td>{{ d.name }}</td><td><code>{{ d.version }}</code></td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+{% endfor %}
+{% endfor %}
+
+<footer>
+  Auto-generated by <code>forktex arch</code> &mdash; {{ generated_at }}
+</footer>
+</div>
+
+<script>
+// C4 drill-down navigation
+let currentSystem = null;
+let currentContainer = null;
+
+function hideAll() {
+  document.querySelectorAll('[id^="view-"]').forEach(el => el.style.display = 'none');
+}
+
+function showLevel(level) {
+  hideAll();
+  if (level === 'context') {
+    document.getElementById('view-context').style.display = 'block';
+    document.getElementById('bc-sep-1').style.display = 'none';
+    document.getElementById('bc-system').style.display = 'none';
+    document.getElementById('bc-sep-2').style.display = 'none';
+    document.getElementById('bc-container').style.display = 'none';
+    currentSystem = null;
+    currentContainer = null;
+  } else if (level === 'container' && currentSystem) {
+    showSystem(currentSystem);
+  }
+}
+
+function showSystem(sysId) {
+  hideAll();
+  const el = document.getElementById('view-system-' + sysId);
+  if (el) {
+    el.style.display = 'block';
+    currentSystem = sysId;
+    currentContainer = null;
+    document.getElementById('bc-sep-1').style.display = '';
+    document.getElementById('bc-system').style.display = '';
+    document.getElementById('bc-system').textContent = sysId;
+    document.getElementById('bc-sep-2').style.display = 'none';
+    document.getElementById('bc-container').style.display = 'none';
+  }
+}
+
+function showContainer(sysId, containerId) {
+  hideAll();
+  const el = document.getElementById('view-container-' + sysId + '-' + containerId);
+  if (el) {
+    el.style.display = 'block';
+    currentSystem = sysId;
+    currentContainer = containerId;
+    document.getElementById('bc-sep-1').style.display = '';
+    document.getElementById('bc-system').style.display = '';
+    document.getElementById('bc-system').textContent = sysId;
+    document.getElementById('bc-sep-2').style.display = '';
+    document.getElementById('bc-container').style.display = '';
+    document.getElementById('bc-container').textContent = containerId;
+  }
+}
+
+// ── Dependency Graph (SVG) ──────────────────────────────────────────
+(function() {
+  const graphEl = document.getElementById('dep-graph');
+  if (!graphEl) return;
+
+  const edges = {{ edges_json | safe }};
+  if (!edges.length) return;
+
+  // Collect unique nodes from edges
+  const nodeSet = new Set();
+  edges.forEach(e => { nodeSet.add(e.source); nodeSet.add(e.target); });
+  const nodes = Array.from(nodeSet).map((id, i) => ({ id, x: 0, y: 0, idx: i }));
+  const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
+
+  // Layout: arrange in a grid
+  const W = graphEl.offsetWidth || 900;
+  const cols = Math.ceil(Math.sqrt(nodes.length));
+  const cellW = W / (cols + 1);
+  const cellH = 60;
+  nodes.forEach((n, i) => {
+    n.x = (i % cols + 0.5) * cellW + 40;
+    n.y = Math.floor(i / cols) * cellH + 40;
+  });
+  const H = Math.ceil(nodes.length / cols) * cellH + 80;
+
+  // Build SVG
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.style.width = '100%';
+  svg.style.height = H + 'px';
+
+  // Arrow marker
+  const defs = document.createElementNS(ns, 'defs');
+  const marker = document.createElementNS(ns, 'marker');
+  marker.setAttribute('id', 'arrow');
+  marker.setAttribute('viewBox', '0 0 10 10');
+  marker.setAttribute('refX', '10'); marker.setAttribute('refY', '5');
+  marker.setAttribute('markerWidth', '6'); marker.setAttribute('markerHeight', '6');
+  marker.setAttribute('orient', 'auto-start-reverse');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+  path.setAttribute('fill', '#8b949e');
+  marker.appendChild(path);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  // Draw edges
+  const boxW = 140, boxH = 28;
+  edges.forEach(e => {
+    const src = nodeMap[e.source], tgt = nodeMap[e.target];
+    if (!src || !tgt) return;
+    const g = document.createElementNS(ns, 'g');
+    g.setAttribute('class', 'graph-edge');
+    const line = document.createElementNS(ns, 'line');
+    line.setAttribute('x1', src.x + boxW/2); line.setAttribute('y1', src.y + boxH/2);
+    line.setAttribute('x2', tgt.x + boxW/2); line.setAttribute('y2', tgt.y + boxH/2);
+    line.setAttribute('marker-end', 'url(#arrow)');
+    g.appendChild(line);
+    // Edge label
+    const lbl = document.createElementNS(ns, 'text');
+    lbl.setAttribute('x', (src.x + tgt.x + boxW) / 2);
+    lbl.setAttribute('y', (src.y + tgt.y + boxH) / 2 - 4);
+    lbl.setAttribute('text-anchor', 'middle');
+    lbl.setAttribute('fill', '#8b949e'); lbl.setAttribute('font-size', '9');
+    lbl.textContent = e.label;
+    g.appendChild(lbl);
+    svg.appendChild(g);
+  });
+
+  // Draw nodes
+  nodes.forEach(n => {
+    const g = document.createElementNS(ns, 'g');
+    g.setAttribute('class', 'graph-node');
+    const rect = document.createElementNS(ns, 'rect');
+    rect.setAttribute('x', n.x); rect.setAttribute('y', n.y);
+    rect.setAttribute('width', boxW); rect.setAttribute('height', boxH);
+    g.appendChild(rect);
+    const text = document.createElementNS(ns, 'text');
+    text.setAttribute('x', n.x + boxW/2); text.setAttribute('y', n.y + boxH/2 + 4);
+    text.setAttribute('text-anchor', 'middle');
+    text.textContent = n.id;
+    g.appendChild(text);
+    svg.appendChild(g);
+  });
+
+  graphEl.appendChild(svg);
+})();
+</script>
+</body>
+</html>

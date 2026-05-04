@@ -1,0 +1,259 @@
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+"""forktex agents root — Ecosystem-aware root agent.
+
+Starts a persistent agent process with full FORKTEX ecosystem context:
+- All AGENTS.md files loaded as system context
+- Architecture data from latest C4 snapshot
+- RAG-backed semantic search over ecosystem knowledge
+- Full filesystem + git + bash tools
+
+The root agent is the "factory brain" — it understands every repo, every
+service, every library, and can reason about cross-cutting concerns.
+
+Usage:
+    forktex agents root
+    forktex agents root --task "What databases does each platform use?"
+    forktex agents root --dir ~/Desktop/forktex
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import asyncclick as click
+
+from forktex.agent.ui.console import console, info, error
+from forktex.core.paths import get_architecture_dir
+
+
+ECOSYSTEM_COLLECTION = "forktex-ecosystem"
+
+
+def _find_ecosystem_root(start: Path) -> Path | None:
+    current = start
+    for _ in range(5):
+        parent = current.parent
+        repos = [d for d in parent.iterdir() if d.is_dir() and (d / ".git").is_dir()]
+        if len(repos) >= 3:
+            return parent
+        current = parent
+    return None
+
+
+def _load_grounding(root: Path) -> str:
+    """Load the ecosystem AGENTS.md as grounding context."""
+    agents_md = root / "docs" / "AGENTS.md"
+    if agents_md.exists():
+        return agents_md.read_text(encoding="utf-8")
+    return ""
+
+
+def _load_architecture(root: Path) -> str:
+    """Load the latest architecture snapshot summary."""
+    arch_dir = get_architecture_dir(root)
+    if not arch_dir.exists():
+        return ""
+
+    arch_files = sorted(arch_dir.glob("arch-*.json"))
+    if not arch_files:
+        return ""
+
+    latest = arch_files[-1]
+    try:
+        data = json.loads(latest.read_text(encoding="utf-8"))
+        systems = data.get("systems", [])
+        summary_lines = [
+            f"Architecture snapshot ({data.get('generated_at', 'unknown')}):"
+        ]
+        for sys in systems:
+            name = sys.get("name", "?")
+            level = sys.get("fsd_level", "?")
+            containers = len(sys.get("containers", []))
+            summary_lines.append(f"  - {name}: {level}, {containers} containers")
+        return "\n".join(summary_lines)
+    except (json.JSONDecodeError, OSError):
+        return ""
+
+
+def _load_libraries(root: Path) -> str:
+    """Load the library dependency graph summary."""
+    lib_file = root / "docs" / "engineering" / "libraries.json"
+    if not lib_file.exists():
+        return ""
+
+    try:
+        data = json.loads(lib_file.read_text(encoding="utf-8"))
+        libs = data.get("libraries", [])
+        lines = ["Library catalog:"]
+        for lib in libs:
+            lines.append(
+                f"  - {lib['name']} v{lib.get('version', '?')} ({lib['path']}) — {lib.get('description', '')}"
+            )
+
+        edges = data.get("dependency_graph", {}).get("edges", [])
+        if edges:
+            lines.append("Dependencies:")
+            for a, b in edges:
+                lines.append(f"  {a} → {b}")
+
+        return "\n".join(lines)
+    except (json.JSONDecodeError, OSError):
+        return ""
+
+
+def _build_system_prompt(root: Path) -> str:
+    """Assemble the root agent's system prompt from ecosystem knowledge."""
+    parts = [
+        "You are the FORKTEX root agent — the factory brain.",
+        "You have full awareness of the entire FORKTEX ecosystem.",
+        "You can reason about cross-repo dependencies, architecture, and workflows.",
+        "You have access to filesystem, git, bash, and web tools.",
+        "",
+        "When asked about the ecosystem, draw on the grounding knowledge below.",
+        "When asked to make changes, consider the impact across all repos.",
+        "When unsure, search the ecosystem RAG collection for detailed context.",
+        "",
+    ]
+
+    grounding = _load_grounding(root)
+    if grounding:
+        parts.append("=== ECOSYSTEM GROUNDING ===")
+        parts.append(grounding)
+        parts.append("")
+
+    architecture = _load_architecture(root)
+    if architecture:
+        parts.append("=== ARCHITECTURE ===")
+        parts.append(architecture)
+        parts.append("")
+
+    libraries = _load_libraries(root)
+    if libraries:
+        parts.append("=== LIBRARIES ===")
+        parts.append(libraries)
+        parts.append("")
+
+    return "\n".join(parts)
+
+
+@click.command(name="root")
+@click.option("--dir", "-d", "root_dir", default=None, help="Ecosystem root directory")
+@click.option(
+    "--task", "-t", default=None, help="One-shot task (otherwise interactive)"
+)
+@click.option(
+    "--type",
+    "agent_type",
+    default="assistant",
+    help="Agent type (assistant, developer, researcher)",
+)
+async def root_agent(root_dir: str | None, task: str | None, agent_type: str):
+    """Start the ecosystem-aware root agent.
+
+    The root agent has full context of every FORKTEX repo, library, and
+    architecture component. It uses RAG search for detailed queries and
+    has access to all agent tools.
+
+    In interactive mode, it starts a REPL. With --task, it runs a single task.
+    """
+    if root_dir:
+        root = Path(root_dir)
+    else:
+        root = _find_ecosystem_root(Path.cwd())
+
+    if not root or not root.is_dir():
+        error("Could not find ecosystem root. Use --dir to specify.")
+        return
+
+    info(f"Ecosystem root: {root}")
+    info("Loading ecosystem knowledge...")
+
+    system_prompt = _build_system_prompt(root)
+    context_size = len(system_prompt)
+    info(f"System context: {context_size:,} chars")
+
+    # Try to enhance with RAG collection info
+    rag_available = False
+    try:
+        from forktex.intelligence import Intelligence
+
+        async with Intelligence() as ai:
+            collections = await ai.list_collections()
+            for c in collections.get("data", []):
+                if c.get("name") == ECOSYSTEM_COLLECTION:
+                    rag_available = True
+                    doc_count = c.get("document_count", 0)
+                    info(
+                        f"RAG collection '{ECOSYSTEM_COLLECTION}': {doc_count} documents"
+                    )
+                    break
+
+        if not rag_available:
+            info(
+                "RAG collection not indexed. Run: forktex intelligence index-ecosystem"
+            )
+    except Exception:
+        info("Intelligence API not available — running with static context only")
+
+    # Build agent tools configuration
+    from forktex.agent.types import AGENT_TYPES
+
+    resolved_type = AGENT_TYPES.get(agent_type, AGENT_TYPES["assistant"])
+    info(f"Agent type: {resolved_type.name} ({len(resolved_type.allowed_tools)} tools)")
+
+    if task:
+        # One-shot mode
+        info(f"Task: {task}")
+
+        from forktex.agent.intelligence.agent import LocalAgentLoop
+        from forktex.agent.intelligence.tool_server import IntelligenceToolServer
+
+        tool_server = IntelligenceToolServer(str(root))
+        tools = tool_server.get_tool_schemas()
+
+        agent = LocalAgentLoop(
+            system=system_prompt, tools=tools, tool_server=tool_server
+        )
+        response = await agent.run(task)
+
+        console.print("\n[bold]Response:[/bold]\n")
+        console.print(response.text)
+
+        if response.tool_calls_made:
+            console.print(
+                f"\n[dim]{response.tool_calls_made} tool calls, "
+                f"{response.input_tokens + response.output_tokens} tokens[/dim]"
+            )
+    else:
+        # Interactive mode — delegate to chat with enriched system prompt
+        from forktex.agent.intelligence.cli.chat import chat as _chat_fn
+
+        ctx = click.get_current_context()
+        # Store system prompt in context for the chat to pick up
+        ctx.ensure_object(dict)
+        ctx.obj["system_prompt"] = system_prompt
+        ctx.obj["project"] = str(root)
+        await ctx.invoke(_chat_fn, project=str(root))

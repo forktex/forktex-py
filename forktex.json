@@ -1,0 +1,190 @@
+{
+  "manifestVersion": "1.0.0",
+  "name": "forktex-py",
+  "description": "ForkTex Python repo — the CLI, agent, architecture discovery, FSD audit, and orchestration toolkit (single-package repo)",
+  "version": "0.2.5",
+  "fsd": {
+    "version": "1.0.1",
+    "profiles": [
+      "workspace/python-monorepo"
+    ],
+    "targetLevel": "L3",
+    "atoms": {
+      "test": {
+        "commands": [
+          "poetry run pytest tests/ -q"
+        ]
+      },
+      "typecheck": {
+        "targets": [
+          "typecheck"
+        ],
+        "description": "Static type system verifies interface correctness (pyright; install via dev deps)",
+        "commands": [
+          "python3 -m pyright src/"
+        ]
+      },
+      "audit": {
+        "targets": [
+          "audit"
+        ],
+        "description": "Scan installed Python deps for known CVEs (pip-audit; install via dev deps)",
+        "commands": [
+          "poetry run pip-audit --skip-editable"
+        ]
+      },
+      "build": {
+        "targets": [
+          "build"
+        ],
+        "description": "Build sdist + wheel into dist/ and verify metadata with twine check",
+        "commands": [
+          "rm -rf dist/",
+          "python3 -m build",
+          "python3 -m twine check dist/*"
+        ]
+      },
+      "publish-test": {
+        "targets": [
+          "publish-test"
+        ],
+        "description": "Upload dist/ to TestPyPI (https://test.pypi.org) for rehearsal. SDK deps must already be on TestPyPI.",
+        "commands": [
+          "python3 -m twine upload --repository testpypi dist/*"
+        ]
+      },
+      "publish": {
+        "targets": [
+          "publish"
+        ],
+        "description": "Upload dist/ to production PyPI (irreversible per-version)",
+        "commands": [
+          "python3 -m twine upload dist/*"
+        ]
+      },
+      "dev-link-sdks": {
+        "targets": [
+          "dev-link-sdks"
+        ],
+        "description": "pip install -e the three sibling SDK repos (cloud/intelligence/network) for local development against source trees",
+        "commands": [
+          "@bash -c 'for d in ../cloud/sdk-py ../intelligence/sdk-py ../network/sdk-py; do [ -d \"$$d\" ] || { echo \"missing: $$d\"; exit 1; }; done'",
+          "pip install --break-system-packages -e ../cloud/sdk-py -e ../intelligence/sdk-py -e ../network/sdk-py",
+          "@echo 'linked. export FORKTEX_DEV_SIBLING_SDKS=1 to flag the dev-linked banner on forktex --version'"
+        ]
+      },
+      "dev-unlink-sdks": {
+        "targets": [
+          "dev-unlink-sdks"
+        ],
+        "description": "Reinstall the three SDKs from their pinned PyPI versions, restoring the published surface",
+        "commands": [
+          "pip install --break-system-packages --force-reinstall --no-deps forktex-cloud forktex-intelligence forktex-network"
+        ]
+      },
+      "dev-install": {
+        "targets": [
+          "dev-install"
+        ],
+        "description": "One-shot editable install of the four ecosystem packages (cloud, intelligence, network SDKs + forktex-py CLI) from sibling source trees",
+        "commands": [
+          "@bash -c 'for d in ../cloud/sdk-py ../intelligence/sdk-py ../network/sdk-py; do [ -d \"$$d\" ] || { echo \"missing: $$d\"; exit 1; }; done'",
+          "pip install --break-system-packages -e ../cloud/sdk-py -e ../intelligence/sdk-py -e ../network/sdk-py -e .",
+          "@echo ''",
+          "@echo 'installed. run \"export FORKTEX_DEV_SIBLING_SDKS=1\" to flag the dev-linked banner on forktex --version.'"
+        ]
+      },
+      "installer-build": {
+        "targets": [
+          "installer-build"
+        ],
+        "description": "Bundle scripts/install.sh + install.ps1 with _install_core.py inlined into dist/install/ for hosting",
+        "commands": [
+          "python3 scripts/build_installers.py"
+        ]
+      },
+      "installer-test": {
+        "targets": [
+          "installer-test"
+        ],
+        "description": "Run the installer across Linux distros via Docker (ubuntu/fedora/arch). Requires installer-build first.",
+        "commands": [
+          "bash scripts/install_test.sh"
+        ]
+      },
+      "license-check": {
+        "targets": [
+          "license-check"
+        ],
+        "description": "Verify every source file carries the current AGPL-3.0 + Commercial dual-license header (CI gate)",
+        "commands": [
+          "python3 scripts/license_headers.py check"
+        ]
+      },
+      "license-fix": {
+        "targets": [
+          "license-fix"
+        ],
+        "description": "Add or update the dual-license header on every source file (idempotent)",
+        "commands": [
+          "python3 scripts/license_headers.py fix"
+        ]
+      },
+      "license-strip": {
+        "targets": [
+          "license-strip"
+        ],
+        "description": "Remove the dual-license header from every source file (use before license model changes)",
+        "commands": [
+          "python3 scripts/license_headers.py strip"
+        ]
+      },
+      "codegen": {
+        "targets": [
+          "codegen"
+        ],
+        "description": "Not applicable: forktex-py has no schema-derived artifacts",
+        "commands": [
+          "@echo 'codegen: not applicable for forktex-py (pure Python CLI, no generated code)'"
+        ]
+      },
+      "codegen-check": {
+        "targets": [
+          "codegen-check"
+        ],
+        "description": "Not applicable: forktex-py has no generated artifacts to verify",
+        "commands": [
+          "@echo 'codegen-check: not applicable for forktex-py'"
+        ]
+      },
+      "ci": {
+        "targets": [
+          "ci"
+        ],
+        "description": "Aggregate quality gate before publish: format-check + lint + license-check + audit + test + build",
+        "commands": [
+          "@$(MAKE) format-check",
+          "@$(MAKE) lint",
+          "@$(MAKE) license-check",
+          "@$(MAKE) audit",
+          "@$(MAKE) test",
+          "@$(MAKE) build",
+          "@echo ''",
+          "@echo 'CI passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'",
+          "@echo '(make typecheck reports cross-SDK type drifts; tracked separately)'"
+        ]
+      }
+    }
+  },
+  "packages": [
+    {
+      "name": "forktex",
+      "path": ".",
+      "version": "0.2.5",
+      "publishable": true,
+      "language": "python",
+      "registry": "https://pypi.org",
+      "description": "CLI, agent, MCP-style orchestrator, architecture discovery, and audit toolkit for ForkTex"
+    }
+  ]
+}
