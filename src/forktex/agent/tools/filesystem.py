@@ -211,7 +211,7 @@ async def _grep_search(
                         )
                         if len(results) >= 100:
                             return results
-            except PermissionError, OSError:
+            except (PermissionError, OSError):
                 continue
         return results
 

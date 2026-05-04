@@ -173,7 +173,7 @@ async def run(project: Optional[str] = None) -> None:
 
         try:
             choice = (await session.prompt_async("> ")).strip()
-        except EOFError, KeyboardInterrupt:
+        except (EOFError, KeyboardInterrupt):
             console.print("[dim]bye.[/dim]")
             return
 
@@ -495,7 +495,7 @@ async def _show_service_help(
             .strip()
             .lower()
         )
-    except EOFError, KeyboardInterrupt:
+    except (EOFError, KeyboardInterrupt):
         return False
     if answer and answer not in ("y", "yes", ""):
         console.print("[dim]dismissed.[/dim]")

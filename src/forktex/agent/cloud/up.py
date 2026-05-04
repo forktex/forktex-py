@@ -62,6 +62,12 @@ from forktex_cloud import paths as _cloud_paths
     "--no-observability", is_flag=True, help="Disable Loki + Promtail (local)"
 )
 @click.option("-v", "--verbose", is_flag=True, help="Verbose output")
+@click.option(
+    "--archive",
+    "archive_delivery",
+    is_flag=True,
+    help="Upload images via docker save instead of registry pull (for locally-built images)",
+)
 @click.pass_context
 async def up(
     ctx,
@@ -80,6 +86,7 @@ async def up(
     raw,
     no_observability,
     verbose,
+    archive_delivery,
 ):
     """Deploy (remote) or start local mode (--env local)."""
     if environment == "local":
@@ -104,11 +111,12 @@ async def up(
             skip_dns=skip_dns,
             skip_ssl=skip_ssl,
             verbose=verbose,
+            archive_delivery=archive_delivery,
         )
 
 
 def _run_remote(
-    ctx, *, environment, name, flavour, region, skip_dns, skip_ssl, verbose
+    ctx, *, environment, name, flavour, region, skip_dns, skip_ssl, verbose, archive_delivery=False
 ):
     """Deploy via the cloud controller API (POST /api/v1/up)."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -118,7 +126,7 @@ def _run_remote(
     from forktex_cloud.client import ForktexCloudClient
 
     with ForktexCloudClient.from_context(cloud_ctx) as client:
-        click.echo(f"Running up pipeline via {cloud_ctx.controller}...")
+        click.echo(f"  Dispatching deploy via {cloud_ctx.controller}...")
         result = client.up(
             name=name,
             flavour=flavour,
@@ -127,14 +135,98 @@ def _run_remote(
             skip_dns=skip_dns,
             skip_ssl=skip_ssl,
             project_dir=project_root,
+            archive_delivery=archive_delivery,
         )
-        status = result.status
-        server_id = getattr(result, "server_id", "")
-        click.echo(f"Up pipeline complete: status={status}")
-        if server_id:
-            click.echo(f"Server: {server_id}")
-            if verbose:
-                click.echo(f"Full response: {result}")
+        deployment_id = result.deployment_id
+        click.echo(f"  Deployment: {deployment_id}")
+        click.echo()
+
+        _stream_run(client, deployment_id=deployment_id, verbose=verbose)
+
+
+def _stream_run(client, *, run_id: str | None = None, deployment_id: str | None = None, verbose: bool = False) -> None:
+    """Stream and render flow run events until terminal state.
+
+    Pass either ``run_id`` (flow run UUID) or ``deployment_id`` (cloud deployment ID).
+    When only ``deployment_id`` is provided, the run UUID is resolved via the runs API.
+    """
+    if not run_id and deployment_id:
+        import time as _time
+        # The flow run is created asynchronously — poll briefly until it appears.
+        deadline = _time.monotonic() + 15
+        while _time.monotonic() < deadline:
+            runs = client.list_flow_runs(deployment_id=deployment_id, limit=1)
+            if runs:
+                run_id = str(runs[0].runId)
+                break
+            _time.sleep(1)
+        if not run_id:
+            click.echo(f"  No flow run found for deployment {deployment_id} — check: forktex cloud status")
+            return
+    _STEP_STATUS_COLOR = {
+        "running":   ("cyan",   "▶"),
+        "completed": ("green",  "✓"),
+        "failed":    ("red",    "✗"),
+        "cancelled": ("yellow", "⊘"),
+        "pending":   ("white",  "·"),
+    }
+
+    step_lines: dict[str, int] = {}  # step_name → line index for overwrite
+
+    def _fmt_step(name: str, status: str) -> str:
+        color, icon = _STEP_STATUS_COLOR.get(status, ("white", "?"))
+        label = click.style(f"{icon} {name}", fg=color)
+        return f"  {label}"
+
+    try:
+        for event in client.stream_flow_run_events(run_id):
+            # Events are typed: StepRunRead has stepName, RunRead has workflowName
+            step_name = getattr(event, "stepName", None) or (
+                event.get("stepName") if isinstance(event, dict) else None
+            )
+            status = getattr(event, "status", None) or (
+                event.get("status", "") if isinstance(event, dict) else ""
+            )
+
+            if not step_name:
+                # Top-level run transition
+                if status in ("completed", "failed", "cancelled"):
+                    color = "green" if status == "completed" else "red" if status == "failed" else "yellow"
+                    icon = "✓" if status == "completed" else "✗" if status == "failed" else "⊘"
+                    click.echo()
+                    click.echo(f"  {click.style(icon + ' Deploy ' + status, fg=color, bold=True)}")
+                    if status == "failed" and verbose:
+                        error = getattr(event, "error", None) or (
+                            event.get("error", "") if isinstance(event, dict) else ""
+                        )
+                        if error:
+                            click.echo(f"  {click.style('Error:', fg='red')} {str(error)[:400]}")
+                continue
+
+            # Step-level: print once, overwrite on status change
+            line = _fmt_step(step_name, status)
+            if step_name not in step_lines:
+                click.echo(line)
+                step_lines[step_name] = len(step_lines)
+            else:
+                steps_below = len(step_lines) - step_lines[step_name] - 1
+                if steps_below > 0:
+                    click.echo(f"\033[{steps_below + 1}A\033[2K{line}\033[{steps_below}B", nl=False)
+                else:
+                    click.echo(f"\r\033[2K{line}", nl=False)
+                    click.echo()
+
+    except Exception as exc:
+        # SSE stream broken (server restarted, network blip) — fall back
+        # to polling the final state
+        click.echo(f"\n  (stream disconnected: {exc}) — fetching final state...")
+        try:
+            run = client.get_flow_run(run_id)
+            final = run.status
+            color = "green" if final == "completed" else "red"
+            click.echo(f"  Deploy {click.style(final, fg=color, bold=True)}")
+        except Exception:
+            click.echo(f"  Could not fetch run {run_id} — check: forktex cloud status")
 
 
 def _run_local(
@@ -162,7 +254,7 @@ def _run_local(
 
             manifest = Manifest.load(project_root / "forktex.json", env=env_name)
             project_name = manifest.name or "forktex"
-        except FileNotFoundError, ValueError, KeyError:
+        except (FileNotFoundError, ValueError, KeyError):
             click.echo(
                 f"Warning: could not load manifest, using project name '{project_name}'",
                 err=True,
@@ -191,7 +283,7 @@ def _run_local(
 
                 m = Manifest.load(project_root / "forktex.json", env=env_name)
                 pname = m.name or "forktex"
-            except FileNotFoundError, ValueError, KeyError:
+            except (FileNotFoundError, ValueError, KeyError):
                 click.echo(
                     f"Warning: could not load manifest, using project name '{pname}'",
                     err=True,
@@ -215,7 +307,7 @@ def _run_local(
         from forktex_cloud.secrets.factory import get_secrets_provider
 
         secrets_provider = get_secrets_provider(project_root=project_root)
-    except ValueError, ImportError:
+    except (ValueError, ImportError):
         pass
 
     obs_enabled = not no_observability

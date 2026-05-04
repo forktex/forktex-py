@@ -638,7 +638,7 @@ def check_resolve_rule(
                 else:
                     return False
             return data is not None
-        except json.JSONDecodeError, KeyError:
+        except (json.JSONDecodeError, KeyError):
             return False
 
     return False

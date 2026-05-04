@@ -45,6 +45,13 @@ from forktex.agent.cloud.events import events
 from forktex.agent.cloud.dns import dns
 from forktex.agent.cloud.ssl import ssl
 from forktex.agent.cloud.usage import usage
+from forktex.agent.cloud.provider import provider
+from forktex.agent.cloud.registry import registry
+from forktex.agent.cloud.new import new
+from forktex.agent.cloud.tree import tree
+from forktex.agent.cloud.use import use
+from forktex.agent.cloud.inspect import inspect
+from forktex.agent.cloud.deployment import deployment
 
 
 @click.group()
@@ -86,3 +93,10 @@ cloud.add_command(events)
 cloud.add_command(dns)
 cloud.add_command(ssl)
 cloud.add_command(usage)
+cloud.add_command(provider)
+cloud.add_command(registry)
+cloud.add_command(new)
+cloud.add_command(tree)
+cloud.add_command(use)
+cloud.add_command(inspect)
+cloud.add_command(deployment)
