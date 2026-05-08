@@ -21,16 +21,16 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""forktex agents root — Ecosystem-aware root agent.
+"""forktex agents root — Multi-repo AI assistant with full codebase context.
 
-Starts a persistent agent process with full FORKTEX ecosystem context:
-- All AGENTS.md files loaded as system context
-- Architecture data from latest C4 snapshot
-- RAG-backed semantic search over ecosystem knowledge
-- Full filesystem + git + bash tools
+Starts a persistent agent that loads:
+- Per-project briefings (so it knows what each project does)
+- The latest architecture snapshot (services, ports, dependencies)
+- Semantic search over your indexed codebase
+- Filesystem + git + shell tools
 
-The root agent is the "factory brain" — it understands every repo, every
-service, every library, and can reason about cross-cutting concerns.
+Best for cross-cutting questions like *"Where does the order flow touch
+each service?"* or *"What databases is the platform using?"*
 
 Usage:
     forktex agents root
@@ -94,7 +94,7 @@ def _load_architecture(root: Path) -> str:
             containers = len(sys.get("containers", []))
             summary_lines.append(f"  - {name}: {level}, {containers} containers")
         return "\n".join(summary_lines)
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError):  # fmt: skip
         return ""
 
 
@@ -120,27 +120,26 @@ def _load_libraries(root: Path) -> str:
                 lines.append(f"  {a} → {b}")
 
         return "\n".join(lines)
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError):  # fmt: skip
         return ""
 
 
 def _build_system_prompt(root: Path) -> str:
-    """Assemble the root agent's system prompt from ecosystem knowledge."""
+    """Assemble the agent's system prompt from workspace knowledge."""
     parts = [
-        "You are the FORKTEX root agent — the factory brain.",
-        "You have full awareness of the entire FORKTEX ecosystem.",
-        "You can reason about cross-repo dependencies, architecture, and workflows.",
-        "You have access to filesystem, git, bash, and web tools.",
+        "You are an AI assistant with full context of this multi-project codebase.",
+        "You can reason about cross-project dependencies, architecture, and workflows.",
+        "You have access to filesystem, git, shell, and web tools.",
         "",
-        "When asked about the ecosystem, draw on the grounding knowledge below.",
-        "When asked to make changes, consider the impact across all repos.",
-        "When unsure, search the ecosystem RAG collection for detailed context.",
+        "When asked about the codebase, draw on the briefings below.",
+        "When asked to make changes, consider the impact across every project.",
+        "When unsure, search the indexed codebase for detailed context.",
         "",
     ]
 
     grounding = _load_grounding(root)
     if grounding:
-        parts.append("=== ECOSYSTEM GROUNDING ===")
+        parts.append("=== PROJECT BRIEFINGS ===")
         parts.append(grounding)
         parts.append("")
 
@@ -160,7 +159,7 @@ def _build_system_prompt(root: Path) -> str:
 
 
 @click.command(name="root")
-@click.option("--dir", "-d", "root_dir", default=None, help="Ecosystem root directory")
+@click.option("--dir", "-d", "root_dir", default=None, help="Workspace root directory")
 @click.option(
     "--task", "-t", default=None, help="One-shot task (otherwise interactive)"
 )
@@ -171,13 +170,13 @@ def _build_system_prompt(root: Path) -> str:
     help="Agent type (assistant, developer, researcher)",
 )
 async def root_agent(root_dir: str | None, task: str | None, agent_type: str):
-    """Start the ecosystem-aware root agent.
+    """Start a multi-repo AI assistant with full codebase context.
 
-    The root agent has full context of every FORKTEX repo, library, and
-    architecture component. It uses RAG search for detailed queries and
-    has access to all agent tools.
+    Loads per-project briefings, the latest architecture snapshot, and
+    (when available) a semantic index of your codebase. Best for
+    cross-cutting questions and changes that ripple across projects.
 
-    In interactive mode, it starts a REPL. With --task, it runs a single task.
+    With ``--task`` runs once; without, drops into interactive chat.
     """
     if root_dir:
         root = Path(root_dir)
@@ -185,17 +184,17 @@ async def root_agent(root_dir: str | None, task: str | None, agent_type: str):
         root = _find_ecosystem_root(Path.cwd())
 
     if not root or not root.is_dir():
-        error("Could not find ecosystem root. Use --dir to specify.")
+        error("Could not find your workspace root. Use --dir to specify.")
         return
 
-    info(f"Ecosystem root: {root}")
-    info("Loading ecosystem knowledge...")
+    info(f"Workspace root: {root}")
+    info("Loading workspace knowledge...")
 
     system_prompt = _build_system_prompt(root)
     context_size = len(system_prompt)
     info(f"System context: {context_size:,} chars")
 
-    # Try to enhance with RAG collection info
+    # Enhance with the indexed codebase, when available.
     rag_available = False
     try:
         from forktex.intelligence import Intelligence
@@ -206,15 +205,11 @@ async def root_agent(root_dir: str | None, task: str | None, agent_type: str):
                 if c.get("name") == ECOSYSTEM_COLLECTION:
                     rag_available = True
                     doc_count = c.get("document_count", 0)
-                    info(
-                        f"RAG collection '{ECOSYSTEM_COLLECTION}': {doc_count} documents"
-                    )
+                    info(f"Codebase index ready ({doc_count:,} documents)")
                     break
 
         if not rag_available:
-            info(
-                "RAG collection not indexed. Run: forktex intelligence index-ecosystem"
-            )
+            info("Codebase not yet indexed. Run: forktex intelligence index-ecosystem")
     except Exception:
         info("Intelligence API not available — running with static context only")
 

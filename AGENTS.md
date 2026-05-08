@@ -20,7 +20,8 @@ forktex --version
 forktex fsd --project-dir . makefile sync
 forktex fsd --project-dir . check --json-output
 forktex fsd --project-dir . report
-forktex arch discover --project-dir . --output-dir /tmp/forktex-arch
+forktex graph build --project .          # writes graph.{json,dsl,html}
+forktex graph c4 --format html --project .
 ```
 
 Only fall back to direct module execution when the CLI surface does not exist yet.
@@ -36,7 +37,8 @@ forktex --version
 forktex fsd --project-dir . makefile sync
 forktex fsd --project-dir . check
 forktex fsd --project-dir . report
-forktex arch discover --project-dir . --output-dir /tmp/forktex-arch
+forktex graph build --project .          # writes graph.{json,dsl,html}
+forktex graph c4 --format html --project .
 ```
 
 Useful Make targets:
@@ -103,11 +105,18 @@ Backward compatibility still exists for older top-level cloud fields, but new wo
 
 ## Architecture Notes
 
-`forktex arch discover` should be the default way to inspect repo structure.
+`forktex graph build` is the canonical way to refresh the project graph;
+`forktex graph c4` projects it onto the C4 model. The graph is the
+single source of truth — agent tools, the dashboard, and the C4 view
+all read from it, no duplicate filesystem walks.
 
-For `forktex-py`, architecture should expose both:
+For `forktex-py`, the graph exposes both:
 
 - publishable package nodes
 - internal domain nodes derived from `src/forktex/*`
+- AST-extracted import edges (when `--imports` is on, the default)
 
-If architecture output and FSD output disagree, treat that as a product bug and fix the toolchain rather than documenting around it.
+If the graph and FSD output disagree, treat that as a product bug and
+fix the toolchain rather than documenting around it. After
+`forktex fsd check`, the FSD level is stamped onto the package node so
+the C4 view reflects the latest evaluation.

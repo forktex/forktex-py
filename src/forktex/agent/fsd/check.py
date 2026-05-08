@@ -90,6 +90,38 @@ SKIP_DIRS = {
 }
 
 
+def _targets_and_services_from_graph(
+    graph, project_root: Path
+) -> tuple[set[str], list[dict]]:
+    """Derive Make targets + service-shaped dicts from a project Graph.
+
+    Each ``package`` node carries ``makefile_targets`` and ``has_makefile``
+    in its attrs (added by ``forktex.graph.build``). The root package
+    contributes its targets to ``all_targets``; nested packages become
+    "services" with their own target sets.
+    """
+    all_targets: set[str] = set()
+    services: list[dict] = []
+    for pkg in graph.by_kind("package"):
+        rel = pkg.attrs.get("rel_path") or "."
+        targets = list(pkg.attrs.get("makefile_targets", []))
+        if rel == ".":
+            all_targets.update(targets)
+        else:
+            for t in targets:
+                all_targets.add(f"{pkg.name}-{t}")
+                all_targets.add(t)
+            services.append(
+                {
+                    "name": pkg.name,
+                    "path": str((project_root / rel).resolve()),
+                    "targets": sorted(targets),
+                    "target_count": len(targets),
+                }
+            )
+    return all_targets, services
+
+
 def _discover_services(project_root: Path) -> list[dict]:
     """Discover services by looking for subdirectories with Makefiles."""
     services = []
@@ -115,11 +147,21 @@ def _discover_services(project_root: Path) -> list[dict]:
     return services
 
 
-def _evaluate(project_root: Path) -> dict:
-    """Run the full FSD check and return structured results."""
+def _evaluate(project_root: Path, *, graph=None) -> dict:
+    """Run the full FSD check and return structured results.
+
+    Pass ``graph`` (a ``forktex.graph.models.Graph`` from
+    ``build_graph(ProjectScope(project_root))``) to skip the duplicate
+    Makefile + service walks — the targets and services are read from
+    package node attrs instead. Falls back to filesystem walks when no
+    graph is provided.
+    """
     root_makefile = project_root / "Makefile"
-    all_targets = _find_makefile_targets(root_makefile)
-    services = _discover_services(project_root)
+    if graph is not None:
+        all_targets, services = _targets_and_services_from_graph(graph, project_root)
+    else:
+        all_targets = _find_makefile_targets(root_makefile)
+        services = _discover_services(project_root)
     manifest = ForktexManifest.load(project_root / "forktex.json")
     ensure_manifest_supported(manifest)
     config = load_project_config(project_root)
@@ -205,6 +247,34 @@ def _render_html(data: dict) -> str:
     return template.render(**data)
 
 
+def _enrich_graph_with_fsd_level(project_root: Path, fsd_level: str) -> None:
+    """Best-effort: stamp ``fsd_level`` onto the project's package nodes
+    in ``.forktex/graph.json`` and re-export DSL/HTML/C4 so downstream
+    viewers reflect the freshly-computed level. No-op if the graph hasn't
+    been built yet.
+    """
+    from forktex.graph.build import build_graph
+    from forktex.graph.export import export_graph
+    from forktex.graph.export.c4_html_writer import render_c4_html
+    from forktex.graph.io_proxy import tracked_write
+    from forktex.graph.scopes import ProjectScope
+    from forktex_cloud import paths as _cp
+
+    try:
+        graph = build_graph(ProjectScope(project_root))
+        for pkg in graph.by_kind("package"):
+            pkg.attrs["fsd_level"] = fsd_level
+        export_graph(graph, _cp.project_dir(project_root))
+        tracked_write(
+            _cp.project_dir(project_root) / "c4.html",
+            render_c4_html(graph),
+            kind="c4_export",
+            writer="forktex.agent.fsd.check",
+        )
+    except Exception:  # pragma: no cover — non-fatal enrichment
+        pass
+
+
 @click.command()
 @click.option(
     "--level", default=None, help="Required level (e.g., L2). Exit non-zero if not met."
@@ -223,24 +293,59 @@ def _render_html(data: dict) -> str:
     type=click.Path(),
     help="Write both JSON + HTML to directory",
 )
+@click.option(
+    "--no-enrich-graph",
+    is_flag=True,
+    default=False,
+    help="Skip stamping fsd_level onto the project graph + c4.html.",
+)
+@click.option(
+    "--recursive",
+    "-r",
+    is_flag=True,
+    default=False,
+    help="Also evaluate every nested forktex.json under the project root, "
+    "writing per-project evidence into each nested .forktex/fsd/evidence/.",
+)
 @click.pass_context
-async def check(ctx, level, as_json, html_path, output_dir):
+async def check(ctx, level, as_json, html_path, output_dir, no_enrich_graph, recursive):
     """Verify that a project meets the ForkTex Standard for Delivery."""
     project_root: Path = ctx.obj["project_root"]
-    data = _evaluate(project_root)
+    # Build the graph once and reuse for evaluation + enrichment.
+    from forktex.graph.build import build_graph
+    from forktex.graph.scopes import ProjectScope
+
+    graph = build_graph(ProjectScope(project_root))
+    data = _evaluate(project_root, graph=graph)
 
     # Determine output directory
     out_dir = Path(output_dir) if output_dir else get_fsd_evidence_dir(project_root)
 
-    # Always write JSON + HTML to output dir
+    # Always write JSON + HTML to output dir using stable filenames; the
+    # generated_at field inside the JSON carries the timestamp, and the
+    # filesystem mtime preserves it for OS-level tooling.
     out_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
 
-    json_path = out_dir / f"check-{ts}.json"
-    json_path.write_text(json.dumps(data, indent=2))
+    from forktex.graph.io_proxy import tracked_write
 
-    html_out = Path(html_path) if html_path else out_dir / f"check-{ts}.html"
-    html_out.write_text(_render_html(data))
+    json_path = out_dir / "check.json"
+    tracked_write(
+        json_path,
+        json.dumps(data, indent=2),
+        kind="fsd_evidence",
+        writer="forktex.agent.fsd.check",
+    )
+
+    html_out = Path(html_path) if html_path else out_dir / "check.html"
+    tracked_write(
+        html_out,
+        _render_html(data),
+        kind="fsd_evidence",
+        writer="forktex.agent.fsd.check",
+    )
+
+    if not no_enrich_graph:
+        _enrich_graph_with_fsd_level(project_root, data.get("level", "L0"))
 
     # Console output
     if as_json:
@@ -270,3 +375,39 @@ async def check(ctx, level, as_json, html_path, output_dir):
             sys.exit(1)
         elif level:
             click.echo(f"\nPASSED: Required {level}, achieved {data['level']}")
+
+    if recursive:
+        from forktex.graph.build import _discover_child_manifests
+
+        nested = _discover_child_manifests(project_root)
+        if nested:
+            click.echo(f"\n──── recursive: {len(nested)} nested forktex.json found")
+        for child_manifest in nested:
+            child_root = child_manifest.parent
+            try:
+                child_data = _evaluate(child_root)
+            except Exception as exc:  # pragma: no cover
+                click.echo(f"  ✗ {child_root.name}: {exc}")
+                continue
+            child_evidence_dir = (
+                Path(output_dir) if output_dir else get_fsd_evidence_dir(child_root)
+            )
+            child_evidence_dir.mkdir(parents=True, exist_ok=True)
+            tracked_write(
+                child_evidence_dir / "check.json",
+                json.dumps(child_data, indent=2),
+                kind="fsd_evidence",
+                writer="forktex.agent.fsd.check",
+            )
+            tracked_write(
+                child_evidence_dir / "check.html",
+                _render_html(child_data),
+                kind="fsd_evidence",
+                writer="forktex.agent.fsd.check",
+            )
+            atoms_pass = child_data.get("satisfied_atoms", 0)
+            atoms_total = atoms_pass + child_data.get("missing_atoms", 0)
+            click.echo(
+                f"  · {child_root.name:25s} {child_data['level']:6s} "
+                f"atoms={atoms_pass}/{atoms_total}"
+            )

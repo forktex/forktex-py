@@ -151,7 +151,7 @@ def _render_connect_error(service: str, url: str, exc: BaseException) -> None:
 @click.option("--no-probe", is_flag=True, help="Skip reachability checks (offline).")
 @click.option("--json", "as_json", is_flag=True, help="Machine-readable output.")
 async def status_cmd(project, no_probe, as_json):
-    """Aggregate status table across cloud, intelligence, and network."""
+    """Quick overview: are you signed in to Cloud, Intelligence, and Network?"""
     root = _project_root(project)
     states = await collect_auth_status(root, probe=not no_probe)
 
@@ -172,6 +172,19 @@ async def status_cmd(project, no_probe, as_json):
         }
         console.print_json(json.dumps(out))
         return
+
+    # Project + environment header (formerly `forktex info`).
+    import sys
+
+    from forktex.agent.ui.display import CLI_VERSION
+
+    console.print(
+        f"[bold]ForkTex[/bold] [dim]v{CLI_VERSION}[/dim]   "
+        f"project: [cyan]{root}[/cyan]   "
+        f"python: [dim]{sys.version.split()[0]}[/dim]   "
+        f"platform: [dim]{sys.platform}[/dim]"
+    )
+    console.print()
 
     table = Table(title="forktex status", show_lines=False)
     table.add_column("Facet", style="bold")
@@ -318,7 +331,7 @@ async def connect_cloud(
     try:
         with ForktexCloudClient(url) as client:
             token_resp = client.login(email, password)
-            access_token = token_resp.access_token
+            access_token = token_resp.accessToken
             with ForktexCloudClient(url, access_token=access_token) as authed:
                 orgs = authed.list_orgs()
             if not orgs:

@@ -60,7 +60,7 @@ from forktex.agent.cloud.deployment import deployment
 )
 @click.pass_context
 async def cloud(ctx, project_dir):
-    """ForkTex Cloud — deploy, manage, and monitor your infrastructure."""
+    """Deploy, manage, and observe your infrastructure."""
     from pathlib import Path
     from forktex.agent.cloud.settings import load_cloud_context
 

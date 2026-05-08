@@ -26,17 +26,19 @@
 from __future__ import annotations
 
 import asyncclick as click
+from forktex.agent.cloud.errors import translate_cloud_errors
 
 
 @click.group()
 @click.pass_context
 async def server(ctx):
-    """VPS server management."""
+    """Create, configure, and manage your cloud servers."""
     pass
 
 
 @server.command("list")
 @click.pass_context
+@translate_cloud_errors
 async def server_list(ctx):
     """List servers."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -76,6 +78,7 @@ async def server_list(ctx):
 @click.option("--location", default=None, help="Data center override")
 @click.option("--project", "project_id", default="", help="Project name")
 @click.pass_context
+@translate_cloud_errors
 async def server_create(
     ctx, name, flavour, region, server_type, image, location, project_id
 ):
@@ -101,6 +104,7 @@ async def server_create(
 @server.command("show")
 @click.argument("server_id")
 @click.pass_context
+@translate_cloud_errors
 async def server_show(ctx, server_id):
     """Show server details."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -117,6 +121,7 @@ async def server_show(ctx, server_id):
 @click.argument("server_id")
 @click.option("--yes", is_flag=True, help="Skip confirmation")
 @click.pass_context
+@translate_cloud_errors
 async def server_destroy(ctx, server_id, yes):
     """Destroy a VPS."""
     if not yes:
@@ -136,6 +141,7 @@ async def server_destroy(ctx, server_id, yes):
 @click.argument("server_id")
 @click.option("--service", default=None, help="Restart a single service by name")
 @click.pass_context
+@translate_cloud_errors
 async def server_restart_cmd(ctx, server_id, service):
     """Restart services on a server."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -155,6 +161,7 @@ async def server_restart_cmd(ctx, server_id, service):
 @click.option("--service", required=True, help="Service/container name")
 @click.argument("command")
 @click.pass_context
+@translate_cloud_errors
 async def server_exec_cmd(ctx, server_id, service, command):
     """Execute a command inside a service container."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -179,6 +186,7 @@ async def server_exec_cmd(ctx, server_id, service, command):
     help="Target slot to make active.",
 )
 @click.pass_context
+@translate_cloud_errors
 async def server_switch_cmd(ctx, server_id, component, to_color):
     """Manually switch blue-green traffic for a component (manual rollback path)."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -198,6 +206,7 @@ async def server_switch_cmd(ctx, server_id, component, to_color):
 @click.option("--component", required=True, help="Compute service id to update.")
 @click.option("--new-image", required=True, help="New docker image (e.g. 'myapi:v2').")
 @click.pass_context
+@translate_cloud_errors
 async def server_update_cmd(ctx, server_id, component, new_image):
     """Blue-green image update: pull, deploy to inactive slot, health check, auto-switch.
 
@@ -224,6 +233,7 @@ async def server_update_cmd(ctx, server_id, component, new_image):
 @click.option("--user", default="root", help="SSH user (default: root)")
 @click.option("--project", "project_id", default=None, help="Project ID")
 @click.pass_context
+@translate_cloud_errors
 async def server_import_cmd(ctx, name, host, user, project_id):
     """Import an existing VPS (BYOVPS)."""
     cloud_ctx = ctx.obj["cloud_ctx"]

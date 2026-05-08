@@ -102,7 +102,7 @@ class ResolveRule(ForkTexModel):
                 for part in (self.path or "").split("."):
                     data = data.get(part) if isinstance(data, dict) else None
                 return data is not None
-            except (json.JSONDecodeError, AttributeError):
+            except (json.JSONDecodeError, AttributeError):  # fmt: skip
                 return False
 
         if self.strategy == "file-content" and _root:
@@ -128,13 +128,39 @@ class Domain(Identifiable):
     scope: Literal["service", "project", "organization"]
 
 
+EvidenceShape = Literal[
+    "diff",
+    "findings",
+    "report",
+    "artifact",
+    "log",
+    "document",
+    "attestation",
+    "metric",
+    "policy",
+]
+QualifierAxis = Literal["service", "env", "custom"]
+
+
 class Atom(Identifiable):
     """A single verifiable capability in the current FSD standard."""
 
     domain: str = ""
+    facet: str | None = None
     resolve: list[ResolveRule] = []
     iso: list[ISORef] = []
     evidence: str = ""
+
+    # Schema additions (1.1.0): variant + audit metadata.
+    axes: list[QualifierAxis] = []
+    evidence_shape: EvidenceShape | None = None
+    evidence_kinds: list[str] = []
+
+    # Migration metadata — surfaces in `forktex fsd report` so authors can
+    # see when an atom replaced or absorbed an older one.
+    renamed_from: str | None = None
+    absorbs: list[str] = []
+    common_variants: list[str] = []
 
     @computed_field
     @property
@@ -203,6 +229,13 @@ class FSDStandard(Versioned):
     facets: list[Facet] = []
     levels: list[Level] = []
 
+    # Schema additions (1.1.0): chord aliases + deprecated-rename map.
+    # ``aliases`` are profile-level Make-target chords (e.g. quality →
+    # [format, lint, typing]); they render as PHONY shortcuts but never
+    # appear in level/facet/mapping bookkeeping.
+    aliases: dict[str, list[str]] = {}
+    aliases_deprecated: dict[str, list[str]] = {}
+
     @computed_field
     @property
     def atoms_by_id(self) -> dict[str, Atom]:
@@ -250,6 +283,24 @@ class FSDStandard(Versioned):
                 ISORef.from_string(s) if isinstance(s, str) else s
                 for s in atom.get("iso", [])
             ]
+
+        # Aliases: split the chord map from the deprecated-rename map.
+        raw_aliases = raw.get("aliases") or {}
+        raw_aliases.pop("_description", None)
+        deprecated = raw_aliases.pop("_deprecated", None) or {}
+        if isinstance(deprecated, dict):
+            deprecated.pop("_description", None)
+        # Drop any remaining underscore-prefixed metadata keys.
+        chords = {k: v for k, v in raw_aliases.items() if not k.startswith("_")}
+        raw["aliases"] = chords
+        raw["aliases_deprecated"] = deprecated
+
+        # Strip top-level proposal markers like ``_status``; pydantic's
+        # ``extra="allow"`` would accept them but we keep the model tidy.
+        for key in list(raw):
+            if key.startswith("_"):
+                del raw[key]
+
         return cls.model_validate(raw)
 
 

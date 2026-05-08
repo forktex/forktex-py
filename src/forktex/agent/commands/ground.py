@@ -21,15 +21,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""forktex agents ground — Regenerate AGENTS.md from filesystem inspection.
+"""forktex agents ground — Refresh project documentation that AI agents read.
 
-Scans sibling git repositories, reads their forktex.json manifests and
-project metadata, and updates AGENTS.md files with current state.
+Walks the projects in your workspace, reads their manifests and metadata,
+and rewrites the per-project markdown briefing the AI assistant uses as
+system context.
 
-Also provides nested git management utilities:
-    forktex agents ground           Regenerate AGENTS.md for current project
-    forktex agents ground --all     Regenerate for all sibling projects
-    forktex agents ground --status  Show ecosystem status (all repos)
+    forktex agents ground            Refresh briefing for the current project
+    forktex agents ground --all      Refresh briefings for every project
+    forktex agents ground --status   Show what's discoverable in your workspace
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def _discover_repos(root: Path) -> list[dict]:
                 pkg = manifest.get("package")
                 if pkg:
                     repo_info["package"] = pkg.get("name")
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError):  # fmt: skip
                 pass
 
         # Check for client/web subdirectories
@@ -123,27 +123,27 @@ def _generate_repo_summary(repo: dict) -> str:
 
 @click.group()
 async def ground():
-    """Ecosystem grounding — manage AGENTS.md and nested repos."""
+    """Refresh project documentation across every repo in your workspace."""
     pass
 
 
 @ground.command(name="status")
-@click.option("--dir", "-d", "root_dir", default=None, help="Ecosystem root directory")
+@click.option("--dir", "-d", "root_dir", default=None, help="Workspace root directory")
 async def ground_status(root_dir: str | None):
-    """Show ecosystem status: all repos, their AGENTS.md, manifests, and packages."""
+    """Show what's discoverable in your workspace: projects, briefings, manifests."""
     if root_dir:
         root = Path(root_dir)
     else:
         root = _find_ecosystem_root(Path.cwd())
 
     if not root or not root.is_dir():
-        error("Could not find ecosystem root. Use --dir to specify.")
+        error("Could not find your workspace root. Use --dir to specify.")
         return
 
     repos = _discover_repos(root)
 
-    console.print(f"\n[bold]FORKTEX Ecosystem[/bold] ({root})\n")
-    console.print(f"  Found [cyan]{len(repos)}[/cyan] repositories:\n")
+    console.print(f"\n[bold]Workspace[/bold] ({root})\n")
+    console.print(f"  Found [cyan]{len(repos)}[/cyan] projects:\n")
 
     for repo in repos:
         agents_status = (
@@ -174,7 +174,7 @@ async def ground_status(root_dir: str | None):
 
 
 @ground.command(name="repos")
-@click.option("--dir", "-d", "root_dir", default=None, help="Ecosystem root directory")
+@click.option("--dir", "-d", "root_dir", default=None, help="Workspace root directory")
 @click.option("--json-out", is_flag=True, help="Output as JSON")
 async def ground_repos(root_dir: str | None, json_out: bool):
     """List all discovered repos with metadata."""
@@ -184,7 +184,7 @@ async def ground_repos(root_dir: str | None, json_out: bool):
         root = _find_ecosystem_root(Path.cwd())
 
     if not root or not root.is_dir():
-        error("Could not find ecosystem root. Use --dir to specify.")
+        error("Could not find your workspace root. Use --dir to specify.")
         return
 
     repos = _discover_repos(root)

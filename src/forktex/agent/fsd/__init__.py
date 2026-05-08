@@ -25,26 +25,58 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import asyncclick as click
 
 from forktex.agent.fsd.check import check
+from forktex.agent.fsd.ecosystem_cmd import ecosystem
 from forktex.agent.fsd.makefile_cli import makefile_group
 from forktex.agent.fsd.report import report
-from forktex.core.paths import resolve_path
 
 
 @click.group()
 @click.option(
-    "--project-dir", default=None, help="Project root directory (default: cwd)"
+    "--project-dir",
+    "-d",
+    default=None,
+    help="Project root (default: walk upward from cwd to find forktex.json)",
 )
 @click.pass_context
 async def fsd(ctx, project_dir):
-    """FSD - ForkTex Standard for Delivery verification and compliance."""
+    """Verify your project against the delivery standard (FSD).
 
+    Runs structural + quality checks, scores a maturity level (L0–L4),
+    and writes evidence under ``.forktex/fsd/evidence/`` so audits and
+    compliance reporting are always one command away. Walks upward from
+    the current directory to find the project, or pass ``--project-dir``.
+    """
+    from forktex.core.paths import find_project_root
+    from forktex.runtime.lifecycle import ensure_runtime
+
+    if project_dir is not None:
+        start = Path(project_dir).resolve()
+    else:
+        start = Path.cwd().resolve()
+    found = find_project_root(start)
+    if found is None:
+        # Allow `fsd ecosystem` to override; otherwise hard fail at the
+        # subcommand level so users get the canonical message.
+        if ctx.invoked_subcommand != "ecosystem":
+            raise click.ClickException(
+                f"no forktex.json found at or above {start}.\n"
+                "Run from a project directory or pass --project-dir /path/to/project."
+            )
+        ctx.ensure_object(dict)
+        ctx.obj["project_root"] = start
+        return
+
+    ensure_runtime(needs_project=True, kind="fsd", project_hint=str(found))
     ctx.ensure_object(dict)
-    ctx.obj["project_root"] = resolve_path(project_dir)
+    ctx.obj["project_root"] = found
 
 
 fsd.add_command(check)
 fsd.add_command(report)
 fsd.add_command(makefile_group)
+fsd.add_command(ecosystem)

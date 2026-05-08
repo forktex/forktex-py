@@ -21,10 +21,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""forktex fsd report - generate ISO compliance evidence by running quality gates.
+"""forktex fsd report - generate FSD evidence by running quality gates.
 
-Runs the actual Make targets (format-check, lint, test, audit) and captures
-their output as structured audit evidence. Outputs JSON + HTML.
+Runs the declared Make targets (format-check, lint, test, security)
+and captures their output as structured evidence. Outputs JSON + HTML.
 """
 
 from __future__ import annotations
@@ -166,7 +166,6 @@ async def report(ctx, output_dir, as_json):
     out = Path(output_dir) if output_dir else get_fsd_evidence_dir(project_root)
     out.mkdir(parents=True, exist_ok=True)
 
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     gate_results = []
     all_passed = True
 
@@ -206,13 +205,24 @@ async def report(ctx, output_dir, as_json):
         "iso_evidence": iso_evidence,
     }
 
-    # Write JSON
-    json_path = out / f"report-{ts}.json"
-    json_path.write_text(json.dumps(data, indent=2))
+    from forktex.graph.io_proxy import tracked_write
 
-    # Write HTML
-    html_path = out / f"report-{ts}.html"
-    html_path.write_text(_render_html(data))
+    # Stable filenames; timestamp is in the JSON body + filesystem mtime.
+    json_path = out / "report.json"
+    tracked_write(
+        json_path,
+        json.dumps(data, indent=2),
+        kind="fsd_evidence",
+        writer="forktex.agent.fsd.report",
+    )
+
+    html_path = out / "report.html"
+    tracked_write(
+        html_path,
+        _render_html(data),
+        kind="fsd_evidence",
+        writer="forktex.agent.fsd.report",
+    )
 
     click.echo()
     click.echo(f"Overall: {'PASSED' if all_passed else 'FAILED'}")

@@ -66,7 +66,7 @@ def load_intelligence_settings(
                 for key in IntelligenceSettings.model_fields:
                     if key in data:
                         values[key] = data[key]
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError):  # fmt: skip
             pass
 
     # Project-level config (overrides global)
@@ -81,7 +81,7 @@ def load_intelligence_settings(
                     for key in IntelligenceSettings.model_fields:
                         if key in data:
                             values[key] = data[key]
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError):  # fmt: skip
                 pass
 
     # Environment variables
@@ -120,10 +120,17 @@ def reset_intelligence_settings() -> None:
 
 def save_intelligence_global(settings: IntelligenceSettings) -> None:
     """Persist settings to the global intelligence config file."""
+    from forktex.graph.io_proxy import tracked_write
+
     _cloud_paths.ensure_global_dir()
     path = _cloud_paths.global_intelligence_file()
     data = {"endpoint": settings.endpoint, "api_key": settings.api_key}
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    tracked_write(
+        path,
+        json.dumps(data, indent=2) + "\n",
+        kind="intelligence_settings",
+        writer="forktex.agent.intelligence.settings",
+    )
 
 
 def save_intelligence_project(
@@ -132,7 +139,14 @@ def save_intelligence_project(
     """Persist settings to the project intelligence config file."""
     from pathlib import Path as _P
 
+    from forktex.graph.io_proxy import tracked_write
+
     _cloud_paths.ensure_project_dirs(_P(project_root))
     path = _cloud_paths.project_dir(_P(project_root)) / "intelligence.json"
     data = {"endpoint": settings.endpoint, "api_key": settings.api_key}
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    tracked_write(
+        path,
+        json.dumps(data, indent=2) + "\n",
+        kind="intelligence_settings",
+        writer="forktex.agent.intelligence.settings",
+    )

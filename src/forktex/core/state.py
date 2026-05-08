@@ -72,14 +72,17 @@ class StateManager:
 
     async def write_json(self, filename: str, data: Any) -> None:
         """Atomic write of JSON data to state file."""
+        from forktex.graph.io_proxy import tracked_write_async
+
         await self.ensure_dir()
         state_file = self.state_dir / filename
-        temp_file = state_file.with_suffix(".tmp")
-
         async with _state_lock:
-            async with aiofiles.open(temp_file, "w", encoding="utf-8") as f:
-                await f.write(json.dumps(data, indent=2, default=str))
-            await asyncio.to_thread(temp_file.replace, state_file)
+            await tracked_write_async(
+                state_file,
+                json.dumps(data, indent=2, default=str),
+                kind="state",
+                writer="forktex.core.state",
+            )
 
     async def save_conversation(
         self, session_id: str, history: List[Dict[str, str]]

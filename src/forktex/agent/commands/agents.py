@@ -38,7 +38,7 @@ from forktex.agent.ui.console import console, info, error
 
 @click.group()
 async def agents():
-    """Manage agent processes."""
+    """Run and manage AI agents working on your code."""
     pass
 
 

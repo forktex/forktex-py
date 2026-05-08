@@ -96,21 +96,35 @@ def load_network_settings(
 
 
 def save_network_global(settings: NetworkSettings) -> None:
+    from forktex.graph.io_proxy import tracked_write
+
     _cloud_paths.ensure_global_dir()
     path = _cloud_paths.global_network_file()
-    path.write_text(json.dumps(_dump(settings), indent=2) + "\n")
+    tracked_write(
+        path,
+        json.dumps(_dump(settings), indent=2) + "\n",
+        kind="network_settings",
+        writer="forktex.agent.network.settings",
+    )
 
 
 def save_network_project(settings: NetworkSettings, project_root: Path) -> None:
+    from forktex.graph.io_proxy import tracked_write
+
     _cloud_paths.ensure_project_dirs(project_root)
     path = _cloud_paths.project_network_file(project_root)
-    path.write_text(json.dumps(_dump(settings), indent=2) + "\n")
+    tracked_write(
+        path,
+        json.dumps(_dump(settings), indent=2) + "\n",
+        kind="network_settings",
+        writer="forktex.agent.network.settings",
+    )
 
 
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError):  # fmt: skip
         return {}
     return data if isinstance(data, dict) else {}
 

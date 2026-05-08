@@ -12,53 +12,51 @@ format: ## Source code conforms to a consistent, auto-enforced style
 		ruff format $$pkg/src/ $$pkg/tests/ 2>/dev/null || true; \
 	done
 
-lint: ## Static analysis catches bugs, anti-patterns, and security issues
+lint: ## Static analysis catches bugs, anti-patterns, and security smells
 	ruff check src/ tests/
 	@for pkg in $(SUBPACKAGES); do \
 		echo "  Linting $$pkg..."; \
 		ruff check $$pkg/src/ $$pkg/tests/ 2>/dev/null || true; \
 	done
 
-typecheck: ## Static type system verifies interface correctness (pyright; install via dev deps)
+typing: ## Static type system verifies interface correctness (pyright; install via dev deps)
 	python3 -m pyright src/
 
-test: ## Automated tests verify behavior against real infrastructure
+test: ## Automated tests verify behaviour at the unit and integration level
 	poetry run pytest tests/ -q
 
-deps: ## Project dependencies installed and locked to reproducible versions
-	pip install --break-system-packages -e . 2>/dev/null || \
-	pip install -e .
+security: ## Scan installed Python deps for known CVEs (pip-audit; install via dev deps)
+	poetry run pip-audit --skip-editable
 
-codegen: ## Not applicable: forktex-py has no schema-derived artifacts
-	@echo 'codegen: not applicable for forktex-py (pure Python CLI, no generated code)'
+license: ## Source headers and dependency licenses verified against policy
+	@if [ -x scripts/license_headers.py ]; then \
+		python3 scripts/license_headers.py check; \
+	else \
+		echo "license: no scripts/license_headers.py — declare overrides in forktex.json"; \
+	fi
 
-codegen-check: ## Not applicable: forktex-py has no generated artifacts to verify
-	@echo 'codegen-check: not applicable for forktex-py'
+sync: ## Not applicable: forktex-py has no schema-derived artifacts (pure Python CLI, no generated code)
+	@echo 'sync: not applicable for forktex-py (no codegen artifacts to keep current)'
 
-ci: ## Aggregate quality gate before publish: format-check + lint + license-check + audit + test + build
-	@$(MAKE) format-check
-	@$(MAKE) lint
-	@$(MAKE) license-check
-	@$(MAKE) audit
-	@$(MAKE) test
-	@$(MAKE) build
-	@echo ''
-	@echo 'CI passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'
-	@echo '(make typecheck reports cross-SDK type drifts; tracked separately)'
+docs: ## Project documentation exists and is current — architecture diagrams, API reference, runbooks, ADRs
+	@echo "$(PROJECT_NAME): docs — declare fsd.atoms.\"docs@<kind>\" overrides (e.g. docs@arch via 'forktex graph c4')."
 
-start: ## Project runtime starts with one command
-	@$(MAKE) deps
+install: ## Project bootstraps to a runnable state on a fresh machine — auto-detects the OS, missing tools (poetry/uv/.venv/node_modules/pyright), and resolves them
+	@if command -v poetry >/dev/null 2>&1; then \
+		echo "  install: poetry detected → poetry install --with dev"; \
+		poetry install --with dev; \
+	elif [ -d .venv ]; then \
+		echo "  install: .venv detected → pip install -e ."; \
+		.venv/bin/pip install -e .; \
+	elif command -v pip >/dev/null 2>&1; then \
+		echo "  install: pip --user fallback → pip install --user -e ."; \
+		pip install --user -e . 2>/dev/null || pip install --break-system-packages -e .; \
+	else \
+		echo "  install: no python toolchain found. Install Python ≥ 3.14 first."; \
+		exit 1; \
+	fi
 	@echo ""
-	@echo "$(PROJECT_NAME) runtime ready."
-	@echo "  Run: forktex --version"
-	@echo "  Run: make test"
-	@echo ""
-
-stop: ## Project runtime stops cleanly
-	@echo "$(PROJECT_NAME) has no managed long-running runtime to stop."
-
-logs: ## Runtime logs observable through one command
-	@echo "$(PROJECT_NAME) has no managed runtime logs to stream."
+	@echo "$(PROJECT_NAME) installed."
 
 build: ## Build sdist + wheel into dist/ and verify metadata with twine check
 	rm -rf dist/
@@ -68,7 +66,7 @@ build: ## Build sdist + wheel into dist/ and verify metadata with twine check
 publish: ## Upload dist/ to production PyPI (irreversible per-version)
 	python3 -m twine upload dist/*
 
-clean: ## Build artifacts and caches removable
+clean: ## Build artifacts and caches removable from project tree
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null; true
 	find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null; true
@@ -79,12 +77,30 @@ clean: ## Build artifacts and caches removable
 	find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null; true
 	find . -type f -name .coverage -delete 2>/dev/null; true
 
-help: ## Available targets self-documented
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+help: ## Project's Make target surface is self-documented (`make help`)
+	@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
-audit: ## Scan installed Python deps for known CVEs (pip-audit; install via dev deps)
-	poetry run pip-audit --skip-editable
+apply: ## Drive a runtime to its declared state — local process, local compose, or env-orchestrated deploy. Idempotent.
+	@$(MAKE) install
+	@echo ""
+	@echo "$(PROJECT_NAME) runtime ready."
+	@echo "  Run: forktex --version"
+	@echo "  Run: make test"
+	@echo ""
+
+destroy: ## Remove a runtime entirely — terminate processes, tear down env infrastructure
+	@echo "$(PROJECT_NAME) has no managed long-running runtime locally."
+	@echo "  For env teardown declare fsd.atoms.\"destroy@<env>\" in forktex.json."
+
+monitor: ## Inspect current runtime state — health, metrics, replica status
+	@echo "$(PROJECT_NAME): monitor — declare fsd.atoms.\"monitor@<env>\" or use 'forktex status'."
+
+logs: ## Stream runtime events (stdout/stderr, structured logs) for the local process or a deployed env
+	@echo "$(PROJECT_NAME) has no managed runtime logs locally; declare fsd.atoms.\"logs@<env>\" for deployments."
+
+acceptance: ## End-to-end verification that a deployed runtime works against real infrastructure (smoke, e2e, battle, load, chaos, pen)
+	@echo "$(PROJECT_NAME): acceptance — declare fsd.atoms.\"acceptance@<scope>\" (e.g. @smoke, @e2e, @battle)."
 
 publish-test: ## Upload dist/ to TestPyPI (https://test.pypi.org) for rehearsal. SDK deps must already be on TestPyPI.
 	python3 -m twine upload --repository testpypi dist/*
@@ -118,6 +134,17 @@ license-fix: ## Add or update the dual-license header on every source file (idem
 license-strip: ## Remove the dual-license header from every source file (use before license model changes)
 	python3 scripts/license_headers.py strip
 
+ci: ## Aggregate quality gate before publish: format-check + lint + license-check + security + test + build
+	@$(MAKE) format-check
+	@$(MAKE) lint
+	@$(MAKE) license-check
+	@$(MAKE) security
+	@$(MAKE) test
+	@$(MAKE) build
+	@echo ''
+	@echo 'CI passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'
+	@echo '(make typing reports cross-SDK type drifts; tracked separately)'
+
 format-check: ## Check formatting without rewriting files
 	ruff format --check src/ tests/
 	@for pkg in $(SUBPACKAGES); do \
@@ -136,13 +163,15 @@ test-cov: ## Run tests with coverage
 deps-lock: ## Lock dependencies
 	poetry lock
 
-local: start
+local: apply
 
-local-down: stop
+local-down: destroy
 
 local-logs: logs
+
+quality: format lint typing ## chord (format + lint + typing)
 
 install-global: ## Install the latest local forktex CLI globally in editable mode
 	pip install --break-system-packages -e .
 
-.PHONY: format lint typecheck test audit license-check deps codegen codegen-check ci start stop logs build publish clean help publish-test dev-link-sdks dev-unlink-sdks dev-install installer-build installer-test license-fix license-strip format-check lint-fix test-cov deps-lock local local-down local-logs install-global
+.PHONY: format lint typing test security license sync docs install build publish clean help apply destroy monitor logs acceptance publish-test dev-link-sdks dev-unlink-sdks dev-install installer-build installer-test license-check license-fix license-strip ci format-check lint-fix test-cov deps-lock local local-down local-logs quality install-global
