@@ -180,3 +180,257 @@ Order to land the inversion across repos:
    functions; remove on the following major.
 
 This document is the contract. The execution follows.
+
+---
+
+## §X — Env-config model conflict (open)
+
+forktex-py and the cloud SDK currently disagree on **how multiple
+environments are declared**. Both models exist side-by-side in real
+projects; intelligence and network both ship overlap today.
+
+### The two models
+
+**forktex-py model** (1.1.0): the project lists envs in a single
+`forktex.json` file:
+
+```jsonc
+{
+  "cloud": {
+    "environments": [
+      { "name": "local",      "provider": "compose-local" },
+      { "name": "staging",    "provider": "managed"        },
+      { "name": "production", "provider": "managed"        }
+    ]
+  }
+}
+```
+
+This is what `cloud.environments[]` declared. The variant axis
+(`apply@local`, `deploy@staging`, etc.) reads its allowed values
+from this list.
+
+**Cloud SDK model**: a base `forktex.json` plus separate per-env
+overlay files, merged at load time:
+
+```
+forktex.json              # base / production
+forktex.local.json        # overlay applied when --env local
+forktex.staging.json      # overlay applied when --env staging
+```
+
+`forktex_cloud.manifest.loader.Manifest.load(path, env="local")` opens
+`forktex.json` and (if it exists) deep-merges `forktex.local.json`
+on top. The schema (`manifest/schema.py`) does **not** know about
+`cloud.environments[]`. Service-level filtering uses
+`services[].environments: list[str]` ("this service only runs in
+these envs"); `Manifest.services_for_env(env)` walks that field.
+
+### What intelligence has today
+
+Both models present, partially overlapping:
+
+| File | Shape | Env-related contents |
+| --- | --- | --- |
+| `forktex.json` | base manifest | declares `cloud.environments[] = [{name:"local",provider:"compose-local"},{name:"production",provider:"managed"}]` AND `cloud.metadata.environment = "production"` |
+| `forktex.local.json` | overlay (cloud-SDK style) | overrides `cloud.metadata.environment = "local"` and replaces `cloud.services[]` with dev-port hot-reload variants |
+
+When the user runs `forktex cloud up --env local`, the cloud SDK
+loads the overlay and ignores `cloud.environments[]` in the base
+manifest entirely. The `provider` field in `cloud.environments[]` is
+**dead weight today** — nothing reads it.
+
+### Concrete conflict points
+
+1. **Source of truth for env names**: forktex-py says "the
+   `environments[]` array enumerates them"; cloud SDK says "whatever
+   `forktex.<env>.json` files exist on disk".
+2. **Provider routing**: the planned 4-step pipeline (in the
+   inversion proposal above) dispatches on
+   `provider ∈ {compose-local, docker-sandbox, managed}`. That field
+   only exists in forktex-py's model. The cloud SDK has no equivalent.
+3. **Metadata vs registry**: `cloud.metadata.environment = "production"`
+   in the base says "this manifest's default env is production".
+   `cloud.environments[]` says "these are all envs". When they
+   disagree (which they do in intelligence today), behaviour is
+   undefined.
+4. **Variant axis values**: `apply@local` and `deploy@staging` need
+   to enumerate envs at Make-target generation time. Without
+   `cloud.environments[]`, the generator would have to glob
+   `forktex.*.json` on disk — fragile.
+5. **Scaffold output**: `scaffold_manifest()` in the cloud SDK
+   creates only `forktex.json`. Developers manually add
+   `forktex.local.json`. forktex-py's model expects scaffold to
+   produce the registry instead.
+
+### Direction (locked separately, not in this slice)
+
+The likely settlement: keep `cloud.environments[]` as the **registry**
+(authoritative list of envs and their providers), and treat
+`forktex.<env>.json` files as **optional populators** for one entry
+in that registry. Either model alone is sufficient; both are
+compatible. The cloud SDK's loader gains an `environments[]` walk;
+the variant-axis generator reads from the registry.
+
+This requires a coordinated cloud-SDK PR (out of scope for this
+slice). Tracked as the follow-up to `scaffold_manifest()` inversion
+above.
+
+### Evidence collected during the loops
+
+**Intelligence (2026-05-08, Loop 3)**: project carries both models simultaneously.
+
+```
+intelligence/forktex.json:
+  manifestVersion: 1.1.0
+  cloud.metadata.environment: "production"        # ← cloud-SDK selector
+  cloud.environments[]: [
+    { name: "local",      provider: "compose-local" },   # ← forktex-py registry
+    { name: "production", provider: "managed"        }
+  ]
+  cloud.services[]: [ client, api, db, qdrant, redis, minio ]   # production-shape
+
+intelligence/forktex.local.json:
+  cloud.metadata.environment: "local"             # overrides the base
+  cloud.services[]: [ client, api, worker, db, qdrant, redis, minio ]
+                                                  # dev-port + hot-reload variants
+```
+
+When `forktex cloud up --env local` runs, the cloud SDK loader reads
+`forktex.json`, deep-merges `forktex.local.json` on top, and produces
+the local compose config. The `cloud.environments[]` block on the
+base manifest is **never consulted**; the `provider: compose-local`
+information is dropped on the floor.
+
+**Network (2026-05-08, Loop 1)**: same shape — `forktex.json` declares
+`cloud.environments[]` with three entries (`local`, `staging`,
+`production`); `forktex.local.json` is the actually-consulted
+overlay; staging/production envs have no overlay file but are
+declared in the registry.
+
+**Net**: the two models work today only because (a) developers
+maintain both forms manually and (b) the `provider` field is unused
+so its absence on the SDK side doesn't matter yet. Once the variant
+parser starts dispatching on `provider`, the gap becomes load-bearing.
+
+---
+
+## §Y — Filesystem-ops responsibility audit
+
+The "5-lane responsibility split" above says **forktex-py owns
+filesystem IO**. In practice, the cloud SDK still does direct disk
+writes at 11 sites. Each site is a candidate for inversion (move
+the IO to forktex-py via `tracked_write`, leave the pure logic in
+the SDK).
+
+### Enumerated write sites (cloud SDK today)
+
+| Path | Operation | SDK module | Inversion candidate |
+| --- | --- | --- | --- |
+| `.forktex/compose/docker-compose.<env>.yml` | YAML write | `bridge/local_compose.py:314` (`write_local_compose`) | **YES** — pure builder `build_compose_dict()` already proposed in inversion section |
+| `.forktex/observability/{loki,promtail}.yml` | template copy | `bridge/local_compose.py:97-102` | YES — same proposal; copy templates from agent side |
+| `.forktex/data/{service_id}/` | `mkdir` | `bridge/local_compose.py:259` | YES — agent owns directory creation under `.forktex/` |
+| `.forktex/vault/<env>/secrets.enc` | encrypted JSON write | `secrets/fernet.py:77` | **HOLD** — security-critical; encryption + IO coupled. Low ROI to split |
+| `forktex.json` (scaffold) | initial manifest write | `scaffold/templates.py:142` (`scaffold_manifest`) | YES — proposed `build_manifest_data()` split (covered in inversion section above) |
+| `forktex.json` (re-save) | manifest write-back | `manifest/loader.py:363-365` | YES — agent should own the write; SDK returns the dict |
+| `~/.forktex/cloud.json` | global context write | `ops.py:196` | YES — settings live in forktex-py's domain (`agent/cloud/settings.py`) |
+| `.forktex/cloud.json` | project context write | `ops.py:203` | YES — same lane as global |
+| `.forktex/` directory | scaffold + `.version` | `paths.py:206, 240` | partial — path constructor stays SDK; directory creation moves to agent |
+| `.forktex/.gitignore` | append/create | `paths.py:252-254` | YES — `tracked_write` already handles structure-spec validation |
+
+### Observation
+
+Of 11 sites, **10 are inversion candidates** and **1 stays
+SDK-owned** (vault encryption — security-critical, tightly coupled).
+The full inversion is multi-PR coordinated work; the
+`scaffold_manifest()` and `write_local_compose()` splits already in
+the inversion proposal cover the two highest-traffic sites.
+
+### Audit lane mechanism
+
+When a write is moved to forktex-py:
+
+1. Pure builder lives in the SDK, takes data, returns a dict / bytes.
+2. forktex-py's `agent/cloud/<x>.py` calls the builder, then
+   `forktex.graph.io_proxy.tracked_write(path, content, kind=...,
+   writer="forktex.agent.cloud.<x>")`.
+3. `tracked_write` validates the path against
+   `forktex.graph.structure` (the canonical `.forktex/` spec) and
+   records the touch in the registry.
+4. Optionally wrap the builder call site in
+   `@forktex.runtime.decorators.sdk_boundary` for an extra audit
+   snapshot — though once the IO is forktex-py's, the boundary
+   wrapper adds no new safety.
+
+### Evidence collected during the loops
+
+Loop 3 (graph build against intelligence) surfaced no new SDK-side
+write sites — graph build is forktex-py-only. Loop 2 (which would
+exercise `forktex cloud up`, `down`, `monitor` against the live
+stack) is the next opportunity to capture concrete write-site
+evidence; deferred until a Docker daemon is available.
+
+---
+
+## Loop findings (forktex-py-side)
+
+Side-channel notes from running the iteration loops against
+intelligence and network. These are forktex-py issues / gaps
+distinct from the cloud-boundary conflicts above.
+
+### Loop 1 — `make ci` smoke
+
+- **`make ci` was missing from intelligence + network** after the
+  org-side prune cycle (the standard's `ci` chord requires
+  `format-check` as a render dependency, which doesn't auto-render
+  for sub-package-only repos). **Fixed** in both projects'
+  `forktex.json` by restoring a workspace-level `ci` override that
+  recurses into each package's per-package `ci` target. Generator
+  gap candidate: emit `format-check` as a workspace-level recursive
+  secondary when subpaths exist (today it's only emitted for
+  root-level Python).
+- **`make -C sdk-py ci` from intelligence passes end-to-end**
+  (format-check + lint + typecheck + test + audit + license-check
+  + wheel build + twine check + verify_wheel_import). Confirms the
+  shared per-package ci pattern works.
+
+### Loop 3 — graph + AGENTS.md context
+
+- **Graph walker stopped at top-level modules per domain**. Real
+  projects nest substructure (`api/src/ai/chat/orchestrator.py`).
+  **Fixed** in `forktex.graph.build._modules_under` (commit `3bd9e9f`):
+  recursive `rglob('*.py')` with `SKIP_DIRS` guard; dotted names
+  rebuilt from the path-relative-to-`src_dir`. Smoke against
+  intelligence: 180→277 nodes, 581→988 edges, ai/* modules 3→23.
+- **`forktex agents ground` has no refresh action**. Today the
+  command exposes only `repos` (list) and `status` (display) — no
+  way to actually regenerate AGENTS.md from the graph + manifest.
+  The Phase-1 audit described `--all` and `--status` flags but the
+  CLI surface ships neither write subcommand. **Open**: add
+  `forktex agents ground refresh` (or `apply`) that walks the
+  workspace, renders per-project AGENTS.md from the graph + the
+  project's `forktex.json`. Out of scope this slice.
+
+### Loop 4 — agent-driven dev ops (graph CLI shortcuts)
+
+All five graph CLI shortcuts verified against intelligence:
+
+- `forktex graph package <path>` — correct package metadata for
+  `sdk-py`, `api`, `client`.
+- `forktex graph modules <pattern>` — finds nested modules
+  (`orchestrator` resolves to `api/src/ai/chat/orchestrator.py`).
+- `forktex graph importers <target>` — `pydantic` resolves to 8
+  importers across api + sdk-py; `httpx` to 1.
+- `forktex graph recent --hours N` — surfaces fsd evidence + instance
+  registry writes.
+- `forktex graph ecosystem` — tree view of 12 registered projects.
+
+The remaining 7 graph tools (`graph_summary`, `list_packages`,
+`find_package`, `list_domains`, `list_modules_in_domain`,
+`fsd_status`, `validate_path`, `ecosystem_matrix`) live only in the
+agent's `IntelligenceToolServer` — not exposed as standalone CLI
+shortcuts. **Open**: agent-driven verification (running an actual
+LLM session over intelligence's repo) requires the Intelligence
+SDK to be reachable; deferred until a connected agent loop is
+available.
+
