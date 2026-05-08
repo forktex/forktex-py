@@ -22,9 +22,9 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-forktex.agent.cli - CLI dispatcher for Forktex.
+forktex.agent.cli - CLI dispatcher for the ForkTex software delivery toolkit.
 
-Top-level shape (all three services are peers):
+Top-level shape (all three integrations are peers):
 
     forktex                          bare REPL / menu
     forktex status                   aggregate credential state (all 3 services)
@@ -37,19 +37,13 @@ Top-level shape (all three services are peers):
 
 import asyncio
 import sys
-from pathlib import Path
 
 import asyncclick as click
-from rich.panel import Panel
 
 from forktex.agent.ui.console import console
 from forktex.agent.ui.display import CLI_VERSION
 
 _CLOUD_IMPORT_ERROR: ModuleNotFoundError | None = None
-
-
-def _get_project_root() -> str:
-    return str(Path.cwd().absolute())
 
 
 def _require_cloud_support() -> None:
@@ -71,15 +65,29 @@ def _require_cloud_support() -> None:
 @click.option("--project", "-d", default=None, help="Project directory")
 @click.pass_context
 async def cli(ctx, project):
-    """Forktex — unified CLI across cloud, intelligence, and network.
+    """ForkTex — software delivery toolkit CLI.
 
-    Run with no subcommand to open the menu-driven root loop
-    (auto-upgrades to the intelligence chat REPL when reachable).
+    Plan, build, deploy, observe, and query your projects from one tool.
+    Run with no subcommand to open an interactive menu (and chat with an
+    AI assistant when one is configured).
     """
     if ctx.invoked_subcommand is None:
+        # Bare `forktex` opens the REPL — register a long-running instance
+        # and ensure the project's .forktex/ is installed if there is one.
+        from forktex.runtime.lifecycle import deactivate, ensure_runtime
         from forktex.agent.root_loop import run as _root_run
 
-        await _root_run(project=project)
+        rec = ensure_runtime(
+            needs_project=False,
+            long_running=True,
+            kind="repl",
+            project_hint=project,
+        )
+        try:
+            await _root_run(project=project)
+        finally:
+            if rec is not None:
+                deactivate(rec)
 
 
 # =============================================================================
@@ -87,54 +95,8 @@ async def cli(ctx, project):
 # =============================================================================
 
 
-@cli.command()
-async def info_cmd():
-    """Show project and environment information."""
-    project_root = _get_project_root()
-
-    lines = [
-        f"[bold]Forktex CLI[/bold] v{CLI_VERSION}",
-        "",
-        f"Project Root: {project_root}",
-        f"Python: {sys.version.split()[0]}",
-        f"Platform: {sys.platform}",
-    ]
-
-    console.print(
-        Panel.fit(
-            "\n".join(lines),
-            title="Info",
-            border_style="blue",
-        )
-    )
-
-    from forktex.agent.intelligence.settings import get_intelligence_settings
-
-    settings = get_intelligence_settings(project_root=project_root)
-    console.print("\n[bold]Intelligence API:[/bold]")
-    console.print(f"  Endpoint: {settings.endpoint}")
-    console.print(
-        f"  API Key: {'***' + settings.api_key[-4:] if settings.api_key else 'not set'}"
-    )
-
-    console.print("\n[bold]Cloud:[/bold]")
-    if _CLOUD_IMPORT_ERROR is not None:
-        console.print(
-            f"  Unavailable: missing optional dependency {_CLOUD_IMPORT_ERROR.name!r}"
-        )
-    else:
-        from forktex.agent.cloud.settings import load_cloud_context
-
-        cloud_ctx = load_cloud_context(Path(project_root))
-        console.print(f"  Controller: {cloud_ctx.controller or 'not set'}")
-        console.print(f"  Connected: {cloud_ctx.is_connected}")
-
-
-info_cmd.name = "info"
-
-
 # =============================================================================
-# Top-level `forktex status` — aggregate credential state across services
+# Top-level `forktex status` — project + environment + auth at a glance
 # =============================================================================
 
 from forktex.agent.auth import status_cmd as _status_cmd
@@ -188,25 +150,15 @@ from forktex.agent.fsd import fsd
 
 cli.add_command(fsd)
 
-from forktex.agent.commands.git_cli import git
+from forktex.agent.graph import graph as graph_group
+from forktex.agent.purge import clean_cmd
+from forktex.agent.serve import serve_cmd
+from forktex.graph.io_proxy import install_audit_hook
 
-cli.add_command(git)
-
-from forktex.agent.fsd.arch_cli import arch
-
-cli.add_command(arch)
-
-from forktex.agent.fsd.overview import overview
-
-cli.add_command(overview)
-
-from forktex.agent.fsd.present import present
-
-cli.add_command(present)
-
-from forktex.agent.commands.local_cli import local
-
-cli.add_command(local)
+install_audit_hook()
+cli.add_command(graph_group)
+cli.add_command(serve_cmd)
+cli.add_command(clean_cmd)
 
 
 # =============================================================================

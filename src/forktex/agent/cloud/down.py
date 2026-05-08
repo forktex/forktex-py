@@ -29,6 +29,7 @@ import subprocess
 import sys
 
 import asyncclick as click
+from forktex.agent.cloud.errors import translate_cloud_errors
 
 
 @click.command()
@@ -38,22 +39,23 @@ import asyncclick as click
     "--env", "environment", default=None, help="Environment (local for local teardown)"
 )
 @click.pass_context
+@translate_cloud_errors
 async def down(ctx, yes, keep_dns, environment):
     """Tear down: destroy server + DNS (remote) or stop containers (local)."""
     if environment == "local":
-        from forktex_cloud import paths as _cloud_paths
+        from forktex_cloud import paths as cloud_paths
 
         project_root = ctx.obj["project_root"]
-        compose_file = str(_cloud_paths.compose_path(project_root, "local"))
+        compose_file = str(cloud_paths.compose_path(project_root, "local"))
 
         # Resolve project name from manifest for compose isolation
         project_name = "forktex"
         try:
-            from forktex_cloud.manifest.loader import Manifest
+            from forktex.agent.cloud._manifest_cache import load_manifest
 
-            manifest = Manifest.load(project_root / "forktex.json", env="local")
+            manifest = load_manifest(project_root, env="local")
             project_name = manifest.name or "forktex"
-        except (FileNotFoundError, ValueError, KeyError):
+        except (FileNotFoundError, ValueError, KeyError):  # fmt: skip
             click.echo(
                 f"Warning: could not load manifest, using project name '{project_name}'",
                 err=True,

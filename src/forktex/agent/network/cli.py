@@ -37,9 +37,9 @@ from forktex.agent.ui.console import console, error, info
 
 @click.group()
 async def network():
-    """ForkTex Network — projects, tasks, worklogs, channels.
+    """Coordinate projects, tasks, worklogs, and team channels.
 
-    Credentials are captured via ``forktex network connect``.
+    Sign in via ``forktex network connect``.
     """
     pass
 

@@ -225,22 +225,19 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
     # KnowledgeDirectory), emit a TODO stub and let `fsd.atoms[*].commands`
     # in the manifest supply the real body via _override_commands().
     python_specific = {
-        "deps",
+        "install",
         "format",
         "lint",
-        "typecheck",
+        "typing",
         "test",
-        "security-audit",
+        "security",
         "build",
         "publish",
-        "publish-check",
-        "publish-test",
     }
     if not has_python and atom_id in python_specific:
         return [f'@echo "TODO: configure {atom_id} for $(PROJECT_NAME)"']
 
-    if atom_id == "deps":
-        return _deps_lines(manifest)
+    # ── code domain ─────────────────────────────────────────────────────────
     if atom_id == "format":
         return [
             "ruff format src/ tests/",
@@ -257,7 +254,7 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
             "\t\truff check $$pkg/src/ $$pkg/tests/ 2>/dev/null || true; \\",
             "\tdone",
         ]
-    if atom_id == "typecheck":
+    if atom_id == "typing":
         return ["python -m pyright src/ 2>/dev/null || python -m mypy src/"]
     if atom_id == "test":
         lines = ["poetry run pytest tests/ -x -q"]
@@ -266,21 +263,32 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
                 f"cd {pkg} && poetry run pytest tests/ -x -q 2>/dev/null || true"
             )
         return lines
-    if atom_id == "security-audit":
-        return ['pip-audit 2>/dev/null || echo "pip-audit not installed, skipping"']
-    if atom_id == "start":
+    if atom_id == "security":
         return [
-            "@$(MAKE) deps",
-            '@echo ""',
-            '@echo "$(PROJECT_NAME) runtime ready."',
-            '@echo "  Run: forktex --version"',
-            '@echo "  Run: make test"',
-            '@echo ""',
+            'pip-audit --skip-editable 2>/dev/null || echo "pip-audit not installed, skipping"'
         ]
-    if atom_id == "stop":
-        return ['@echo "$(PROJECT_NAME) has no managed long-running runtime to stop."']
-    if atom_id == "logs":
-        return ['@echo "$(PROJECT_NAME) has no managed runtime logs to stream."']
+    if atom_id == "license":
+        return [
+            "@if [ -x scripts/license_headers.py ]; then \\",
+            "\t\tpython3 scripts/license_headers.py check; \\",
+            "\telse \\",
+            '\t\techo "license: no scripts/license_headers.py — declare overrides in forktex.json"; \\',
+            "\tfi",
+        ]
+    if atom_id == "sync":
+        return [
+            '@echo "$(PROJECT_NAME): sync — no codegen targets declared. Add fsd.atoms.\\"sync@<kind>\\" overrides in forktex.json (e.g. sync@migration, sync@types, sync@api, sync@docs)."',
+        ]
+    if atom_id == "docs":
+        return [
+            '@echo "$(PROJECT_NAME): docs — declare fsd.atoms.\\"docs@<kind>\\" overrides (e.g. docs@arch via \'forktex graph c4\')."',
+        ]
+
+    # ── infra domain ─────────────────────────────────────────────────────────
+    if atom_id == "install":
+        # Bootstrap recipe: detects .venv/poetry/pip and chooses the right
+        # invocation. Honours dev deps when the manifest exposes a dev group.
+        return _install_lines(manifest)
     if atom_id == "build":
         return [
             "@for pkg in $(PUBLISHABLE_PACKAGES); do \\",
@@ -297,25 +305,6 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
             "\tdone",
             '@echo "All packages published."',
         ]
-    if atom_id == "publish-check":
-        return [
-            "@for pkg in $(PUBLISHABLE_PACKAGES); do \\",
-            '\t\techo "Checking $$pkg..."; \\',
-            "\t\t$(MAKE) -C $$pkg publish-check; \\",
-            "\tdone",
-        ]
-    if atom_id == "publish-test":
-        return [
-            "@for pkg in $(PUBLISHABLE_PACKAGES); do \\",
-            '\t\techo "Test-publishing $$pkg..."; \\',
-            "\t\t$(MAKE) -C $$pkg publish-test; \\",
-            "\tdone",
-        ]
-    if atom_id == "ci":
-        return [
-            "@$(MAKE) format-check lint test",
-            '@echo "CI passed for $(PROJECT_NAME)"',
-        ]
     if atom_id == "clean":
         return [
             "find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true",
@@ -330,14 +319,90 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
         ]
     if atom_id == "help":
         return [
-            "@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
+            "@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
             '\t\tawk \'BEGIN {FS = ":.*?## "}; {printf "  \\033[36m%-22s\\033[0m %s\\n", $$1, $$2}\'',
         ]
+
+    # ── ops domain ───────────────────────────────────────────────────────────
+    # apply / destroy with no env qualifier are local-process verbs; env-
+    # qualified variants are produced by the variant parser (Phase A.3) and
+    # wired through _custom_atoms / forktex.json overrides.
+    if atom_id == "apply":
+        return [
+            "@$(MAKE) install",
+            '@echo ""',
+            '@echo "$(PROJECT_NAME) runtime ready."',
+            '@echo "  Run: forktex --version"',
+            '@echo "  Run: make test"',
+            '@echo ""',
+        ]
+    if atom_id == "destroy":
+        return [
+            '@echo "$(PROJECT_NAME) has no managed long-running runtime locally."',
+            '@echo "  For env teardown declare fsd.atoms.\\"destroy@<env>\\" in forktex.json."',
+        ]
+    if atom_id == "monitor":
+        return [
+            '@echo "$(PROJECT_NAME): monitor — declare fsd.atoms.\\"monitor@<env>\\" or use \'forktex status\'."',
+        ]
+    if atom_id == "logs":
+        return [
+            '@echo "$(PROJECT_NAME) has no managed runtime logs locally; declare fsd.atoms.\\"logs@<env>\\" for deployments."',
+        ]
+    if atom_id == "rollback":
+        return [
+            '@echo "$(PROJECT_NAME): rollback is env-only; declare fsd.atoms.\\"rollback@<env>\\" in forktex.json."',
+        ]
+    if atom_id == "acceptance":
+        return [
+            '@echo "$(PROJECT_NAME): acceptance — declare fsd.atoms.\\"acceptance@<scope>\\" (e.g. @smoke, @e2e, @battle)."',
+        ]
+    if atom_id == "backup":
+        return [
+            '@echo "$(PROJECT_NAME): backup is env-only; declare fsd.atoms.\\"backup@<env>\\" in forktex.json."',
+        ]
+
+    # ── data domain ──────────────────────────────────────────────────────────
+    if atom_id == "seed":
+        return [
+            '@echo "$(PROJECT_NAME): seed — declare fsd.atoms.\\"seed@<pack>\\" overrides (e.g. seed@minimal, seed@e2e)."',
+        ]
+
     return [f'@echo "TODO: implement {atom_id} for $(PROJECT_NAME)"']
 
 
+def _install_lines(manifest: ForktexManifest) -> list[str]:
+    """Cross-platform bootstrap recipe for the ``install`` atom.
+
+    Idempotent: detects an existing ``.venv``, the presence of poetry, and
+    the manifest's package layout, then chooses the right invocation. Each
+    detection branch echoes what it picked so the user can see the
+    auto-correction trail.
+    """
+    _, subpaths = _package_paths(manifest)
+    editable_paths = subpaths + ["."]
+    editable_args = " ".join(f"-e {path}" for path in editable_paths)
+    return [
+        "@if command -v poetry >/dev/null 2>&1; then \\",
+        '\t\techo "  install: poetry detected → poetry install --with dev"; \\',
+        "\t\tpoetry install --with dev; \\",
+        "\telif [ -d .venv ]; then \\",
+        '\t\techo "  install: .venv detected → pip install -e ."; \\',
+        f"\t\t.venv/bin/pip install {editable_args}; \\",
+        "\telif command -v pip >/dev/null 2>&1; then \\",
+        '\t\techo "  install: pip --user fallback → pip install --user -e ."; \\',
+        f"\t\tpip install --user {editable_args} 2>/dev/null || pip install --break-system-packages {editable_args}; \\",
+        "\telse \\",
+        '\t\techo "  install: no python toolchain found. Install Python ≥ 3.14 first."; \\',
+        "\t\texit 1; \\",
+        "\tfi",
+        '@echo ""',
+        '@echo "$(PROJECT_NAME) installed."',
+    ]
+
+
 def _package_atom_commands(atom_id: str, src_dir: str = "src") -> list[str]:
-    if atom_id == "deps":
+    if atom_id == "install":
         return [
             "pip install --break-system-packages -e . 2>/dev/null || \\",
             "\tpip install -e .",
@@ -346,36 +411,20 @@ def _package_atom_commands(atom_id: str, src_dir: str = "src") -> list[str]:
         return [f"ruff format {src_dir}/ tests/ 2>/dev/null || ruff format {src_dir}/"]
     if atom_id == "lint":
         return [f"ruff check {src_dir}/ tests/ 2>/dev/null || ruff check {src_dir}/"]
-    if atom_id == "typecheck":
+    if atom_id == "typing":
         return [
             f"python -m pyright {src_dir}/ 2>/dev/null || python -m mypy {src_dir}/"
         ]
     if atom_id == "test":
         return ["poetry run pytest tests/ -x -q 2>/dev/null || poetry run pytest -x -q"]
-    if atom_id == "security-audit":
-        return ['pip-audit 2>/dev/null || echo "pip-audit not installed, skipping"']
+    if atom_id == "security":
+        return [
+            'pip-audit --skip-editable 2>/dev/null || echo "pip-audit not installed, skipping"'
+        ]
     if atom_id == "build":
         return ["rm -rf dist/ && python3 -m build"]
     if atom_id == "publish":
         return ["twine upload dist/*"]
-    if atom_id == "publish-check":
-        return [
-            '@echo "Checking publish readiness..."',
-            "@test -f README.md || (echo 'ERROR: README.md missing' && exit 1)",
-            "@test -f LICENSE || (echo 'ERROR: LICENSE missing' && exit 1)",
-            "python3 -m build 2>/dev/null && twine check dist/* && rm -rf dist/",
-            '@echo "Ready to publish."',
-        ]
-    if atom_id == "publish-test":
-        return [
-            "rm -rf dist/ && python3 -m build",
-            "twine upload --repository testpypi dist/*",
-        ]
-    if atom_id == "ci":
-        return [
-            "@$(MAKE) format-check lint test",
-            '@echo "CI passed for $(PROJECT_NAME)"',
-        ]
     if atom_id == "clean":
         return [
             "find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true",
@@ -390,7 +439,7 @@ def _package_atom_commands(atom_id: str, src_dir: str = "src") -> list[str]:
         ]
     if atom_id == "help":
         return [
-            "@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
+            "@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
             '\t\tawk \'BEGIN {FS = ":.*?## "}; {printf "  \\033[36m%-18s\\033[0m %s\\n", $$1, $$2}\'',
         ]
     return [f'@echo "TODO: implement {atom_id} for $(PROJECT_NAME)"']
@@ -421,6 +470,68 @@ def _render_target(
         lines.append("")
         lines.append(f"{alias}: {target}")
     return lines
+
+
+def _alias_invocation_to_target(invocation: str) -> str:
+    """Convert an atom-variant invocation into a Make target name.
+
+    Stand-in for the variant parser (Phase A.3): replaces the canonical
+    ``@`` separator with ``-``. Once the parser ships, this collapses into
+    ``variants.make_target_for(parse_atom_key(invocation, ...))``.
+    """
+    return invocation.replace("@", "-")
+
+
+def _render_aliases_section(
+    standard: FSDStandard,
+    *,
+    declared_targets: set[str],
+) -> tuple[list[str], list[str]]:
+    """Render chord aliases and deprecated rename aliases as PHONY targets.
+
+    A chord (e.g. ``quality: format lint typing``) lists its atom-variant
+    invocations as Make dependencies. A deprecated rename
+    (e.g. ``start → apply``) emits a redirect target that prints a
+    deprecation warning then dispatches via ``$(MAKE) <new-target>``.
+    Aliases whose targets aren't declared anywhere are silently skipped.
+    """
+    lines: list[str] = []
+    phony: list[str] = []
+
+    for alias, invocations in standard.aliases.items():
+        if alias in declared_targets:
+            continue
+        targets = [_alias_invocation_to_target(inv) for inv in invocations]
+        if not all(t in declared_targets for t in targets):
+            continue
+        chord_label = " + ".join(invocations)
+        lines.extend(
+            [
+                f"{alias}: {' '.join(targets)} ## chord ({chord_label})",
+                "",
+            ]
+        )
+        phony.append(alias)
+
+    for old, new_invocations in standard.aliases_deprecated.items():
+        if old in declared_targets:
+            continue
+        if not new_invocations:
+            continue
+        new_target = _alias_invocation_to_target(new_invocations[0])
+        if new_target not in declared_targets:
+            continue
+        lines.extend(
+            [
+                f"{old}: ## (deprecated; use `{new_target}`)",
+                f"\t@echo \"  ⚠  'make {old}' is deprecated; use 'make {new_target}'\" >&2",
+                f"\t@$(MAKE) {new_target}",
+                "",
+            ]
+        )
+        phony.append(old)
+
+    return lines, phony
 
 
 def _declared_target_names(
@@ -509,14 +620,20 @@ def _root_secondary_targets(
         )
         phony.append("deps-lock")
 
-    for alias in ("local", "local-down", "local-logs"):
+    # Local-env shortcuts: render only when the project has cloud-aware
+    # apply@local / destroy@local / logs@local variants declared. Bare
+    # `apply` / `destroy` are process-level, not env-aware, so the alias
+    # would be misleading — skip rather than dangle.
+    for alias, target_options in (
+        ("local", ("apply-local", "apply")),
+        ("local-down", ("destroy-local", "destroy")),
+        ("local-logs", ("logs-local", "logs")),
+    ):
         if alias in existing_targets:
             continue
-        target = {
-            "local": "start",
-            "local-down": "stop",
-            "local-logs": "logs",
-        }[alias]
+        target = next((t for t in target_options if t in existing_targets), None)
+        if target is None:
+            continue
         lines.extend([f"{alias}: {target}", ""])
         phony.append(alias)
 
@@ -597,6 +714,16 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         manifest, existing_targets=declared_targets
     )
     lines.extend(secondary_lines)
+
+    # Render alias chord shortcuts (quality, ci, release) and deprecated-name
+    # aliases (start → apply, etc.) declared in the standard.
+    alias_lines, alias_phony = _render_aliases_section(
+        standard,
+        declared_targets=declared_targets | set(secondary_phony),
+    )
+    lines.extend(alias_lines)
+    secondary_phony.extend(alias_phony)
+
     custom_target_names = [_make_target_names(s, o)[0] for s, o in custom]
     root_paths, subpaths = _package_paths(manifest)
     has_root_python = bool(root_paths)
@@ -676,8 +803,9 @@ def generate_package_makefile(
         if atom_id in standard.atoms_by_id
     ]
 
-    # Detect package layout: prefer `app/` (FastAPI convention) when present,
-    # fall back to `src/` (Python library convention).
+    # Detect package layout. Canonical ForkTex DDL layout is `src/{domain}/...`
+    # (matches network/api, intelligence/api). `app/` is a FastAPI fallback only
+    # used when `src/` is absent.
     src_dir = "src"
     if (
         package_dir is not None

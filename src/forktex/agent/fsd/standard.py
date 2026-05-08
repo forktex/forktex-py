@@ -23,33 +23,30 @@
 
 """FSD Standard definitions — atoms, facets, levels, domains, and resolution.
 
-Source of truth for the ForkTex Standard for Delivery.
+Source of truth for the ForkTex Standard for Delivery (FSD): a generic
+software-delivery standard that a project advertises a target level
+against (L0 Bootstrap → L4 Operational), runs declared atom recipes
+for, and reports per-atom + per-level achievement on.
 
-FSD is a composable quality contract for the FORKTEX ecosystem.
-FORKTEX is a software factory that manages itself through its own products:
-Cloud deploys platforms, Network handles communications, Intelligence provides AI.
-FSD governs this spiral — defining what a well-functioning piece looks like.
+The runtime split:
 
-Architecture:
-  standard.json   Machine-readable standard (domains, atoms, facets, levels)
+  standard.json   Machine-readable catalog (domains, atoms, facets, levels)
   standard.py     Resolution engine (this module)
-  check.py        CLI: verify projects/org against the standard
+  check.py        CLI: verify a project against the standard
 
-Domains map atoms to organizational concerns (and docs/ tracks):
-  code         → engineering/      Source code correctness, style, safety
-  data         → engineering/      Persistence, migrations, seeding
-  infra        → engineering/      Local env, build, publish
-  ops          → platforms/        Deploy, backup, rollback, monitor
-  governance   → company/          Policies, registers, org structure
-  process      → processes/        Procedures, workflows
-  compliance   → compliance/       ISO, legal, audit evidence
-  supply-chain → third-parties/    Supplier management
+Domains group atoms by concern; the bundled software catalog has four:
+
+  code   Source-code correctness, style, type-safety, generated artefacts
+  data   Development data hydration
+  infra  Local artefact production + project ergonomics
+  ops    Environment lifecycle, runtime control, recovery, verification
 
 Resolution strategies (pluggable — an atom can use any combination):
-  make         — At least one Make target exists
-  path         — File or directory exists relative to docs/
-  field        — JSON/YAML field is non-null in a manifest
-  file-content — File contains required markers (future)
+
+  make         At least one Make target exists in the project Makefile(s)
+  path         File or directory exists relative to project root
+  field        JSON/YAML field is non-null in a manifest
+  file-content File contains required markers (future)
 """
 
 from __future__ import annotations
@@ -638,7 +635,7 @@ def check_resolve_rule(
                 else:
                     return False
             return data is not None
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError):  # fmt: skip
             return False
 
     return False

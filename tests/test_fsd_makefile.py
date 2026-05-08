@@ -41,10 +41,11 @@ def test_workspace_profile_limits_applicable_atoms():
     applicable, disabled = resolve_applicable_atoms(manifest)
 
     assert applicable is not None
-    assert "deps" in applicable
+    assert "install" in applicable
     assert "build" in applicable
-    assert "codegen" in applicable
-    assert "deploy" not in disabled
+    assert "sync" in applicable
+    assert "apply" in applicable
+    assert "rollback" in disabled
 
 
 def test_generate_root_makefile_contains_expected_targets():
@@ -96,7 +97,7 @@ def test_generate_root_makefile_skips_root_python_secondaries_for_workspace_only
         "install-global: ## Install the latest local forktex CLI globally"
         not in content
     )
-    assert "local: start" in content
+    assert "local: apply" in content
 
 
 def test_package_override_reenables_disabled_atom_and_suppresses_secondary_duplicates():

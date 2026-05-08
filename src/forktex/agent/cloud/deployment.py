@@ -1,12 +1,36 @@
 # Copyright (C) 2026 FORKTEX S.R.L.
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
 
 """forktex cloud deployment — list, cancel, and retry deployments."""
 
 from __future__ import annotations
 
 import asyncclick as click
+from forktex.agent.cloud.errors import translate_cloud_errors
 
 
 @click.group("deployment")
@@ -15,9 +39,14 @@ def deployment():
 
 
 @deployment.command("list")
-@click.option("--status", default=None, help="Filter by status (started, success, failed, cancelled)")
+@click.option(
+    "--status",
+    default=None,
+    help="Filter by status (started, success, failed, cancelled)",
+)
 @click.option("--limit", default=20, show_default=True, help="Max results")
 @click.pass_context
+@translate_cloud_errors
 async def deployment_list(ctx, status, limit):
     """List recent deployments for the connected org."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -39,13 +68,19 @@ async def deployment_list(ctx, status, limit):
         st = d.get("status", "?")
         env = (d.get("environmentId") or d.get("environment_id") or "?")[:36]
         started = (d.get("startedAt") or d.get("started_at") or "?")[:19]
-        color = {"success": "green", "failed": "red", "cancelled": "yellow", "started": "cyan"}.get(st, "white")
+        color = {
+            "success": "green",
+            "failed": "red",
+            "cancelled": "yellow",
+            "started": "cyan",
+        }.get(st, "white")
         click.echo(f"  {did:38s} {click.style(st, fg=color):20s} {env:38s} {started}")
 
 
 @deployment.command("cancel")
 @click.argument("deployment_id")
 @click.pass_context
+@translate_cloud_errors
 async def deployment_cancel(ctx, deployment_id):
     """Cancel a running deployment."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -54,14 +89,17 @@ async def deployment_cancel(ctx, deployment_id):
     from forktex_cloud.client import ForktexCloudClient
 
     with ForktexCloudClient.from_context(cloud_ctx) as client:
-        result = client.cancel_deployment(deployment_id)
+        client.cancel_deployment(deployment_id)
 
-    click.echo(f"  {click.style('✓', fg='yellow')} Deployment {deployment_id[:8]}… cancelled")
+    click.echo(
+        f"  {click.style('✓', fg='yellow')} Deployment {deployment_id[:8]}… cancelled"
+    )
 
 
 @deployment.command("retry")
 @click.argument("deployment_id")
 @click.pass_context
+@translate_cloud_errors
 async def deployment_retry(ctx, deployment_id):
     """Re-dispatch a failed or cancelled deployment."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -74,4 +112,4 @@ async def deployment_retry(ctx, deployment_id):
 
     new_id = getattr(result, "deployment_id", "?")
     click.echo(f"  {click.style('✓', fg='green')} Retried as deployment {new_id}")
-    click.echo(f"  Watch: forktex cloud logs")
+    click.echo("  Watch: forktex cloud logs")

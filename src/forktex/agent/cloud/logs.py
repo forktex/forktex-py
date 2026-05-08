@@ -1,6 +1,29 @@
 # Copyright (C) 2026 FORKTEX S.R.L.
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
 
 """forktex cloud logs — unified log primitive via API.
 
@@ -16,16 +39,38 @@ All modes go through the cloud API. No direct Loki or SSH access.
 from __future__ import annotations
 
 import asyncclick as click
+from forktex.agent.cloud.errors import translate_cloud_errors
 
 
 @click.command()
 @click.option("--run", "run_id", default=None, help="Stream SSE events for a flow run")
-@click.option("--service", "server_id", default=None, help="Stream live service logs from a server")
-@click.option("-s", "--svc", "service_filter", default=None, help="Filter to a specific service name (e.g. 'api')")
-@click.option("--deployment", "deployment_id", default=None, help="Show stored deployment logs")
-@click.option("--lines", type=int, default=100, help="Lines to tail for service logs (default: 100)")
-@click.option("--since", default=None, help="Lookback window for service logs (e.g. 1h, 30m)")
+@click.option(
+    "--service",
+    "server_id",
+    default=None,
+    help="Stream live service logs from a server",
+)
+@click.option(
+    "-s",
+    "--svc",
+    "service_filter",
+    default=None,
+    help="Filter to a specific service name (e.g. 'api')",
+)
+@click.option(
+    "--deployment", "deployment_id", default=None, help="Show stored deployment logs"
+)
+@click.option(
+    "--lines",
+    type=int,
+    default=100,
+    help="Lines to tail for service logs (default: 100)",
+)
+@click.option(
+    "--since", default=None, help="Lookback window for service logs (e.g. 1h, 30m)"
+)
 @click.pass_context
+@translate_cloud_errors
 async def logs(ctx, run_id, server_id, service_filter, deployment_id, lines, since):
     """Stream logs via the cloud API.
 
@@ -48,7 +93,9 @@ async def logs(ctx, run_id, server_id, service_filter, deployment_id, lines, sin
 
     with ForktexCloudClient.from_context(cloud_ctx) as client:
         if server_id:
-            _stream_service_logs(client, server_id, service=service_filter, lines=lines, since=since)
+            _stream_service_logs(
+                client, server_id, service=service_filter, lines=lines, since=since
+            )
         elif deployment_id:
             _show_deployment_logs(client, deployment_id, ctx)
         elif run_id:
@@ -57,10 +104,14 @@ async def logs(ctx, run_id, server_id, service_filter, deployment_id, lines, sin
             _stream_latest_run(client)
 
 
-def _stream_service_logs(client, server_id: str, *, service: str | None, lines: int, since: str | None) -> None:
+def _stream_service_logs(
+    client, server_id: str, *, service: str | None, lines: int, since: str | None
+) -> None:
     """Stream live service logs from a server via SSE."""
     svc_label = service or "all services"
-    click.echo(click.style(f"  Streaming logs — server {server_id[:8]}… {svc_label}", dim=True))
+    click.echo(
+        click.style(f"  Streaming logs — server {server_id[:8]}… {svc_label}", dim=True)
+    )
     click.echo()
     try:
         for line in client.stream_service_logs(
@@ -80,11 +131,11 @@ def _stream_run_events(client, run_id: str) -> None:
     click.echo()
 
     _COLORS = {
-        "running":   ("cyan",   "▶"),
-        "completed": ("green",  "✓"),
-        "failed":    ("red",    "✗"),
+        "running": ("cyan", "▶"),
+        "completed": ("green", "✓"),
+        "failed": ("red", "✗"),
         "cancelled": ("yellow", "⊘"),
-        "pending":   ("white",  "·"),
+        "pending": ("white", "·"),
     }
 
     try:
@@ -98,10 +149,24 @@ def _stream_run_events(client, run_id: str) -> None:
                 click.echo(f"  {label}")
             else:
                 if status in ("completed", "failed", "cancelled"):
-                    color = "green" if status == "completed" else "red" if status == "failed" else "yellow"
-                    icon = "✓" if status == "completed" else "✗" if status == "failed" else "⊘"
+                    color = (
+                        "green"
+                        if status == "completed"
+                        else "red"
+                        if status == "failed"
+                        else "yellow"
+                    )
+                    icon = (
+                        "✓"
+                        if status == "completed"
+                        else "✗"
+                        if status == "failed"
+                        else "⊘"
+                    )
                     click.echo()
-                    click.echo(f"  {click.style(icon + ' Run ' + status, fg=color, bold=True)}")
+                    click.echo(
+                        f"  {click.style(icon + ' Run ' + status, fg=color, bold=True)}"
+                    )
     except KeyboardInterrupt:
         click.echo()
 
@@ -129,17 +194,25 @@ def _render_finished_run(run) -> None:
     """Print a summary of a finished flow run."""
     _COLORS = {
         "completed": "green",
-        "failed":    "red",
+        "failed": "red",
         "cancelled": "yellow",
     }
     color = _COLORS.get(run.status, "white")
     click.echo(f"  {click.style(run.status.upper(), fg=color, bold=True)}")
     click.echo()
-    for step in (run.steps or []):
+    for step in run.steps or []:
         step_status = getattr(step, "status", "")
         step_color = _COLORS.get(step_status, "white")
-        icon = "✓" if step_status == "completed" else "✗" if step_status == "failed" else "·"
-        click.echo(f"  {click.style(icon, fg=step_color)} {getattr(step, 'stepName', step_status)}")
+        icon = (
+            "✓"
+            if step_status == "completed"
+            else "✗"
+            if step_status == "failed"
+            else "·"
+        )
+        click.echo(
+            f"  {click.style(icon, fg=step_color)} {getattr(step, 'stepName', step_status)}"
+        )
 
     if run.error:
         click.echo()
@@ -156,9 +229,15 @@ def _show_deployment_logs(client, deployment_id: str, ctx) -> None:
         for env in envs:
             deps = client.list_deployments(str(project.id), str(env.id))
             for dep in deps:
-                dep_id = dep.get("id") if isinstance(dep, dict) else str(getattr(dep, "id", ""))
+                dep_id = (
+                    dep.get("id")
+                    if isinstance(dep, dict)
+                    else str(getattr(dep, "id", ""))
+                )
                 if dep_id == deployment_id or dep_id.startswith(deployment_id):
-                    logs_resp = client.get_deployment_logs(str(project.id), str(env.id), dep_id)
+                    logs_resp = client.get_deployment_logs(
+                        str(project.id), str(env.id), dep_id
+                    )
                     _render_deployment_logs(logs_resp)
                     return
     click.echo(f"  Deployment {deployment_id} not found.")

@@ -72,3 +72,114 @@ def temp_git_repo(temp_dir):
         ["git", "commit", "-m", "initial"], cwd=temp_dir, capture_output=True
     )
     return temp_dir
+
+
+# ── Isolation fixtures for the OS fingerprint surface ─────────────────────
+
+
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path, monkeypatch, request):
+    """Redirect ``Path.home()`` (and therefore ``forktex_cloud.paths.global_dir``)
+    to a tmp directory so the real ``~/.forktex/`` is never touched.
+
+    Autouse so every test in the suite is sandboxed by default — pre-existing
+    tests that exercise ``tracked_write`` (cloud/intelligence/network settings,
+    state writes) no longer leak into the production registry.
+
+    Tests that genuinely need the real HOME (e.g., would re-read live cloud
+    creds) can opt out with ``@pytest.mark.real_home``.
+
+    Drains ``forktex.runtime.lifecycle._active_instances`` at teardown — any
+    instance the test created would otherwise have its close record written
+    by the process-wide ``atexit`` handler AFTER ``monkeypatch`` restored
+    ``HOME``, leaking into the production registry.
+    """
+    if "real_home" in request.keywords:
+        yield None
+        return
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("APPDATA", str(home))
+    monkeypatch.delenv("FORKTEX_STRUCTURE_LENIENT", raising=False)
+    try:
+        yield home
+    finally:
+        try:
+            from forktex.runtime import lifecycle as _lifecycle
+
+            _lifecycle._active_instances.clear()
+        except Exception:
+            pass
+
+
+@pytest.fixture
+def project_root(tmp_path):
+    """Create a minimal project tree with ``forktex.json`` and an empty
+    ``.forktex/`` directory."""
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "forktex.json").write_text(
+        '{"manifestVersion":"1.0.0","name":"proj","version":"0.0.1"}\n'
+    )
+    (root / ".forktex").mkdir()
+    (root / ".forktex" / ".version").write_text("1\n")
+    return root
+
+
+@pytest.fixture
+def monorepo_root(tmp_path):
+    """Create a monorepo with nested ``forktex.json`` files and ``.forktex``
+    directories at multiple depths.
+
+    Layout::
+
+        repo/
+        ├── forktex.json
+        ├── .forktex/.version
+        ├── packages/api/forktex.json
+        ├── packages/api/.forktex/.version
+        └── packages/web/forktex.json
+    """
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "forktex.json").write_text(
+        '{"manifestVersion":"1.0.0","name":"repo","version":"0.0.1"}\n'
+    )
+    (root / ".forktex").mkdir()
+    (root / ".forktex" / ".version").write_text("1\n")
+
+    api = root / "packages" / "api"
+    api.mkdir(parents=True)
+    (api / "forktex.json").write_text(
+        '{"manifestVersion":"1.0.0","name":"api","version":"0.0.1"}\n'
+    )
+    (api / ".forktex").mkdir()
+    (api / ".forktex" / ".version").write_text("1\n")
+
+    web = root / "packages" / "web"
+    web.mkdir(parents=True)
+    (web / "forktex.json").write_text(
+        '{"manifestVersion":"1.0.0","name":"web","version":"0.0.1"}\n'
+    )
+    return root
+
+
+@pytest.fixture
+def orphan_dir(tmp_path):
+    """A directory with no forktex.json anywhere above it."""
+    d = tmp_path / "orphan"
+    d.mkdir()
+    return d
+
+
+@pytest.fixture
+def reset_audit_hook():
+    """Reset the io_proxy audit-hook installation flag so a test can verify
+    its installation in isolation. Idempotent: only flips it for the test."""
+    from forktex.graph import io_proxy
+
+    original = io_proxy._AUDIT_INSTALLED
+    io_proxy._AUDIT_INSTALLED = False
+    yield
+    io_proxy._AUDIT_INSTALLED = original

@@ -17,3 +17,7 @@ htmlcov/
 # generated forktex state (per V1 spec)
 .forktex/**
 !.forktex/.version
+
+# forktex — generated + secrets (keep .forktex/.version committed)
+.forktex/**
+!.forktex/.version

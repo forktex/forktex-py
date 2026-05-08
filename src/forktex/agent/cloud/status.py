@@ -26,11 +26,13 @@
 from __future__ import annotations
 
 import asyncclick as click
+from forktex.agent.cloud.errors import translate_cloud_errors
 
 
 @click.command()
 @click.argument("server_id", required=False, default=None)
 @click.pass_context
+@translate_cloud_errors
 async def status(ctx, server_id):
     """Show server status and health. Uses active server if ID not given."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -38,7 +40,9 @@ async def status(ctx, server_id):
 
     server_id = server_id or cloud_ctx.current_server
     if not server_id:
-        raise click.ClickException("No server ID given and no active server set. Run: forktex cloud use server <id>")
+        raise click.ClickException(
+            "No server ID given and no active server set. Run: forktex cloud use server <id>"
+        )
 
     from forktex_cloud.client import ForktexCloudClient
 

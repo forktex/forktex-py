@@ -26,12 +26,14 @@
 from __future__ import annotations
 
 import asyncclick as click
+from forktex.agent.cloud.errors import translate_cloud_errors
 
 
 @click.command()
 @click.option("--project", "project_id", default=None, help="Filter by project ID")
 @click.option("--limit", default=20, help="Number of events to show (default: 20)")
 @click.pass_context
+@translate_cloud_errors
 async def events(ctx, project_id, limit):
     """View deployment events and history."""
     cloud_ctx = ctx.obj["cloud_ctx"]

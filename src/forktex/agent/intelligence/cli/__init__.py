@@ -54,10 +54,10 @@ from forktex.agent.ui.console import console, error, info
 
 @click.group()
 async def intelligence():
-    """ForkTex Intelligence — ask, run, scrape, index, connect.
+    """Ask the AI assistant, run tasks, scrape, and index codebases.
 
-    Credentials are captured via ``forktex intelligence connect``.
-    For interactive chat, run bare ``forktex``.
+    Sign in via ``forktex intelligence connect``. For an interactive
+    chat session, just run ``forktex``.
     """
     pass
 

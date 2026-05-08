@@ -1,6 +1,6 @@
 # CLI reference
 
-`forktex` is a single binary with three peer services — **intelligence**, **cloud**, **network** — plus cross-cutting groups for delivery-standard checks (`fsd`), architecture discovery (`arch`), and multi-repo git (`git`). All three services share the same credential verbs (`connect` / `disconnect`).
+`forktex` is a single binary with three peer services — **intelligence**, **cloud**, **network** — plus built-in commands for project inspection (`graph`), the delivery-standard audit (`fsd`), and lifecycle helpers (`status`, `clean`, `serve`, `agents`). All three services share the same credential verbs (`connect` / `disconnect`).
 
 ## Built-in vs. platform
 
@@ -8,23 +8,22 @@ What works offline, what needs which platform connection:
 
 | Command group        | Needs no platform | Needs `intelligence` | Needs `cloud` | Needs `network` |
 |----------------------|:-----------------:|:--------------------:|:-------------:|:---------------:|
-| `forktex agents …`   | ✅                |                      |               |                 |
-| `forktex arch …`     | ✅                |                      |               |                 |
+| `forktex graph …`    | ✅                |                      |               |                 |
 | `forktex fsd …`      | ✅                |                      |               |                 |
-| `forktex git …`      | ✅                |                      |               |                 |
-| `forktex local …`    | ✅                |                      |               |                 |
+| `forktex agents …`   | ✅                |                      |               |                 |
+| `forktex serve`      | ✅                |                      |               |                 |
+| `forktex clean`      | ✅                |                      |               |                 |
 | `forktex` (chat REPL)| menu only         | ✅ (chat upgrade)    |               |                 |
 | `forktex intelligence ask/run/scrape` | |     ✅                |               |                 |
 | `forktex cloud up/deploy/server/…`    | |                      | ✅            |                 |
 | `forktex network status`              | |                      |               | ✅              |
 
-`forktex status` and `forktex info` work without any platform — they just report which connections exist.
+`forktex status` works with or without a connection — it shows the project + environment + which services are signed in.
 
 ```
 forktex                      Bare: menu-driven root loop (auto-upgrades to chat REPL)
 forktex --version            Print version
-forktex status               Aggregate credential state (cloud + intelligence + network)
-forktex info                 Project + environment summary
+forktex status               Project + environment + auth state across all services
 ```
 
 ## Services
@@ -54,21 +53,33 @@ forktex network
 ## Cross-cutting groups
 
 ```
+forktex graph
+  build                      Refresh .forktex/graph.{json,dsl,html}
+  show                       Render as tree | json | dsl on stdout
+  c4                         Per-platform C4 view (DSL or drill-down HTML)
+  audit                      Validate the .forktex/ footprint against the spec
+  ecosystem                  Walk every forktex.json under a parent dir
+  diff                       Compare two graph snapshots
+  importers <target>         Modules that import a library / package / module
+  package <rel-path>         Locate the package containing a path
+  modules <pattern>          Glob over module names
+  recent                     Files inside .forktex/ touched in the last N hours
+
 forktex fsd
-  check                      Verify FSD compliance against the active profile
-  report                     Generate ISO audit evidence
+  check [--recursive]        Verify FSD compliance; recurse into nested forktex.json
+  report                     Generate FSD evidence pack (JSON + HTML)
+  ecosystem                  FSD level matrix across every project under a parent dir
   makefile sync              Regenerate Makefile from forktex.json atoms
 
-forktex arch
-  discover                   C4 auto-discovery from the codebase
+forktex agents
+  list                       Recent agent runs from history
+  show <id>                  Detail of one run
+  cancel <id>                Cancel a running agent
+  ground                     Regenerate AGENTS.md across sibling repos
+  root                       Start the persistent ecosystem-aware agent
 
-forktex git
-  status-all                 Multi-repo git status
-
-forktex overview             Ecosystem overview (siblings, versions, drift)
-forktex present              Pretty-print project context
-forktex agents               Local tool-server agents (ground, root)
-forktex local                Local-only utilities
+forktex serve                Live web dashboard (graph + C4 + structure spec)
+forktex clean                Remove generated artifacts; forget missing projects
 ```
 
 ## Slash commands (chat REPL)

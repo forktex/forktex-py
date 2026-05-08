@@ -46,7 +46,7 @@ Handler = Callable[
 # ── the three services (single source of truth — reused by completers & help) ─
 
 SERVICES: list[tuple[str, str]] = [
-    ("cloud", "deploy + manage infrastructure (controller + org credentials)"),
+    ("cloud", "deploy + manage infrastructure (environments + credentials)"),
     ("intelligence", "AI agent + tools (API key, chat, ask, run)"),
     ("network", "identity, projects, tasks, worklogs (JWT)"),
 ]

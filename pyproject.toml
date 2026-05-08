@@ -23,7 +23,7 @@
 
 [project]
 name = "forktex"
-version = "0.2.5"
+version = "0.4.0"
 description = "CLI, agent, architecture, audit, and SDK toolkit for the ForkTex self-managed software factory"
 authors = [
     {name = "FORKTEX",email = "info@forktex.com"}

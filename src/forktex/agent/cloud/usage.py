@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import asyncclick as click
+from forktex.agent.cloud.errors import translate_cloud_errors
 
 
 @click.command()
@@ -36,6 +37,7 @@ import asyncclick as click
     help="Show N months of history (default: current only)",
 )
 @click.pass_context
+@translate_cloud_errors
 async def usage(ctx, months):
     """View current month VPS-hours + cost for your org.
 
