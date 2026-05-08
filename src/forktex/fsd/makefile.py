@@ -155,14 +155,36 @@ def _get_atom_override(
 
 
 def _make_target_names(
-    atom: Atom, override: AtomOverride | None
+    atom: Atom,
+    override: AtomOverride | None,
+    *,
+    services: set[str] | None = None,
+    envs: set[str] | None = None,
 ) -> tuple[str, list[str]]:
-    canonical = atom.make_targets or [atom.id]
+    """Resolve the primary Make target + alias list for an atom.
+
+    Override-supplied targets win unconditionally. Otherwise the atom's
+    canonical target is used; if the canonical name is variant-syntax
+    (contains ``@``), it's parsed via :mod:`forktex.fsd.variants` so a
+    user-declared key like ``apply@web@local`` becomes the canonical
+    Make target ``apply-web-local`` regardless of qualifier order.
+    """
     if override and override.targets:
         primary = override.targets[0]
         aliases = _dedupe(override.aliases)
         return primary, aliases
-    return canonical[0], (override.aliases if override else [])
+    canonical = atom.make_targets or [atom.id]
+    primary = canonical[0]
+    if "@" in primary:
+        from forktex.fsd.variants import parse_atom_key
+
+        parsed = parse_atom_key(
+            primary,
+            services=services or set(),
+            envs=envs or set(),
+        )
+        primary = parsed.make_target
+    return primary, (override.aliases if override else [])
 
 
 def _make_target_comment(
@@ -472,20 +494,77 @@ def _render_target(
     return lines
 
 
-def _alias_invocation_to_target(invocation: str) -> str:
+def _alias_invocation_to_target(
+    invocation: str,
+    *,
+    services: set[str] | None = None,
+    envs: set[str] | None = None,
+) -> str:
     """Convert an atom-variant invocation into a Make target name.
 
-    Stand-in for the variant parser (Phase A.3): replaces the canonical
-    ``@`` separator with ``-``. Once the parser ships, this collapses into
-    ``variants.make_target_for(parse_atom_key(invocation, ...))``.
+    Routes through ``forktex.fsd.variants.parse_atom_key`` so canonical
+    axes (service / env) reorder to ``<atom>-<service>-<env>-<custom>``
+    regardless of input order, and free-form qualifiers preserve their
+    declared order. When *services* / *envs* aren't supplied, every
+    qualifier falls through to the free-form bucket — equivalent to the
+    historical ``replace('@', '-')``.
     """
-    return invocation.replace("@", "-")
+    from forktex.fsd.variants import parse_atom_key
+
+    parsed = parse_atom_key(
+        invocation,
+        services=services or set(),
+        envs=envs or set(),
+    )
+    return parsed.make_target
+
+
+def _project_axes(manifest: ForktexManifest) -> tuple[set[str], set[str]]:
+    """Extract the canonical axis values declared in a manifest.
+
+    Services come from ``packages[*].name`` and ``packages[*].path``
+    (so both the full name and the directory shorthand match). Envs
+    come from ``cloud.environments[*].name`` when the manifest carries
+    a typed cloud block.
+    """
+    services: set[str] = set()
+    for pkg in manifest.packages:
+        if pkg.name:
+            services.add(pkg.name)
+        if pkg.path and pkg.path != ".":
+            services.add(pkg.path)
+
+    envs: set[str] = set()
+    cloud = getattr(manifest, "cloud", None)
+    if cloud is not None:
+        cloud_envs = getattr(cloud, "environments", None)
+        if isinstance(cloud_envs, list):
+            for entry in cloud_envs:
+                if isinstance(entry, dict):
+                    name = entry.get("name")
+                    if isinstance(name, str):
+                        envs.add(name)
+                else:
+                    name = getattr(entry, "name", None)
+                    if isinstance(name, str):
+                        envs.add(name)
+        # Also accept the dict-shaped cloud block (some manifests don't
+        # validate against the typed CloudManifest model).
+        if isinstance(cloud, dict):
+            cloud_envs_raw = cloud.get("environments")
+            if isinstance(cloud_envs_raw, list):
+                for entry in cloud_envs_raw:
+                    if isinstance(entry, dict) and isinstance(entry.get("name"), str):
+                        envs.add(entry["name"])
+    return services, envs
 
 
 def _render_aliases_section(
     standard: FSDStandard,
     *,
     declared_targets: set[str],
+    services: set[str] | None = None,
+    envs: set[str] | None = None,
 ) -> tuple[list[str], list[str]]:
     """Render chord aliases and deprecated rename aliases as PHONY targets.
 
@@ -501,7 +580,10 @@ def _render_aliases_section(
     for alias, invocations in standard.aliases.items():
         if alias in declared_targets:
             continue
-        targets = [_alias_invocation_to_target(inv) for inv in invocations]
+        targets = [
+            _alias_invocation_to_target(inv, services=services, envs=envs)
+            for inv in invocations
+        ]
         if not all(t in declared_targets for t in targets):
             continue
         chord_label = " + ".join(invocations)
@@ -518,7 +600,9 @@ def _render_aliases_section(
             continue
         if not new_invocations:
             continue
-        new_target = _alias_invocation_to_target(new_invocations[0])
+        new_target = _alias_invocation_to_target(
+            new_invocations[0], services=services, envs=envs
+        )
         if new_target not in declared_targets:
             continue
         lines.extend(
@@ -540,17 +624,23 @@ def _declared_target_names(
     *,
     manifest: ForktexManifest,
     package_manifest: ForktexManifest | None = None,
+    services: set[str] | None = None,
+    envs: set[str] | None = None,
 ) -> set[str]:
     names: set[str] = set()
     for atom in atoms:
         target, aliases = _make_target_names(
             atom,
             _get_atom_override(manifest, atom.id, package_manifest=package_manifest),
+            services=services,
+            envs=envs,
         )
         names.add(target)
         names.update(aliases)
     for synthetic, override in custom:
-        target, aliases = _make_target_names(synthetic, override)
+        target, aliases = _make_target_names(
+            synthetic, override, services=services, envs=envs
+        )
         names.add(target)
         names.update(aliases)
     return names
@@ -586,6 +676,20 @@ def _root_secondary_targets(
             ]
         )
         phony.append("format-check")
+    elif not has_root_python and subpaths and "format-check" not in existing_targets:
+        # Sub-package-only workspace (e.g. intelligence, network): delegate to
+        # each subpackage's own format-check target, tolerating absence so
+        # languages with prettier (TS) and ruff (Python) all work.
+        lines.extend(
+            [
+                "format-check: ## Check formatting across every subpackage (workspace recursion)",
+                "\t@for pkg in $(SUBPACKAGES); do \\",
+                "\t\t$(MAKE) -C $$pkg format-check 2>/dev/null || true; \\",
+                "\tdone",
+                "",
+            ]
+        )
+        phony.append("format-check")
 
     if has_root_python and "lint-fix" not in existing_targets:
         lines.extend(
@@ -594,6 +698,17 @@ def _root_secondary_targets(
                 "\truff check --fix src/ tests/",
                 "\t@for pkg in $(SUBPACKAGES); do \\",
                 "\t\truff check --fix $$pkg/src/ $$pkg/tests/ 2>/dev/null || true; \\",
+                "\tdone",
+                "",
+            ]
+        )
+        phony.append("lint-fix")
+    elif not has_root_python and subpaths and "lint-fix" not in existing_targets:
+        lines.extend(
+            [
+                "lint-fix: ## Lint and auto-fix across every subpackage (workspace recursion)",
+                "\t@for pkg in $(SUBPACKAGES); do \\",
+                "\t\t$(MAKE) -C $$pkg lint-fix 2>/dev/null || true; \\",
                 "\tdone",
                 "",
             ]
@@ -666,6 +781,11 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         "",
     ]
 
+    # Pre-compute the project's canonical variant axes so that custom
+    # atom IDs containing ``@`` (e.g. ``apply@web@local``) render as
+    # canonical Make targets (``apply-web-local``).
+    services_axis, envs_axis = _project_axes(manifest)
+
     # Resolve custom atoms first so the standard-atom loop can skip any
     # atom whose primary make-target collides with a custom override.
     # Without this, the standard's ``license`` atom (make_targets =
@@ -675,13 +795,17 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
     custom = _custom_atoms(manifest, standard)
     custom_target_collisions: set[str] = set()
     for synthetic, override in custom:
-        ctarget, caliases = _make_target_names(synthetic, override)
+        ctarget, caliases = _make_target_names(
+            synthetic, override, services=services_axis, envs=envs_axis
+        )
         custom_target_collisions.add(ctarget)
         custom_target_collisions.update(caliases)
 
     for atom in atoms:
         override = _get_atom_override(manifest, atom.id)
-        target, aliases = _make_target_names(atom, override)
+        target, aliases = _make_target_names(
+            atom, override, services=services_axis, envs=envs_axis
+        )
         if target in custom_target_collisions:
             continue
         commands = _override_commands(_root_atom_commands(atom.id, manifest), override)
@@ -697,7 +821,9 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         lines.append("")
 
     for synthetic, override in custom:
-        target, aliases = _make_target_names(synthetic, override)
+        target, aliases = _make_target_names(
+            synthetic, override, services=services_axis, envs=envs_axis
+        )
         lines.extend(
             _render_target(
                 synthetic,
@@ -709,22 +835,30 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         )
         lines.append("")
 
-    declared_targets = _declared_target_names(atoms, custom, manifest=manifest)
+    declared_targets = _declared_target_names(
+        atoms, custom, manifest=manifest, services=services_axis, envs=envs_axis
+    )
     secondary_lines, secondary_phony = _root_secondary_targets(
         manifest, existing_targets=declared_targets
     )
     lines.extend(secondary_lines)
 
     # Render alias chord shortcuts (quality, ci, release) and deprecated-name
-    # aliases (start → apply, etc.) declared in the standard.
+    # aliases (start → apply, etc.) declared in the standard. Reuses the
+    # already-computed canonical axes so chord targets canonicalise.
     alias_lines, alias_phony = _render_aliases_section(
         standard,
         declared_targets=declared_targets | set(secondary_phony),
+        services=services_axis,
+        envs=envs_axis,
     )
     lines.extend(alias_lines)
     secondary_phony.extend(alias_phony)
 
-    custom_target_names = [_make_target_names(s, o)[0] for s, o in custom]
+    custom_target_names = [
+        _make_target_names(s, o, services=services_axis, envs=envs_axis)[0]
+        for s, o in custom
+    ]
     root_paths, subpaths = _package_paths(manifest)
     has_root_python = bool(root_paths)
     extra_targets: list[str] = []
@@ -742,7 +876,12 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         + " ".join(
             _dedupe(
                 [
-                    _make_target_names(atom, _get_atom_override(manifest, atom.id))[0]
+                    _make_target_names(
+                        atom,
+                        _get_atom_override(manifest, atom.id),
+                        services=services_axis,
+                        envs=envs_axis,
+                    )[0]
                     for atom in atoms
                 ]
                 + custom_target_names
@@ -822,10 +961,14 @@ def generate_package_makefile(
         "",
     ]
 
+    services_axis, envs_axis = _project_axes(package_manifest)
+
     custom = _custom_atoms(manifest, standard, package_manifest=package_manifest)
     custom_target_collisions: set[str] = set()
     for synthetic, override in custom:
-        ctarget, caliases = _make_target_names(synthetic, override)
+        ctarget, caliases = _make_target_names(
+            synthetic, override, services=services_axis, envs=envs_axis
+        )
         custom_target_collisions.add(ctarget)
         custom_target_collisions.update(caliases)
 
@@ -833,7 +976,9 @@ def generate_package_makefile(
         override = _get_atom_override(
             manifest, atom.id, package_manifest=package_manifest
         )
-        target, aliases = _make_target_names(atom, override)
+        target, aliases = _make_target_names(
+            atom, override, services=services_axis, envs=envs_axis
+        )
         if target in custom_target_collisions:
             continue
         commands = _override_commands(
@@ -851,7 +996,9 @@ def generate_package_makefile(
         lines.append("")
 
     for synthetic, override in custom:
-        target, aliases = _make_target_names(synthetic, override)
+        target, aliases = _make_target_names(
+            synthetic, override, services=services_axis, envs=envs_axis
+        )
         lines.extend(
             _render_target(
                 synthetic,
@@ -868,13 +1015,18 @@ def generate_package_makefile(
         custom,
         manifest=manifest,
         package_manifest=package_manifest,
+        services=services_axis,
+        envs=envs_axis,
     )
     secondary_lines, secondary_phony = _package_secondary_targets(
         src_dir, existing_targets=declared_targets
     )
     lines.extend(secondary_lines)
 
-    custom_target_names = [_make_target_names(s, o)[0] for s, o in custom]
+    custom_target_names = [
+        _make_target_names(s, o, services=services_axis, envs=envs_axis)[0]
+        for s, o in custom
+    ]
     phony_targets = _dedupe(
         [
             _make_target_names(
@@ -882,6 +1034,8 @@ def generate_package_makefile(
                 _get_atom_override(
                     manifest, atom.id, package_manifest=package_manifest
                 ),
+                services=services_axis,
+                envs=envs_axis,
             )[0]
             for atom in atoms
         ]

@@ -29,7 +29,8 @@ Project-scope walk:
 * ``project_root`` ─contains→ ``manifest`` ; ``manifest`` ─manifest_of→ ``project_root``
 * ``project_root`` ─contains→ ``package`` (one per ``forktex.json``)
 * ``package`` ─contains→ ``domain`` (one per ``src/{domain}/`` or ``app/{domain}/``)
-* ``domain`` ─contains→ ``module`` (top-level ``*.py`` immediately under it)
+* ``domain`` ─contains→ ``module`` (every ``*.py`` under it, recursively;
+  nested subpackages keep their full dotted name like ``ai.chat.orchestrator``)
 * ``package`` ─depends_on→ ``library`` (parsed from ``pyproject.toml``)
 
 OS-scope walk:
@@ -144,7 +145,17 @@ def _domains_under(src_dir: Path) -> list[Path]:
 
 
 def _modules_under(domain: Path) -> list[Path]:
-    return sorted(f for f in domain.iterdir() if f.is_file() and f.suffix == ".py")
+    """Find every ``.py`` file under a domain directory, recursively.
+
+    Walks subpackages too — modern Python projects nest meaningful
+    structure (e.g. ``api/src/ai/chat/orchestrator.py``). Honours
+    ``SKIP_DIRS`` so caches and build outputs don't pollute the graph.
+    """
+
+    def _allowed(path: Path) -> bool:
+        return not any(part in SKIP_DIRS for part in path.relative_to(domain).parts)
+
+    return sorted(f for f in domain.rglob("*.py") if f.is_file() and _allowed(f))
 
 
 _MAKE_TARGET_RE = None
@@ -256,12 +267,16 @@ def _add_package(
             for module_path in _modules_under(domain_dir):
                 mod_rel = _rel(module_path, project_root)
                 mod_id = _node_id("module", "project", mod_rel)
-                # Dotted name: "<importable>.<domain>.<stem>" — for __init__.py
-                # the package's dotted form is "<importable>.<domain>".
+                # Dotted name from src_dir-relative path, dot-separated.
+                # `__init__.py` collapses to its package's dotted name (drop
+                # the last segment). Supports nested subpackages, e.g.
+                # ``api/src/ai/chat/orchestrator.py`` →
+                # ``forktex-intelligence-api.ai.chat.orchestrator``.
+                rel_to_src = module_path.relative_to(src_dir)
+                parts = list(rel_to_src.with_suffix("").parts)
                 if module_path.stem == "__init__":
-                    dotted = f"{importable}.{domain_dir.name}"
-                else:
-                    dotted = f"{importable}.{domain_dir.name}.{module_path.stem}"
+                    parts = parts[:-1]
+                dotted = ".".join([importable, *parts]) if parts else importable
                 g.add_node(
                     GraphNode(
                         id=mod_id,
