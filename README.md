@@ -58,6 +58,8 @@ forktex agents list      # history of agent runs
 forktex agents show <id> # inspect one run
 ```
 
+The REPL persists line history between sessions at `~/.forktex/repl_history` — up-arrow recalls the previous prompt the next time you open `forktex`. Slash commands include `/help`, `/status`, `/cards`, `/connect <svc>`, `/disconnect <svc>`, `/clear`, `/history`, `/tools`, `/menu`, `/quit` (alias: `/exit`).
+
 ### 🛠  A real tool surface, not a wrapper
 
 The agent calls into a single tool registry — the same shape an MCP server would expose, just in-process:
@@ -100,13 +102,13 @@ forktex fsd makefile sync  # regenerate Makefile from forktex.json atoms (don't 
 
 #### The catalog at a glance
 
-**21 atoms across 4 domains** — a software-delivery standard from bootstrap (L0) to operational maturity (L4). Each atom is the **unit of evidence at a single audit citation** — variants like `apply@local`, `test@battle`, `sync@migration` express scope without bloating the catalog.
+**20 atoms across 4 domains** — a software-delivery standard from bootstrap (L0) to operational maturity (L4). Each atom is the **unit of evidence at a single audit citation** — variants like `apply@local`, `test@battle`, `sync@migration` express scope without bloating the catalog.
 
 ```
-code     (8)   ▶  format · lint · typing · test · security · license · sync · docs
+code     (9)   ▶  format · lint · typing · test · security · license · sync · docs · manual
 data     (1)   ▶  seed
-infra    (5)   ▶  install · build · publish · clean · help
-ops      (7)   ▶  apply · destroy · monitor · logs · rollback · acceptance · backup
+infra    (4)   ▶  install · build · publish · clean
+ops      (6)   ▶  apply · destroy · monitor · rollback · acceptance · backup
 ```
 
 #### Domain × atom map
@@ -123,18 +125,17 @@ One-line semantics per atom. Variants are listed where the atom is canonically s
 | code | `license` | source headers + dependency licenses verified | — |
 | code | `sync` | derived artifacts in sync with source-of-truth | `sync@migration`, `sync@types`, `sync@api`, `sync@state`, `sync@docs`, `sync@sbom` |
 | code | `docs` | project documentation exists and is current | `docs@arch`, `docs@api`, `docs@runbook`, `docs@adr` |
+| code | `manual` | architecture + context manual generated from the project graph (humans + agents) | `manual@arch`, `manual@graph`, `manual@agents`, `manual@search` |
 | **data** | `seed` | development / test data hydration | `seed@minimal`, `seed@e2e`, `seed@demo` |
 | **infra** | `install` | bootstraps a fresh checkout to runnable state | `install@dev` |
 | infra | `build` | distributable artefacts produced (wheel, image, bundle) | `build@<service>`, `build@image` |
 | infra | `publish` | artefacts uploaded to registry / store / CDN | `publish@test`, `publish@prod` |
 | infra | `clean` | build artefacts and caches removable | `clean@db`, `clean@cache`, `clean@dist` |
-| infra | `help` | Make surface self-documenting (`make help`) | — |
 | **ops** | `apply` | drive runtime to declared state — local or env, idempotent | `apply@local`, `apply@<env>` |
 | ops | `destroy` | remove runtime entirely — terminate processes or tear down env | `destroy@<env>` |
-| ops | `monitor` | inspect current runtime state (health, metrics) | `monitor@<env>` |
-| ops | `logs` | stream runtime events | `logs@<env>` |
+| ops | `monitor` | inspect current runtime state — health, metrics, replica status, live logs | `monitor@<env>`, `monitor@<env>@logs`, `monitor@<env>@health` |
 | ops | `rollback` | revert deployed env to previous version | `rollback@<env>` |
-| ops | `acceptance` | live system verification end-to-end | `acceptance@smoke`, `acceptance@e2e`, `acceptance@battle`, `acceptance@load`, `acceptance@chaos`, `acceptance@pen` |
+| ops | `acceptance` | live system verification end-to-end | `acceptance@battle`, `acceptance@e2e`, `acceptance@load`, `acceptance@chaos`, `acceptance@pen` |
 | ops | `backup` | database + volume backups produced and restorable | `backup@<env>` |
 
 #### Levels × atoms — cumulative ladder
@@ -144,10 +145,10 @@ Each level **strictly contains** the previous. A project advertises its `targetL
 | Level | Name | Adds | Cumulative atoms |
 | :---: | --- | --- | :---: |
 | **L0** | Bootstrap | — | 0 |
-| **L1** | Runnable | `install`, `apply`, `destroy`, `monitor`, `logs`, `build`, `publish`, `clean`, `help` | 9 |
-| **L2** | Quality | `format`, `lint`, `typing`, `test`, `security`, `license`, `sync` | 16 |
-| **L3** | Shippable | `docs` | 17 |
-| **L4** | Operational | `acceptance`, `rollback`, `backup`, `seed` | 21 |
+| **L1** | Runnable | `install`, `apply`, `destroy`, `monitor`, `build`, `publish`, `clean` | 7 |
+| **L2** | Quality | `format`, `lint`, `typing`, `test`, `security`, `license`, `sync` | 14 |
+| **L3** | Shippable | `docs`, `manual` | 16 |
+| **L4** | Operational | `acceptance`, `rollback`, `backup`, `seed` | 20 |
 
 #### Variant syntax (`@`-qualifiers)
 
@@ -282,6 +283,82 @@ forktex cloud up --env local --build           # bring infra up from forktex.jso
 forktex serve                                  # live dashboard with the project graph
 forktex status --json | jq '.intelligence.configured'
 ```
+
+### Atoms (1:1 with the catalog)
+
+Every FSD atom is also a top-level command, so any atom in your
+project's `forktex.json` is one keyword away. Variants surface as
+flags (`--service`, `--env`, repeatable `--scope`); execution shells
+out to `make <target>`:
+
+```bash
+forktex test                                  # ⇒ make test
+forktex apply --env local                     # ⇒ make apply-local
+forktex acceptance --scope battle             # ⇒ make acceptance-battle
+forktex publish --env prod                    # ⇒ make publish-prod
+forktex sync --scope migration                # ⇒ make sync-migration
+```
+
+Bare `forktex` (no subcommand) still launches the interactive agent
+REPL. Atom-name collisions resolve as follows:
+
+- **`forktex manual`** (no subverb) → `manual` atom recipe (which
+  itself calls `forktex manual build`); `forktex manual build` and
+  `forktex manual search …` keep their existing surface.
+- **`forktex clean`** keeps its current behaviour (purges
+  `.forktex/`); the `clean` *atom* (build-artifact cleanup) is run
+  via `make clean`.
+
+---
+
+## Public Python API
+
+The `forktex` PyPI package primarily ships a CLI. A small Python surface
+is also exposed for programmatic integration. **Only the symbols listed
+below are covered by semver from v1.0.0 forward** — everything else
+under `forktex.*` is internal and may change in a patch release.
+
+| Import | What it gives you |
+| --- | --- |
+| `from forktex import __version__` | Installed package version |
+| `from forktex import StateManager, generate_id, current_timestamp` | Core agent-state primitives |
+| `from forktex import get_global_config_dir, get_project_config_dir, ensure_global_config_dir, ensure_project_config_dir` | Path helpers for `~/.forktex/` and `<project>/.forktex/` |
+| `from forktex import Settings, get_settings` | Aggregated settings accessor |
+| `from forktex.core import …` | Same primitives as above, by module |
+| `from forktex.intelligence import Intelligence, IntelligenceSettings, …` | Re-exports from the `forktex-intelligence` SDK |
+| `from forktex.cloud import ForktexCloudClient, CloudContext, Manifest, …` | Re-exports from the `forktex-cloud` SDK |
+| `from forktex.agent.auth import build_facet_commands, connect_cloud, …` | Auth-flow building blocks |
+| `from forktex.agent.network import …` | `forktex network` Click subgroup + settings |
+| `from forktex.manual import generate_manual, ManualBundle, ManualScope, SearchIndex, SearchHit` | Generate the architecture/context manual + keyword search over the project graph |
+
+For SDK use without forktex-py installed, the underlying packages
+(`forktex-intelligence`, `forktex-cloud`, `forktex-network`) are
+available as standalone PyPI distributions.
+
+## Versioning policy
+
+From **v1.0.0** forward, `forktex` follows
+[Semantic Versioning](https://semver.org/):
+
+- **MAJOR** — breaking changes to the CLI surface (commands listed in
+  `forktex --help`) or to the public Python API listed above.
+- **MINOR** — new commands, new flags, new public Python symbols,
+  additive FSD catalog changes (new atoms / variants / profiles).
+- **PATCH** — bug fixes, internal refactors, doc updates, and changes
+  to anything not covered by the public surface.
+
+The bundled FSD catalog has its own version (`fsd.version` in
+`forktex.json` and `version` in `src/forktex/data/fsd/standard.json`)
+which tracks catalog evolution independently. Catalog upgrades within
+the same major (e.g. `1.x → 1.y`) are additive and won't fail
+`forktex fsd check` for projects pinned to an earlier minor.
+
+Anything under `forktex.agent.*` (except `forktex.agent.auth` and
+`forktex.agent.network`), `forktex.fsd.*`, `forktex.graph.*`,
+`forktex.runtime.*`, `forktex.manifest.*`, `forktex.models.*`,
+`forktex.filesystem.*`, `forktex.scraper.*`, and any
+underscore-prefixed module is **internal**. Use at your own risk —
+expect breakage between minor versions.
 
 ---
 

@@ -331,7 +331,7 @@ async def connect_cloud(
     try:
         with ForktexCloudClient(url) as client:
             token_resp = client.login(email, password)
-            access_token = token_resp.accessToken
+            access_token = token_resp.access_token
             with ForktexCloudClient(url, access_token=access_token) as authed:
                 orgs = authed.list_orgs()
             if not orgs:

@@ -39,7 +39,7 @@ from typing import Optional
 import asyncclick as click
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
-from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.history import FileHistory, History, InMemoryHistory
 from prompt_toolkit.shortcuts import CompleteStyle
 from rich.columns import Columns
 from rich.console import Group
@@ -132,6 +132,26 @@ class _MenuCompleter(Completer):
 _session: Optional[PromptSession[str]] = None
 
 
+def _repl_history() -> History:
+    """Return a per-user persistent history backing for the REPL.
+
+    History lives at ``<global_config_dir>/repl_history`` (typically
+    ``~/.forktex/repl_history``). Falls back to in-memory storage when
+    the directory is not writable so the REPL still boots.
+    """
+    try:
+        from forktex.core.paths import (
+            ensure_global_config_dir,
+            get_global_config_dir,
+        )
+
+        ensure_global_config_dir()
+        history_path = get_global_config_dir() / "repl_history"
+        return FileHistory(str(history_path))
+    except OSError:  # read-only home, sandboxed env, etc.
+        return InMemoryHistory()
+
+
 def _get_session() -> PromptSession[str]:
     global _session
     if _session is None:
@@ -139,7 +159,7 @@ def _get_session() -> PromptSession[str]:
             completer=_MenuCompleter(),
             complete_while_typing=True,
             complete_style=CompleteStyle.MULTI_COLUMN,
-            history=InMemoryHistory(),
+            history=_repl_history(),
             mouse_support=False,
         )
     return _session
@@ -442,9 +462,20 @@ async def _run_service_action(
             api_key=None,
             new_account=new_account,
         )
+    except KeyboardInterrupt:
+        info(
+            f"[dim]{service} {slash_head[1:]} cancelled — "
+            f"type 'c' / 'i' / 'n' to retry.[/dim]"
+        )
     except SystemExit:
-        # _render_connect_error already emitted the diagnostic panel.
-        pass
+        # _render_connect_error already emitted the diagnostic panel
+        # (auth failure, network unreachable, etc.). The user may have
+        # also Ctrl+C'd through the prompt — surface a friendly hint
+        # so the menu doesn't drop back silently.
+        info(
+            f"[dim]{service} {slash_head[1:]} did not complete — "
+            f"type 'c' / 'i' / 'n' to retry.[/dim]"
+        )
     except Exception as exc:
         info(f"{slash_head} failed: {exc}")
 

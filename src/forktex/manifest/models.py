@@ -235,10 +235,24 @@ class ForktexManifest(ForkTexModel):
         return d.host if isinstance(d, GatewayDomain) else d
 
     @classmethod
-    def load(cls, path: Path) -> ForktexManifest:
+    def load(cls, path: Path, *, env: str | None = None) -> ForktexManifest:
+        """Load a manifest, optionally merging a per-env overlay.
+
+        When ``env`` is provided, looks for ``forktex.<env>.json`` next to
+        ``path`` and deep-merges it into the base before validation. Mirrors
+        the cloud SDK's ``forktex_cloud.Manifest.load(path, env=...)`` shape
+        so the same on-disk convention works across both tools.
+        """
         if not path.is_file():
             raise FileNotFoundError(f"Manifest not found: {path}")
         raw = json.loads(path.read_text())
+        if env:
+            from forktex.manifest._overlay import deep_merge
+
+            overlay_path = path.parent / f"forktex.{env}.json"
+            if overlay_path.is_file():
+                overlay = json.loads(overlay_path.read_text())
+                raw = deep_merge(raw, overlay)
         raw.setdefault("manifestVersion", MANIFEST_VERSION)
         cloud_raw = raw.get("cloud")
         if cloud_raw is None:

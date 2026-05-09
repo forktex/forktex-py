@@ -299,6 +299,17 @@ PROJECT_SPEC: tuple[EntrySpec, ...] = (
         sensitivity="public",
         writers=("forktex.agent.graph.cli",),
     ),
+    # Manual atom outputs (`forktex manual build` / `make manual`).
+    EntrySpec(
+        pattern="manual/**",
+        kind="dir",
+        purpose="Generated architecture + AI manual bundle "
+        "(manual_arch.html, manual_graph.html, manual_agents.json, "
+        "manual_bundle.json).",
+        sensitivity="public",
+        required=False,
+        writers=("forktex.agent.manual.cli",),
+    ),
 )
 
 
@@ -332,6 +343,16 @@ GLOBAL_SPEC: tuple[EntrySpec, ...] = (
         purpose="Global network JWT + principal email.",
         sensitivity="secret",
         writers=("forktex.agent.network.settings",),
+    ),
+    # Persistent REPL input history (prompt_toolkit FileHistory).
+    EntrySpec(
+        pattern="repl_history",
+        kind="file",
+        purpose="Persistent line history for the bare `forktex` REPL "
+        "(menu PromptSession + chat input buffer).",
+        sensitivity="config",
+        required=False,
+        writers=("forktex.agent.root_loop.menu",),
     ),
     # Registry — NEW. Maintained by io_proxy.tracked_write.
     EntrySpec(

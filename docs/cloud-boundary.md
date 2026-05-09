@@ -106,7 +106,7 @@ boundary draws a single horizontal line through it:
                                                                  ForktexCloudClient.deploy(…)   (managed)
 
 4. VERIFY                                                      monitor@<env>      (healthcheck)
-                                                                 acceptance@<env>   (e2e / smoke / battle)
+                                                                 acceptance@<env>   (e2e / battle / load)
 ─────────────────────────────────────────────────────────────────────────────
 ```
 
@@ -114,7 +114,7 @@ Step 1 is **pure**: no IO, no exceptions about filesystem state,
 returns serialisable data. Steps 2–4 are **agent-owned**.
 
 The atoms that flow through this pipeline are the ops-domain atoms —
-`apply`, `destroy`, `monitor`, `logs`, `rollback`, `backup`,
+`apply`, `destroy`, `monitor`, `rollback`, `backup`,
 `acceptance`. Each runs the same 4 steps, just substituting the
 substrate at step 3.
 
@@ -378,7 +378,7 @@ Side-channel notes from running the iteration loops against
 intelligence and network. These are forktex-py issues / gaps
 distinct from the cloud-boundary conflicts above.
 
-### Loop 1 — `make ci` smoke
+### Loop 1 — `make ci` battle
 
 - **`make ci` was missing from intelligence + network** after the
   org-side prune cycle (the standard's `ci` chord requires
@@ -400,7 +400,7 @@ distinct from the cloud-boundary conflicts above.
   projects nest substructure (`api/src/ai/chat/orchestrator.py`).
   **Fixed** in `forktex.graph.build._modules_under` (commit `3bd9e9f`):
   recursive `rglob('*.py')` with `SKIP_DIRS` guard; dotted names
-  rebuilt from the path-relative-to-`src_dir`. Smoke against
+  rebuilt from the path-relative-to-`src_dir`. Battle-tested against
   intelligence: 180→277 nodes, 581→988 edges, ai/* modules 3→23.
 - **`forktex agents ground` has no refresh action**. Today the
   command exposes only `repos` (list) and `status` (display) — no

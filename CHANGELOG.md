@@ -4,6 +4,292 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 
 ## [Unreleased]
 
+### Added
+
+- **Persistent REPL history.** Bare `forktex` now keeps line history
+  across sessions in `<global_config_dir>/repl_history` (typically
+  `~/.forktex/repl_history`). Up-arrow recalls previous prompts the
+  next time you open the REPL. Powered by
+  `prompt_toolkit.history.FileHistory` and shared between the menu
+  PromptSession and the chat input buffer. Falls back to in-memory
+  history if the global config dir isn't writable.
+- **`/exit` slash command** — alias for `/quit`, matches common REPL
+  conventions.
+
+### Fixed
+
+- **`/connect` mid-chat no longer breaks the TTY.** The detach/reattach
+  pair around the embedded login flow is now wrapped in `try/finally`
+  so the prompt_toolkit Application restores the terminal even when
+  the connect impl raises (`KeyboardInterrupt`, `SystemExit`, or
+  generic `Exception`). A friendly one-liner ("connect <svc>
+  cancelled — try again with /connect <svc>") replaces the silent
+  drop-back.
+- **Stream errors are now classified.** The chat-turn exception
+  handler distinguishes transient network blips
+  (`httpx.RemoteProtocolError`/`ReadTimeout`/`ConnectError`,
+  `asyncio.TimeoutError`, generic `ConnectionError`,
+  `IntelligenceAPIError 408/429`) from fatal failures
+  (`IntelligenceAPIError 401/403` → suggests `/connect intelligence`;
+  other 4xx/5xx). Unknown exceptions render with a debug hint instead
+  of a raw traceback. New helper at
+  `forktex.agent.root_loop._stream_errors.classify`.
+- **Login-cancelled feedback.** The menu's connect dispatcher now
+  catches `KeyboardInterrupt` and `SystemExit` together and prints
+  "<service> connect did not complete — type 'c' / 'i' / 'n' to
+  retry." instead of dropping back to the menu silently.
+
+### Publishing-readiness verdict — bare `forktex` REPL
+
+The `forktex` runtime agent (the bare-invocation chat REPL) is
+publish-ready. End-to-end audit:
+
+- Entry point + lifecycle (`forktex.agent.cli`, `forktex.agent.root_loop`).
+- Menu UI auto-upgrades to chat when Intelligence is reachable.
+- Chat app streams SSE deltas with up to 20 tool-call rounds.
+- 12 graph tools + filesystem + git + gated-bash all wired.
+- 11 slash commands (`/help`, `/status`, `/cards`, `/connect`,
+  `/disconnect`, `/clear`, `/history`, `/tools`, `/menu`, `/quit`,
+  `/exit`).
+- Persistent history (this release) + clean Ctrl+C/Ctrl+D handling.
+
+Composition with the renamed SDK shapes (`Intelligence()` /
+`Cloud()` / `NetWork()`) and `forktex-core`'s graph + catalog
+primitives is a follow-up coordinated with sibling-repo PyPI
+publishes — see project memory `project_sdk_rename_migration_plan`.
+
+### Changed — breaking
+
+- **`help` atom removed from the catalog.** `make help` is a Makefile
+  convention (target listing), not an FSD evidence concept — the
+  atom never carried its weight. The Makefile generator now emits a
+  `help:` rule as a static preamble (always present, independent of
+  the catalog), so `make help` keeps working for every project.
+  Catalog drops from 21 → **20 atoms** across 4 domains. The
+  `ergonomics` facet (which contained only `help`) is also removed,
+  along with its references from L1/L2/L3/L4. FSD catalog version
+  bumped `1.2.0` → `1.3.0`.
+- **`forktex help` is no longer a recognised CLI command.** Use
+  `forktex --help` for the CLI surface (Click's built-in) and
+  `make help` for the Makefile target listing. The two surfaces are
+  now cleanly separate.
+
+### Fixed
+
+- **Atom dispatch crashed with `'Context' object has no attribute
+  'exit'`** when running any `forktex <atom>`. asyncclick's
+  ``Context`` doesn't expose a sync-style ``.exit()``; replaced with
+  ``sys.exit(rc)`` in both ``forktex.agent.atoms.dispatcher`` and
+  the ``forktex.agent.manual`` group's ``invoke_without_command``
+  fallback.
+- **`forktex cloud connect` would AttributeError on
+  `token_resp.accessToken`** because the published
+  `forktex_cloud.client.generated.TokenResponse` exposes
+  ``access_token`` (snake_case). Updated `agent/auth/cli.py` and
+  the regression test in `tests/test_auth_connect.py` accordingly.
+
+### Added
+
+- **Atom catalog as first-class CLI surface.** Every FSD atom now
+  has a top-level `forktex <atom>` command, 1:1 with the catalog
+  (e.g. `forktex test`, `forktex apply --env local`,
+  `forktex acceptance --scope battle`). Variants surface as
+  `--service`, `--env`, and repeatable `--scope` flags; resolution
+  routes through `forktex.fsd.variants.parse_atom_key` and shells
+  out to `make <target>`. Bare `forktex` (no subcommand) keeps the
+  runtime-agent REPL. Atom-name collisions: `forktex manual` (no
+  subverb) routes to the atom dispatch via the group's
+  `invoke_without_command=True` body; `forktex clean` keeps its
+  existing `.forktex/` purge behaviour and the *atom* `clean`
+  (build-artifact cleanup) is invoked via `make clean`.
+- **`ForktexManifest.load(path, env=None)` per-env overlay.** Mirrors
+  the cloud SDK's overlay shape: when `env` is provided and a
+  `forktex.<env>.json` file sits next to the base manifest, it is
+  deep-merged in before pydantic validation. List-of-records merge
+  by `id`/`name` key; plain lists overlay-replace. New helper at
+  `forktex.manifest._overlay.deep_merge`.
+- **`manual` atom (code domain).** Generates a system-wide
+  architecture + context manual from the project graph for both
+  humans and AI agents. Variants: `manual@arch` (C4),
+  `manual@graph` (filesystem inspector + dependency tree),
+  `manual@agents` (AI bundle: rules / concepts / few-shots),
+  `manual@search` (keyword fuzzy-search over the graph, ranked).
+  Catalog grows from 20 → **21 atoms**; L3 cumulative count
+  17 → 17 (manual is optional at L3); L4 21 → 22 atoms covered.
+  FSD catalog version bumped from `1.1.0` → `1.2.0`.
+- **`forktex.manual` Python package.** Public API:
+  `generate_manual(graph, scope=...)`, `ManualBundle`, `ManualScope`,
+  `SearchIndex`, `SearchHit`. Covered by v1.0.0 semver.
+- **`forktex manual` CLI subcommand**: `forktex manual build
+  [--scope arch|graph|agents|search]` and `forktex manual search
+  <keyword>`. Writes outputs under `<project>/.forktex/manual/`
+  (audited via the structure spec).
+- **`package/python-library` profile** now has `acceptance` and
+  `manual` in `optional` (previously `acceptance` was disabled).
+  Library projects that ship a CLI entrypoint can declare a
+  meaningful acceptance flow and reach L4.
+- **`package/python-sdk` profile** now has `acceptance` in
+  `optional` (matching the library profile change). SDKs that
+  publish to PyPI can also benefit from the wheel-install acceptance
+  pattern.
+
+### Fixed
+
+- **FSD level evaluator now treats profile-disabled atoms (N/A) as
+  non-blocking**, matching the facet evaluator's behaviour. Without
+  this fix, switching a project to a profile that disables a
+  level-required atom (e.g. `apply` for `package/python-library`)
+  would silently drop the project from L4 → L0 even though every
+  applicable atom was satisfied. Regression test in
+  `tests/test_fsd_evaluate.py`.
+
+### Changed — breaking
+
+- **`ci` chord renamed to `gate`.** The catalog's chord trio is
+  now `quality / gate / release`. `release` chord composes from
+  `gate` (was: from `ci`). Hard break — projects using
+  `make ci` must rename to `make gate`. Justification: "CI" is
+  industry slang for the merge gate; verb-shaped chord names are
+  consistent with the rest of the catalog.
+- **forktex-py switched profile from `workspace/python-monorepo` to
+  `package/python-library`** and bumped declared `targetLevel` from
+  `L3` to `L4`. forktex-py is a single-package Python CLI, not a
+  workspace runtime — the new profile is more honest.
+  `apply`/`destroy`/`monitor` are now N/A on the FSD report (they
+  don't apply to a CLI library).
+- **`logs` atom merged into `monitor`.** The runtime-control facet
+  now exposes a single `monitor` atom that covers health probes,
+  metric scrapes, replica status, **and** live event/log streams.
+  Variants like `monitor@local@logs` express the streaming scope
+  without a separate atom. The four bundled profiles
+  (`workspace/python-monorepo`, `package/python-library`,
+  `package/python-sdk`, `docs/knowledge-directory`) and the
+  Makefile generator have been resynced.
+- **`smoke` removed from the ecosystem vocabulary.** The
+  `acceptance` atom no longer accepts `smoke` as a resolver
+  alternative or `acceptance@smoke` as a common variant. Use
+  `acceptance@battle` (preferred) or `acceptance@e2e` instead.
+  `tests/test_smoke.py` has been renamed to `tests/test_battle.py`.
+
+### Added
+
+- **`make acceptance` for forktex-py itself.** The repo's
+  `forktex.json` now declares an `acceptance` recipe that builds
+  the wheel, installs it into a fresh `python3.14` venv, and
+  battle-tests the CLI end-to-end (`forktex --version`, every
+  subcommand `--help`, `forktex fsd check` and `forktex graph
+  build` against forktex-py itself).
+- **CI runs `make acceptance`** after `make ci` on every push and
+  PR to `master` (`.github/workflows/ci.yml`).
+
+### Removed
+
+- **Legacy `forktex.agent.fsd.standard` module deleted (~700 lines).**
+  Replaced by the JSON catalog at `src/forktex/data/fsd/standard.json`
+  loaded via `forktex.fsd.loader.load_standard`. The single remaining
+  consumer (`agent/fsd/report.py`) now uses `ISORef` from
+  `forktex.fsd.models`. Importers of `forktex.agent.fsd.standard`
+  must migrate to `forktex.fsd.models` (`ISORef`, `Atom`, `Facet`,
+  `FSDStandard`, …).
+
+### Migration — upgrading from `forktex 0.2.6` (latest PyPI)
+
+This block consolidates every breaking change since `0.2.6`. If your
+project still uses any of the surfaces below, update before pulling
+the new release.
+
+**1. CLI commands removed (in 0.3.0 — surface consolidation).**
+
+| Removed | Replace with |
+| --- | --- |
+| `forktex arch` | `forktex graph build` + `forktex graph c4` |
+| `forktex purge` | `forktex clean` |
+| `forktex local` | `forktex cloud up --env local` |
+| `forktex git` | use `git` directly |
+| `forktex present` | `forktex graph c4 --format html` |
+| `forktex overview` | `forktex status` |
+
+**2. Deprecated atom aliases removed (hard break in 0.4.0).** The
+`aliases.deprecated` redirect map is gone — projects must declare
+canonical atom IDs in `forktex.json`. Make-target → atom rewrite:
+
+| Old target | New atom (+ variant) |
+| --- | --- |
+| `start`, `up` | `apply` (`apply@local`, `apply@<env>`) |
+| `stop`, `down` | `destroy` (`destroy@<env>`) |
+| `deploy` | `apply@<env>` |
+| `deps` | `install` |
+| `typecheck` | `typing` |
+| `security-audit`, `audit` | `security` |
+| `codegen`, `codegen-check` | `sync@api`, `sync@types` (etc.) |
+| `monitoring` | `monitor` |
+| `verify`, `e2e`, `smoke`, `battle` | `acceptance@battle`, `acceptance@e2e`, … |
+
+**3. `targetLevel: L5` no longer accepted (hard break in 0.4.0).** The
+catalog stops at `L4 Operational`. Update `forktex.json`:
+
+```diff
+-  "targetLevel": "L5"
++  "targetLevel": "L4"
+```
+
+**4. `logs` atom merged into `monitor` (hard break in [Unreleased]).**
+Catalog drops from 21 atoms to 20.
+
+```diff
+   "fsd": {
+     "atoms": {
+-      "logs": { "commands": ["docker compose -f .forktex/compose/docker-compose.local.yml logs -f"] }
++      "monitor@local@logs": { "commands": ["docker compose -f .forktex/compose/docker-compose.local.yml logs -f"] }
+     }
+   }
+```
+
+The bundled `monitor` atom's `resolve.any_of` accepts `logs` as a
+Make-target name, so existing `make logs` recipes continue to satisfy
+the merged atom — only the *atom declaration* in `forktex.json`
+changes.
+
+**5. `acceptance@smoke` variant removed (hard break in [Unreleased]).**
+Use `acceptance@battle` (preferred) or `acceptance@e2e`. `forktex fsd
+check` rejects `acceptance@smoke` declarations.
+
+**6. `ci` chord renamed to `gate` (hard break in [Unreleased]).**
+
+```diff
+-make ci
++make gate
+```
+
+If your `forktex.json` declares an explicit `ci` atom override under
+`fsd.atoms`, rename the key:
+
+```diff
+   "fsd": {
+     "atoms": {
+-      "ci": { "commands": ["..."] }
++      "gate": { "commands": ["..."] }
+     }
+   }
+```
+
+CI scripts (GitHub Actions, GitLab CI, etc.) invoking `make ci` must
+update to `make gate`. The workflow file name (`.github/workflows/ci.yml`)
+can stay; only the `make` invocation changes.
+
+**7. New `manual` atom (additive in [Unreleased]).** No migration
+required — projects can opt in by declaring a `manual` atom recipe in
+`forktex.json` (or use `forktex manual build` directly without
+declaring an FSD atom).
+
+After applying any of the above, regenerate your `Makefile`:
+
+```bash
+forktex fsd makefile sync
+```
+
+then verify with `forktex fsd check && make ci`.
+
 ## [0.4.0] — 2026-05-08
 
 ### Changed — breaking
@@ -19,7 +305,7 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 - **Hard break on deprecated atom aliases.** The `aliases.deprecated`
   redirect map (which kept `start`/`stop`/`up`/`down`/`deploy`/`deps`/
   `typecheck`/`security-audit`/`codegen`/`codegen-check`/`monitoring`/
-  `audit`/`verify`/`e2e`/`smoke`/`battle` working as Make targets) is
+  `audit`/`verify`/`e2e`/`battle` working as Make targets) is
   removed. Projects must declare new atom IDs explicitly. Chord
   aliases (`quality`, `ci`, `release`) remain.
 - **`standard.legacy.json`** (the v1.0.0 catalog backup) is deleted.

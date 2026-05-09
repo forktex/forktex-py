@@ -21,39 +21,22 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-name: CI
+"""``forktex.agent.atoms`` — first-class catalog atoms as CLI commands.
 
-on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
+Internal package. The factory ``register_atom_commands(cli)`` wires
+every FSD atom from the bundled standard catalog as a top-level
+``forktex <atom>`` Click command. Each command shells out to
+``make <target>`` after resolving variants via
+``forktex.fsd.variants.parse_atom_key``.
 
-jobs:
-  ci:
-    name: CI gate (py${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.14"]
+Bare ``forktex`` (no subcommand) keeps its existing behaviour: it
+launches the runtime agent (chat REPL).
+"""
 
-    steps:
-      - uses: actions/checkout@v4
+from forktex.agent.atoms.dispatcher import (
+    AtomDispatchError,
+    dispatch_atom,
+    register_atom_commands,
+)
 
-      - name: Install poetry
-        run: pipx install 'poetry>=2.0,<3.0'
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: "poetry"
-
-      - name: Install dependencies
-        run: poetry install --with dev
-
-      - name: Run pre-merge gate (make gate)
-        run: poetry run make gate
-
-      - name: Battle-test the published surface (make acceptance)
-        run: poetry run make acceptance
+__all__ = ["AtomDispatchError", "dispatch_atom", "register_atom_commands"]

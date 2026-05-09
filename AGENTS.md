@@ -9,7 +9,7 @@ This repo should be operated through `forktex` itself as much as possible.
 - `fsd.version` versions the active delivery contract
 - `cloud.apiVersion` versions cloud-only deployment manifests
 - the root `Makefile` is generated, not primary
-- the canonical runtime-control atoms are `start`, `stop`, `logs`
+- the canonical runtime-control atoms are `apply`, `destroy`, `monitor` (declared by workspace projects; forktex-py itself uses `package/python-library` and disables them)
 
 ## Preferred Control Surface
 
@@ -45,9 +45,9 @@ Useful Make targets:
 
 ```bash
 make help
-make start
-make stop
-make logs
+make gate            # pre-merge quality chord (renamed from `ci`)
+make acceptance      # wheel install + CLI battle-test
+make manual          # generate the architecture + AI context manual
 make format-check
 make lint
 make test
@@ -58,8 +58,9 @@ make build
 
 The repo currently self-assesses as:
 
-- FSD version: `1.0.0`
-- achieved level: `L3`
+- FSD version: `1.2.0`
+- profile: `package/python-library`
+- achieved level: `L4`
 - architecture packages: `forktex` (single-package repo — the four ecosystem SDKs live in their own repos and are installed as ordinary dependencies)
 - key internal domains: `agent`, `architecture`, `cloud` (shim), `core`, `engineering`, `filesystem`, `fsd`, `intelligence` (shim), `manifest`, `models`
 

@@ -305,6 +305,10 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
         return [
             '@echo "$(PROJECT_NAME): docs — declare fsd.atoms.\\"docs@<kind>\\" overrides (e.g. docs@arch via \'forktex graph c4\')."',
         ]
+    if atom_id == "manual":
+        return [
+            '@echo "$(PROJECT_NAME): manual — declare fsd.atoms.\\"manual\\" or use \'forktex manual build [--scope arch|graph|agents|search]\'."',
+        ]
 
     # ── infra domain ─────────────────────────────────────────────────────────
     if atom_id == "install":
@@ -339,12 +343,6 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
             "find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null; true",
             "find . -type f -name .coverage -delete 2>/dev/null; true",
         ]
-    if atom_id == "help":
-        return [
-            "@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
-            '\t\tawk \'BEGIN {FS = ":.*?## "}; {printf "  \\033[36m%-22s\\033[0m %s\\n", $$1, $$2}\'',
-        ]
-
     # ── ops domain ───────────────────────────────────────────────────────────
     # apply / destroy with no env qualifier are local-process verbs; env-
     # qualified variants are produced by the variant parser (Phase A.3) and
@@ -365,11 +363,7 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
         ]
     if atom_id == "monitor":
         return [
-            '@echo "$(PROJECT_NAME): monitor — declare fsd.atoms.\\"monitor@<env>\\" or use \'forktex status\'."',
-        ]
-    if atom_id == "logs":
-        return [
-            '@echo "$(PROJECT_NAME) has no managed runtime logs locally; declare fsd.atoms.\\"logs@<env>\\" for deployments."',
+            '@echo "$(PROJECT_NAME): monitor — declare fsd.atoms.\\"monitor@<env>\\" (health, metrics, logs) or use \'forktex status\'."',
         ]
     if atom_id == "rollback":
         return [
@@ -377,7 +371,7 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
         ]
     if atom_id == "acceptance":
         return [
-            '@echo "$(PROJECT_NAME): acceptance — declare fsd.atoms.\\"acceptance@<scope>\\" (e.g. @smoke, @e2e, @battle)."',
+            '@echo "$(PROJECT_NAME): acceptance — declare fsd.atoms.\\"acceptance@<scope>\\" (e.g. @battle, @e2e, @load)."',
         ]
     if atom_id == "backup":
         return [
@@ -656,9 +650,9 @@ def _root_secondary_targets(
     has_workspace_runtime = bool(root_paths or subpaths)
     if not has_workspace_runtime:
         # Non-python root manifests (e.g. KnowledgeDirectory) don't need
-        # ruff/pytest/poetry secondaries, and their start/stop/logs atoms
-        # are typically disabled by the profile so the alias rules would
-        # dangle. Emit nothing.
+        # ruff/pytest/poetry secondaries, and their apply/destroy/monitor
+        # atoms are typically disabled by the profile so the alias rules
+        # would dangle. Emit nothing.
         return [], []
 
     lines: list[str] = []
@@ -736,13 +730,13 @@ def _root_secondary_targets(
         phony.append("deps-lock")
 
     # Local-env shortcuts: render only when the project has cloud-aware
-    # apply@local / destroy@local / logs@local variants declared. Bare
+    # apply@local / destroy@local / monitor@local variants declared. Bare
     # `apply` / `destroy` are process-level, not env-aware, so the alias
     # would be misleading — skip rather than dangle.
     for alias, target_options in (
         ("local", ("apply-local", "apply")),
         ("local-down", ("destroy-local", "destroy")),
-        ("local-logs", ("logs-local", "logs")),
+        ("local-monitor", ("monitor-local", "monitor")),
     ):
         if alias in existing_targets:
             continue
@@ -778,6 +772,13 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         f"PUBLISHABLE_PACKAGES := {' '.join(publishable_paths)}"
         if publishable_paths
         else "PUBLISHABLE_PACKAGES :=",
+        "",
+        # Self-documenting `make help`. Static preamble rule — kept here
+        # rather than as an FSD atom because target-listing is a Makefile
+        # convention, not a delivery-evidence concept.
+        "help: ## Self-documenting target listing",
+        "\t@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
+        '\t\tawk \'BEGIN {FS = ":.*?## "}; {printf "  \\033[36m%-22s\\033[0m %s\\n", $$1, $$2}\'',
         "",
     ]
 

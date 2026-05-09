@@ -21,3 +21,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+"""forktex.data — Bundled data files (FSD catalog, etc.).
+
+Internal package — not part of the public Python API.
+"""
+
+__all__: list[str] = []
