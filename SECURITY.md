@@ -223,7 +223,7 @@ Customers running `forktex` in production should pin a specific version
 in their automation:
 
 ```bash
-pipx install 'forktex==0.2.6'   # not bare `forktex`
+pipx install 'forktex==<exact-version>'   # not bare `forktex`
 ```
 
 Major bumps should be rolled out per-project with a test machine first.

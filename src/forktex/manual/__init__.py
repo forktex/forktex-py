@@ -21,39 +21,35 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-name: CI
+"""forktex.manual — System-wide architecture + context manual.
 
-on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
+Generates:
 
-jobs:
-  ci:
-    name: CI gate (py${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.14"]
+- For humans: C4 architecture page, filesystem inspector, dependency
+  map (HTML rendering composes ``forktex.graph.export.c4_html_writer``).
+- For agents: an AI-consumable bundle of rules (project conventions),
+  concepts (FSD catalog + key entities), and few-shot prompts.
+- A keyword search index over the project graph (``manual@search``)
+  with simple TF-IDF-style ranking — case-insensitive substring + token
+  frequency.
 
-    steps:
-      - uses: actions/checkout@v4
+Public surface (semver-stable from v1.0.0):
 
-      - name: Install poetry
-        run: pipx install 'poetry>=2.0,<3.0'
+    from forktex.manual import (
+        ManualScope, ManualBundle, generate_manual,
+        SearchHit, SearchIndex,
+    )
+"""
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: "poetry"
+from __future__ import annotations
 
-      - name: Install dependencies
-        run: poetry install --with dev
+from forktex.manual.search import SearchHit, SearchIndex
+from forktex.manual.types import ManualBundle, ManualScope, generate_manual
 
-      - name: Run pre-merge gate (make gate)
-        run: poetry run make gate
-
-      - name: Battle-test the published surface (make acceptance)
-        run: poetry run make acceptance
+__all__ = [
+    "ManualBundle",
+    "ManualScope",
+    "SearchHit",
+    "SearchIndex",
+    "generate_manual",
+]

@@ -32,4 +32,8 @@ All glyphs share a 5-line × 9-column canvas so they can be laid out in a
 row without manual padding. New products should match this canvas; if a
 size change is genuinely needed, update every glyph in lockstep so
 ``render_row`` stays aligned.
+
+Internal package — not part of the public Python API.
 """
+
+__all__: list[str] = []

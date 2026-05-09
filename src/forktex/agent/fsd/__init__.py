@@ -21,7 +21,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""forktex.agent.fsd - FSD CLI command group."""
+"""forktex.agent.fsd — FSD CLI command group.
+
+Internal package — not part of the public Python API. For programmatic
+catalog loading, use ``forktex.fsd.loader.load_standard``.
+"""
 
 from __future__ import annotations
 
@@ -80,3 +84,6 @@ fsd.add_command(check)
 fsd.add_command(report)
 fsd.add_command(makefile_group)
 fsd.add_command(ecosystem)
+
+
+__all__: list[str] = []

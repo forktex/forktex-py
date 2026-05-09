@@ -37,6 +37,10 @@ PROJECT_ROOT = Path("/home/samanu/Desktop/forktex/forktex-py")
 
 
 def test_workspace_profile_limits_applicable_atoms():
+    """forktex-py uses `package/python-library` since v1.2.0 — ops atoms
+    are disabled (forktex-py is a CLI library, not a workspace runtime).
+    `acceptance` and `manual` are optional in this profile and forktex-py
+    declares both."""
     manifest = ForktexManifest.load(PROJECT_ROOT / "forktex.json")
     applicable, disabled = resolve_applicable_atoms(manifest)
 
@@ -44,7 +48,11 @@ def test_workspace_profile_limits_applicable_atoms():
     assert "install" in applicable
     assert "build" in applicable
     assert "sync" in applicable
-    assert "apply" in applicable
+    assert "acceptance" in applicable
+    assert "manual" in applicable
+    assert "apply" in disabled
+    assert "destroy" in disabled
+    assert "monitor" in disabled
     assert "rollback" in disabled
 
 

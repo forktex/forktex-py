@@ -21,17 +21,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# Copyright (C) 2026 FORKTEX S.R.L.
-#
-# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+"""Regression test: `forktex cloud connect` reads the JWT from
+``token_resp.access_token`` on the SDK's ``TokenResponse`` model.
 
-"""Regression test: `forktex cloud connect` reads the JWT from the camelCase
-field on the SDK's TokenResponse model.
-
-Codegen names the field `accessToken` (the API emits camelCase). If a
-contributor reverts to `token_resp.access_token`, AttributeError silently
-propagates — connect succeeds at the HTTP layer but the saved CloudContext
-gets `access_token=None`, and every subsequent /me request 401s.
+The published ``forktex_cloud.client.generated.TokenResponse`` exposes
+``access_token`` / ``refresh_token`` (snake_case). If a contributor
+reverts to ``token_resp.accessToken`` (camelCase), AttributeError
+silently propagates — connect succeeds at the HTTP layer but the
+saved CloudContext gets ``access_token=None``, and every subsequent
+/me request 401s.
 """
 
 from __future__ import annotations
@@ -39,19 +37,21 @@ from __future__ import annotations
 from forktex_cloud.client.generated import TokenResponse
 
 
-def test_token_response_field_is_camelcase():
+def test_token_response_field_is_snake_case():
     tok = TokenResponse.model_validate(
-        {"accessToken": "jwt-abc", "refreshToken": "rfr-xyz"}
+        {"access_token": "jwt-abc", "refresh_token": "rfr-xyz", "expires_in": 3600}
     )
-    assert tok.accessToken == "jwt-abc"
-    assert tok.refreshToken == "rfr-xyz"
-    assert not hasattr(tok, "access_token")
+    assert tok.access_token == "jwt-abc"
+    assert tok.refresh_token == "rfr-xyz"
+    assert not hasattr(tok, "accessToken")
 
 
-def test_connect_cloud_reads_camelcase_field():
+def test_connect_cloud_reads_snake_case_field():
     """The exact attribute access used in agent/auth/cli.py::connect_cloud."""
-    tok = TokenResponse.model_validate({"accessToken": "jwt-from-login"})
-    # Mirror line 321 of agent/auth/cli.py — would raise AttributeError if
-    # someone reverted to `.access_token`.
-    access_token = tok.accessToken
+    tok = TokenResponse.model_validate(
+        {"access_token": "jwt-from-login", "expires_in": 3600}
+    )
+    # Mirror agent/auth/cli.py — would raise AttributeError if someone
+    # reverted to `.accessToken`.
+    access_token = tok.access_token
     assert access_token == "jwt-from-login"

@@ -156,13 +156,22 @@ async def _cmd_connect(ctx: SlashContext, args: list[str]) -> str:
     }
     impl = impls[service]
 
-    # login impls prompt via rich.Prompt.ask; detach prompt_toolkit I/O for the turn.
+    # login impls prompt via rich.Prompt.ask; detach prompt_toolkit I/O for
+    # the turn. Wrap the detach pair in try/finally so the prompt_toolkit
+    # Application's TTY context is *always* restored — even when the impl
+    # raises KeyboardInterrupt / SystemExit / a generic exception. Without
+    # this, ctrl-c'ing mid-password could leave the chat app with echo off
+    # or the cursor hidden until the user types `reset`.
+    import sys
     from prompt_toolkit.application import get_app
 
     app = get_app()
+    detach_in = app.input.detach()
+    detach_out = app.output.detach()
+    err: Optional[BaseException] = None
     try:
-        with app.input.detach():
-            with app.output.detach():
+        with detach_in, detach_out:
+            try:
                 await impl(
                     project=ctx.project_root,
                     save_global=False,
@@ -172,11 +181,27 @@ async def _cmd_connect(ctx: SlashContext, args: list[str]) -> str:
                     api_key=None,
                     new_account=new_account,
                 )
-    except SystemExit:
-        # _render_connect_error already printed the details; no extra line.
-        return None
-    except Exception as exc:
-        return f"connect failed: {exc}"
+            except (KeyboardInterrupt, SystemExit) as exc:
+                err = exc
+            except Exception as exc:
+                err = exc
+    finally:
+        # Best-effort: nudge stdout/stderr to a fresh line so anything
+        # the chat app renders next isn't appended to half a prompt.
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+
+    if isinstance(err, KeyboardInterrupt):
+        return f"connect {service} cancelled — try again with /connect {service}"
+    if isinstance(err, SystemExit):
+        # _render_connect_error already printed the details; surface a
+        # one-liner so the chat doesn't drop back silently.
+        return f"connect {service} did not complete — see panel above"
+    if err is not None:
+        return f"connect failed: {err}"
 
     ctx.app_state.show_cards = True
     ctx.app_state.flash_cards_until = __import__("time").monotonic() + 3.0
@@ -249,6 +274,8 @@ SLASH_COMMANDS: dict[str, SlashCommand] = {
     "/tools": SlashCommand("/tools", "list local tool-server tools", _cmd_tools),
     "/menu": SlashCommand("/menu", "exit chat to bare menu", _cmd_menu),
     "/quit": SlashCommand("/quit", "exit forktex", _cmd_quit),
+    # `/exit` is a common REPL convention; alias to `/quit`.
+    "/exit": SlashCommand("/exit", "exit forktex (alias of /quit)", _cmd_quit),
 }
 
 

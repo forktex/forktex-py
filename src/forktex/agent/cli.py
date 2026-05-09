@@ -151,14 +151,47 @@ from forktex.agent.fsd import fsd
 cli.add_command(fsd)
 
 from forktex.agent.graph import graph as graph_group
+from forktex.agent.manual import manual as manual_group
 from forktex.agent.purge import clean_cmd
 from forktex.agent.serve import serve_cmd
 from forktex.graph.io_proxy import install_audit_hook
 
 install_audit_hook()
 cli.add_command(graph_group)
+cli.add_command(manual_group)
 cli.add_command(serve_cmd)
 cli.add_command(clean_cmd)
+
+
+# =============================================================================
+# Catalog atoms as first-class CLI commands
+# =============================================================================
+# Every FSD atom from the bundled standard becomes a top-level
+# `forktex <atom>` command (1:1 with the catalog). Bare `forktex`
+# stays the runtime agent (chat REPL) — this only adds new verbs.
+# Atoms whose IDs collide with an existing command/group are skipped
+# (the existing surface owns the name); for `manual`, the group's
+# `invoke_without_command=True` body owns the no-subverb dispatch.
+
+from forktex.agent.atoms import register_atom_commands as _register_atom_commands
+from forktex.fsd.loader import load_standard as _load_standard
+
+try:
+    _atom_manifest = None
+    try:
+        from forktex.core.paths import find_project_root as _find_root
+        from forktex.manifest.models import ForktexManifest as _ForktexManifest
+
+        _root = _find_root(__import__("pathlib").Path.cwd())
+        if _root is not None:
+            _atom_manifest = _ForktexManifest.load(_root / "forktex.json")
+    except Exception:
+        # Manifest is optional for atom registration — variant axes
+        # just stay empty when there's no manifest in scope.
+        _atom_manifest = None
+    _register_atom_commands(cli, standard=_load_standard(), manifest=_atom_manifest)
+except Exception as exc:  # pragma: no cover — defensive
+    console.print(f"[yellow]warn:[/yellow] atom CLI registration failed: {exc}")
 
 
 # =============================================================================

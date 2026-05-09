@@ -5,6 +5,10 @@ PROJECT_NAME := forktex-py
 SUBPACKAGES :=
 PUBLISHABLE_PACKAGES := .
 
+help: ## Self-documenting target listing
+	@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
+
 format: ## Source code conforms to a consistent, auto-enforced style
 	ruff format src/ tests/
 	@for pkg in $(SUBPACKAGES); do \
@@ -40,6 +44,9 @@ sync: ## Not applicable: forktex-py has no schema-derived artifacts (pure Python
 
 docs: ## Project documentation exists and is current — architecture diagrams, API reference, runbooks, ADRs
 	@echo "$(PROJECT_NAME): docs — declare fsd.atoms.\"docs@<kind>\" overrides (e.g. docs@arch via 'forktex graph c4')."
+
+manual: ## Build the system-wide architecture + AI context manual from the project graph (humans + agents).
+	poetry run forktex manual build
 
 install: ## Project bootstraps to a runnable state on a fresh machine — auto-detects the OS, missing tools (poetry/uv/.venv/node_modules/pyright), and resolves them
 	@if command -v poetry >/dev/null 2>&1; then \
@@ -77,30 +84,20 @@ clean: ## Build artifacts and caches removable from project tree
 	find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null; true
 	find . -type f -name .coverage -delete 2>/dev/null; true
 
-help: ## Project's Make target surface is self-documented (`make help`)
-	@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
-
-apply: ## Drive a runtime to its declared state — local process, local compose, or env-orchestrated deploy. Idempotent.
-	@$(MAKE) install
-	@echo ""
-	@echo "$(PROJECT_NAME) runtime ready."
-	@echo "  Run: forktex --version"
-	@echo "  Run: make test"
-	@echo ""
-
-destroy: ## Remove a runtime entirely — terminate processes, tear down env infrastructure
-	@echo "$(PROJECT_NAME) has no managed long-running runtime locally."
-	@echo "  For env teardown declare fsd.atoms.\"destroy@<env>\" in forktex.json."
-
-monitor: ## Inspect current runtime state — health, metrics, replica status
-	@echo "$(PROJECT_NAME): monitor — declare fsd.atoms.\"monitor@<env>\" or use 'forktex status'."
-
-logs: ## Stream runtime events (stdout/stderr, structured logs) for the local process or a deployed env
-	@echo "$(PROJECT_NAME) has no managed runtime logs locally; declare fsd.atoms.\"logs@<env>\" for deployments."
-
-acceptance: ## End-to-end verification that a deployed runtime works against real infrastructure (smoke, e2e, battle, load, chaos, pen)
-	@echo "$(PROJECT_NAME): acceptance — declare fsd.atoms.\"acceptance@<scope>\" (e.g. @smoke, @e2e, @battle)."
+acceptance: ## Install the published wheel into a fresh venv and battle-test the CLI end-to-end (forktex --version, every subcommand --help, fsd check + graph build against forktex-py itself)
+	@if ! ls dist/forktex-*.whl >/dev/null 2>&1; then echo '  building wheel first...'; $(MAKE) build; fi
+	@command -v python3.14 >/dev/null 2>&1 || { echo '  ✗ no python3.14 on PATH (the published wheel pins Python ≥ 3.14)' >&2; exit 1; }
+	@rm -rf /tmp/forktex-accept-venv && python3.14 -m venv /tmp/forktex-accept-venv
+	@/tmp/forktex-accept-venv/bin/pip install --quiet --upgrade pip
+	@WHEEL=$$(ls -t dist/forktex-*.whl | head -1) && /tmp/forktex-accept-venv/bin/pip install --quiet $$WHEEL && echo "  installed: $$WHEEL"
+	@/tmp/forktex-accept-venv/bin/forktex --version
+	@/tmp/forktex-accept-venv/bin/forktex --help > /dev/null && echo '  ✓ forktex --help'
+	@for sub in agents clean cloud fsd graph intelligence manual network serve status; do /tmp/forktex-accept-venv/bin/forktex $$sub --help > /dev/null && echo "  ✓ forktex $$sub --help"; done
+	@echo '' && echo '── battle: forktex on forktex-py ──'
+	@/tmp/forktex-accept-venv/bin/forktex fsd check 2>&1 | tail -3
+	@/tmp/forktex-accept-venv/bin/forktex graph build 2>&1 | tail -2
+	@rm -rf /tmp/forktex-accept-venv
+	@echo '' && echo 'acceptance: forktex CLI installs + invokes correctly'
 
 publish-test: ## Upload dist/ to TestPyPI (https://test.pypi.org) for rehearsal. SDK deps must already be on TestPyPI.
 	python3 -m twine upload --repository testpypi dist/*
@@ -134,7 +131,7 @@ license-fix: ## Add or update the dual-license header on every source file (idem
 license-strip: ## Remove the dual-license header from every source file (use before license model changes)
 	python3 scripts/license_headers.py strip
 
-ci: ## Aggregate quality gate before publish: format-check + lint + license-check + security + test + build
+gate: ## Pre-merge quality gate: format-check + lint + license-check + security + test + build (renamed from `ci`)
 	@$(MAKE) format-check
 	@$(MAKE) lint
 	@$(MAKE) license-check
@@ -142,7 +139,7 @@ ci: ## Aggregate quality gate before publish: format-check + lint + license-chec
 	@$(MAKE) test
 	@$(MAKE) build
 	@echo ''
-	@echo 'CI passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'
+	@echo 'Gate passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'
 	@echo '(make typing reports cross-SDK type drifts; tracked separately)'
 
 format-check: ## Check formatting without rewriting files
@@ -163,15 +160,9 @@ test-cov: ## Run tests with coverage
 deps-lock: ## Lock dependencies
 	poetry lock
 
-local: apply
-
-local-down: destroy
-
-local-logs: logs
-
 quality: format lint typing ## chord (format + lint + typing)
 
 install-global: ## Install the latest local forktex CLI globally in editable mode
 	pip install --break-system-packages -e .
 
-.PHONY: format lint typing test security license sync docs install build publish clean help apply destroy monitor logs acceptance publish-test dev-link-sdks dev-unlink-sdks dev-install installer-build installer-test license-check license-fix license-strip ci format-check lint-fix test-cov deps-lock local local-down local-logs quality install-global
+.PHONY: format lint typing test security license sync docs manual install build publish clean acceptance publish-test dev-link-sdks dev-unlink-sdks dev-install installer-build installer-test license-check license-fix license-strip gate format-check lint-fix test-cov deps-lock quality install-global

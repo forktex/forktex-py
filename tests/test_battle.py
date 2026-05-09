@@ -21,7 +21,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Comprehensive smoke tests for forktex.
+"""Comprehensive battle tests for forktex.
 
 Covers:
 - All tool types (filesystem, bash, git)
@@ -37,12 +37,12 @@ from pathlib import Path
 import pytest
 
 # ============================================================================
-# Tool Smoke Tests
+# Tool Battle Tests
 # ============================================================================
 
 
-class TestFilesystemToolsSmoke:
-    """Smoke tests for every filesystem tool."""
+class TestFilesystemToolsBattle:
+    """Battle tests for every filesystem tool."""
 
     @pytest.fixture
     def fs_tools(self, temp_dir_with_files):
@@ -114,8 +114,8 @@ class TestFilesystemToolsSmoke:
             await fs_tools["read_file"].execute(path="../../../etc/passwd")
 
 
-class TestBashToolsSmoke:
-    """Smoke tests for bash tools."""
+class TestBashToolsBattle:
+    """Battle tests for bash tools."""
 
     @pytest.fixture
     def bash_tools(self, temp_dir):
@@ -125,9 +125,9 @@ class TestBashToolsSmoke:
 
     @pytest.mark.asyncio
     async def test_simple_command(self, bash_tools):
-        r = await bash_tools["bash_execute"].execute(command="echo 'smoke test'")
+        r = await bash_tools["bash_execute"].execute(command="echo 'battle test'")
         assert not r.is_error
-        assert "smoke test" in r.content
+        assert "battle test" in r.content
 
     @pytest.mark.asyncio
     async def test_command_with_exit_code(self, bash_tools):
@@ -157,8 +157,8 @@ class TestBashToolsSmoke:
         assert temp_dir in r.content
 
 
-class TestGitToolsSmoke:
-    """Smoke tests for git tools."""
+class TestGitToolsBattle:
+    """Battle tests for git tools."""
 
     @pytest.fixture
     def git_tools(self, temp_git_repo):
@@ -201,12 +201,12 @@ class TestGitToolsSmoke:
 
 
 # ============================================================================
-# ToolServer Smoke Tests
+# ToolServer Battle Tests
 # ============================================================================
 
 
-class TestToolServerSmoke:
-    """Smoke tests for the ToolServer facade."""
+class TestToolServerBattle:
+    """Battle tests for the ToolServer facade."""
 
     def test_creates_all_tool_groups(self, temp_dir_with_files):
         from forktex.agent.tools.server import ToolServer
@@ -259,11 +259,11 @@ class TestToolServerSmoke:
 
 
 # ============================================================================
-# Config Smoke Tests
+# Config Battle Tests
 # ============================================================================
 
 
-class TestConfigSmoke:
+class TestConfigBattle:
     def test_default_settings(self):
         from forktex.config import Settings
 
@@ -294,11 +294,11 @@ class TestConfigSmoke:
 
 
 # ============================================================================
-# CLI Smoke Tests
+# CLI Battle Tests
 # ============================================================================
 
 
-class TestCLISmoke:
+class TestCLIBattle:
     def test_imports(self):
         from forktex.agent.cli import cli, main
 
@@ -323,7 +323,7 @@ class TestCLISmoke:
 
 
 # ============================================================================
-# Core Library Import Smoke Tests
+# Core Library Import Battle Tests
 # ============================================================================
 
 

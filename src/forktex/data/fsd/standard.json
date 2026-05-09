@@ -1,6 +1,6 @@
 {
   "$schema": "https://forktex.com/schemas/fsd/v1/standard.json",
-  "version": "1.1.0",
+  "version": "1.3.0",
 
   "domains": [
     {
@@ -18,7 +18,7 @@
     {
       "id": "infra",
       "name": "Infra",
-      "description": "Local artifact production and project ergonomics (install, build, publish, clean, help)",
+      "description": "Local artifact production and project ergonomics (install, build, publish, clean)",
       "scope": "project"
     },
     {
@@ -192,6 +192,20 @@
       "evidence": "Committed documentation files; auto-generated artefacts current",
       "common_variants": ["docs@arch", "docs@api", "docs@runbook", "docs@adr"]
     },
+    {
+      "id": "manual",
+      "name": "Manual",
+      "domain": "code",
+      "facet": "documentation",
+      "description": "System-wide architecture + context manual generated from the project graph (humans + agents). Renders C4 + filesystem inspector + dependency map for humans, plus an AI-consumable bundle of rules / concepts / few-shots for downstream agentic workflows.",
+      "evidence_shape": "document",
+      "evidence_kinds": ["document", "report", "bundle"],
+      "axes": ["custom"],
+      "resolve": [{"strategy": "make", "any_of": ["manual"]}],
+      "iso": ["27001:A.5.37", "9001:7.5"],
+      "evidence": "Generated manual artifact (HTML page + JSON context bundle)",
+      "common_variants": ["manual@arch", "manual@graph", "manual@agents", "manual@search"]
+    },
 
     {"_comment": "═══════════════════════ DOMAIN: data ═══════════════════════"},
 
@@ -267,19 +281,6 @@
       "evidence": "Idempotent cleanup log",
       "common_variants": ["clean@db", "clean@cache", "clean@dist"]
     },
-    {
-      "id": "help",
-      "name": "Help",
-      "domain": "infra",
-      "facet": "ergonomics",
-      "description": "Project's Make target surface is self-documented (`make help`)",
-      "evidence_shape": "document",
-      "evidence_kinds": ["document"],
-      "axes": [],
-      "resolve": [{"strategy": "make", "any_of": ["help"]}],
-      "iso": ["9001:7.5"],
-      "evidence": "make help output enumerates available targets"
-    },
 
     {"_comment": "═══════════════════════ DOMAIN: ops ════════════════════════"},
 
@@ -316,27 +317,15 @@
       "name": "Monitor",
       "domain": "ops",
       "facet": "runtime-control",
-      "description": "Inspect current runtime state — health, metrics, replica status",
+      "description": "Inspect current runtime state — health, metrics, replica status, and live event/log streams",
       "evidence_shape": "metric",
-      "evidence_kinds": ["metric", "report"],
+      "evidence_kinds": ["metric", "report", "log"],
       "axes": ["env", "service"],
-      "resolve": [{"strategy": "make", "any_of": ["monitor", "status", "health"]}],
+      "resolve": [{"strategy": "make", "any_of": ["monitor", "status", "health", "logs"]}],
       "iso": ["27001:A.8.15", "27001:A.8.16"],
-      "evidence": "Health endpoint response; metric scrape; dashboard state",
-      "absorbs": ["monitoring"]
-    },
-    {
-      "id": "logs",
-      "name": "Logs",
-      "domain": "ops",
-      "facet": "runtime-control",
-      "description": "Stream runtime events (stdout/stderr, structured logs) for the local process or a deployed env",
-      "evidence_shape": "log",
-      "evidence_kinds": ["log"],
-      "axes": ["env", "service"],
-      "resolve": [{"strategy": "make", "any_of": ["logs"]}],
-      "iso": ["27001:A.8.15"],
-      "evidence": "Live log stream"
+      "evidence": "Health endpoint response; metric scrape; dashboard state; live log stream",
+      "absorbs": ["monitoring", "logs"],
+      "common_variants": ["monitor@local", "monitor@local@logs", "monitor@local@health"]
     },
     {
       "id": "rollback",
@@ -356,14 +345,14 @@
       "name": "Acceptance",
       "domain": "ops",
       "facet": "operational-verification",
-      "description": "End-to-end verification that a deployed runtime works against real infrastructure (smoke, e2e, battle, load, chaos, pen)",
+      "description": "End-to-end verification that a deployed runtime works against real infrastructure (battle, e2e, load, chaos, pen)",
       "evidence_shape": "report",
       "evidence_kinds": ["report", "log", "attestation"],
       "axes": ["env", "service", "custom"],
-      "resolve": [{"strategy": "make", "any_of": ["acceptance", "battle", "smoke", "e2e"]}],
+      "resolve": [{"strategy": "make", "any_of": ["acceptance", "battle", "e2e"]}],
       "iso": ["27001:A.8.31", "9001:8.6"],
       "evidence": "End-to-end test report against running env",
-      "common_variants": ["acceptance@smoke", "acceptance@e2e", "acceptance@battle", "acceptance@load", "acceptance@chaos", "acceptance@pen"]
+      "common_variants": ["acceptance@battle", "acceptance@e2e", "acceptance@load", "acceptance@chaos", "acceptance@pen"]
     },
     {
       "id": "backup",
@@ -384,8 +373,8 @@
     "_description": "Profile-level chord names — render as Make targets but don't appear in level/facet/mapping bookkeeping. Each alias resolves to a list of atom invocations.",
 
     "quality":        ["format", "lint", "typing"],
-    "ci":             ["format@check", "lint", "license", "security", "test", "build"],
-    "release":        ["ci", "publish@test", "publish@prod"]
+    "gate":           ["format@check", "lint", "license", "security", "test", "build"],
+    "release":        ["gate", "publish@test", "publish@prod"]
   },
 
   "facets": [
@@ -421,7 +410,8 @@
       "domain": "code",
       "question": "Is the project documented?",
       "atoms": [
-        {"ref": "docs", "required": true}
+        {"ref": "docs", "required": true},
+        {"ref": "manual", "required": false}
       ]
     },
     {
@@ -437,15 +427,6 @@
       ]
     },
     {
-      "id": "ergonomics",
-      "name": "Operator Ergonomics",
-      "domain": "infra",
-      "question": "Is the project's surface self-documenting?",
-      "atoms": [
-        {"ref": "help", "required": false}
-      ]
-    },
-    {
       "id": "runtime-control",
       "name": "Runtime Control",
       "domain": "ops",
@@ -453,8 +434,7 @@
       "atoms": [
         {"ref": "apply", "required": true},
         {"ref": "destroy", "required": false},
-        {"ref": "monitor", "required": false},
-        {"ref": "logs", "required": false}
+        {"ref": "monitor", "required": false}
       ]
     },
     {
@@ -507,25 +487,25 @@
       "id": "L1",
       "name": "Runnable",
       "description": "Project installs, runs, and can be torn down",
-      "facets": ["build-lifecycle", "runtime-control", "ergonomics"]
+      "facets": ["build-lifecycle", "runtime-control"]
     },
     {
       "id": "L2",
       "name": "Quality",
       "description": "Code-quality + verification gates enforced",
-      "facets": ["build-lifecycle", "runtime-control", "ergonomics", "code-quality", "verification"]
+      "facets": ["build-lifecycle", "runtime-control", "code-quality", "verification"]
     },
     {
       "id": "L3",
       "name": "Shippable",
       "description": "Buildable, publishable, documented, ci-gated",
-      "facets": ["build-lifecycle", "runtime-control", "ergonomics", "code-quality", "verification", "documentation"]
+      "facets": ["build-lifecycle", "runtime-control", "code-quality", "verification", "documentation"]
     },
     {
       "id": "L4",
       "name": "Operational",
       "description": "Deployable to real environments, with verification and recovery",
-      "facets": ["build-lifecycle", "runtime-control", "ergonomics", "code-quality", "verification", "documentation", "operational-verification", "data-lifecycle"]
+      "facets": ["build-lifecycle", "runtime-control", "code-quality", "verification", "documentation", "operational-verification", "data-lifecycle"]
     }
   ]
 }

@@ -94,10 +94,10 @@ def test_free_form_preserves_declared_order():
 def test_axis_collision_first_value_wins_rest_to_custom():
     """If two qualifiers both match the env axis, the first value claims the
     slot and the rest cascade to custom (don't silently drop)."""
-    p = parse_atom_key("smoke@local@staging", services=SERVICES, envs=ENVS)
+    p = parse_atom_key("battle@local@staging", services=SERVICES, envs=ENVS)
     assert p.env == "local"
     assert p.custom == ("staging",)
-    assert p.make_target == "smoke-local-staging"
+    assert p.make_target == "battle-local-staging"
 
 
 def test_three_qualifiers_full_canonical():

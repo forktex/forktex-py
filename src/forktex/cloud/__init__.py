@@ -27,7 +27,7 @@ For standalone usage: pip install forktex-cloud
     from forktex_cloud import ForktexCloudClient, CloudContext
 """
 
-from forktex_cloud import (  # noqa: F401
+from forktex_cloud import (
     ForktexCloudClient,
     CloudAPIError,
     CloudContext,
@@ -49,3 +49,28 @@ from forktex_cloud import (  # noqa: F401
     VaultGetResponse,
     WorkspaceRead,
 )
+
+__all__ = [
+    # High-level API
+    "ForktexCloudClient",
+    "CloudAPIError",
+    "CloudContext",
+    "Manifest",
+    "ManifestError",
+    # Wire-level models (advanced — prefer high-level API)
+    "ApiKeyCreated",
+    "ApiKeyRead",
+    "EnvironmentRead",
+    "EventRead",
+    "HealthRead",
+    "JobResponse",
+    "MeResponse",
+    "OrgRead",
+    "ProjectRead",
+    "ServerRead",
+    "StatusResponse",
+    "TokenResponse",
+    "UserRead",
+    "VaultGetResponse",
+    "WorkspaceRead",
+]

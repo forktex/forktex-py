@@ -46,10 +46,10 @@ class RuntimeProfile:
         return set(self.required) | set(self.optional)
 
 
-# Profiles speak the v1.1.0 atom catalog (see standard.json):
+# Profiles speak the v1.3.0 atom catalog (see standard.json):
 # install / format / lint / typing / test / security / license / sync / docs /
-# build / publish / clean / help / apply / destroy / monitor / logs / rollback /
-# acceptance / backup / seed.
+# manual / build / publish / clean / apply / destroy / monitor /
+# rollback / acceptance / backup / seed.
 PROFILE_CATALOG: dict[str, RuntimeProfile] = {
     "workspace/python-monorepo": RuntimeProfile(
         id="workspace/python-monorepo",
@@ -61,18 +61,17 @@ PROFILE_CATALOG: dict[str, RuntimeProfile] = {
             "security",
             "apply",
             "destroy",
-            "logs",
+            "monitor",
             "build",
             "publish",
             "clean",
-            "help",
         ),
         optional=(
             "typing",
             "license",
             "sync",
             "docs",
-            "monitor",
+            "manual",
             "acceptance",
         ),
         disabled=(
@@ -91,7 +90,6 @@ PROFILE_CATALOG: dict[str, RuntimeProfile] = {
             "build",
             "publish",
             "clean",
-            "help",
         ),
         optional=(
             "security",
@@ -99,15 +97,15 @@ PROFILE_CATALOG: dict[str, RuntimeProfile] = {
             "license",
             "sync",
             "docs",
+            "manual",
+            "acceptance",
         ),
         disabled=(
             "apply",
             "destroy",
             "monitor",
-            "logs",
             "rollback",
             "backup",
-            "acceptance",
             "seed",
         ),
     ),
@@ -121,7 +119,6 @@ PROFILE_CATALOG: dict[str, RuntimeProfile] = {
             "build",
             "publish",
             "clean",
-            "help",
         ),
         optional=(
             "security",
@@ -129,15 +126,15 @@ PROFILE_CATALOG: dict[str, RuntimeProfile] = {
             "license",
             "sync",
             "docs",
+            "manual",
+            "acceptance",
         ),
         disabled=(
             "apply",
             "destroy",
             "monitor",
-            "logs",
             "rollback",
             "backup",
-            "acceptance",
             "seed",
         ),
     ),
@@ -148,10 +145,9 @@ PROFILE_CATALOG: dict[str, RuntimeProfile] = {
             "lint",
             "test",
             "clean",
-            "help",
             "docs",
         ),
-        optional=("build",),
+        optional=("build", "manual"),
         disabled=(
             "install",
             "typing",
@@ -161,7 +157,6 @@ PROFILE_CATALOG: dict[str, RuntimeProfile] = {
             "apply",
             "destroy",
             "monitor",
-            "logs",
             "publish",
             "rollback",
             "backup",

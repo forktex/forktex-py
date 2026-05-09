@@ -2,13 +2,13 @@
   "manifestVersion": "1.0.0",
   "name": "forktex-py",
   "description": "ForkTex Python repo — the CLI, agent, architecture discovery, FSD audit, and orchestration toolkit (single-package repo)",
-  "version": "0.2.5",
+  "version": "0.4.0",
   "fsd": {
-    "version": "1.0.1",
+    "version": "1.3.0",
     "profiles": [
-      "workspace/python-monorepo"
+      "package/python-library"
     ],
-    "targetLevel": "L3",
+    "targetLevel": "L4",
     "atoms": {
       "test": {
         "commands": [
@@ -60,6 +60,27 @@
         "description": "Upload dist/ to production PyPI (irreversible per-version)",
         "commands": [
           "python3 -m twine upload dist/*"
+        ]
+      },
+      "acceptance": {
+        "targets": [
+          "acceptance"
+        ],
+        "description": "Install the published wheel into a fresh venv and battle-test the CLI end-to-end (forktex --version, every subcommand --help, fsd check + graph build against forktex-py itself)",
+        "commands": [
+          "@if ! ls dist/forktex-*.whl >/dev/null 2>&1; then echo '  building wheel first...'; $(MAKE) build; fi",
+          "@command -v python3.14 >/dev/null 2>&1 || { echo '  ✗ no python3.14 on PATH (the published wheel pins Python ≥ 3.14)' >&2; exit 1; }",
+          "@rm -rf /tmp/forktex-accept-venv && python3.14 -m venv /tmp/forktex-accept-venv",
+          "@/tmp/forktex-accept-venv/bin/pip install --quiet --upgrade pip",
+          "@WHEEL=$$(ls -t dist/forktex-*.whl | head -1) && /tmp/forktex-accept-venv/bin/pip install --quiet $$WHEEL && echo \"  installed: $$WHEEL\"",
+          "@/tmp/forktex-accept-venv/bin/forktex --version",
+          "@/tmp/forktex-accept-venv/bin/forktex --help > /dev/null && echo '  ✓ forktex --help'",
+          "@for sub in agents clean cloud fsd graph intelligence manual network serve status; do /tmp/forktex-accept-venv/bin/forktex $$sub --help > /dev/null && echo \"  ✓ forktex $$sub --help\"; done",
+          "@echo '' && echo '── battle: forktex on forktex-py ──'",
+          "@/tmp/forktex-accept-venv/bin/forktex fsd check 2>&1 | tail -3",
+          "@/tmp/forktex-accept-venv/bin/forktex graph build 2>&1 | tail -2",
+          "@rm -rf /tmp/forktex-accept-venv",
+          "@echo '' && echo 'acceptance: forktex CLI installs + invokes correctly'"
         ]
       },
       "dev-link-sdks": {
@@ -148,11 +169,11 @@
           "@echo 'sync: not applicable for forktex-py (no codegen artifacts to keep current)'"
         ]
       },
-      "ci": {
+      "gate": {
         "targets": [
-          "ci"
+          "gate"
         ],
-        "description": "Aggregate quality gate before publish: format-check + lint + license-check + security + test + build",
+        "description": "Pre-merge quality gate: format-check + lint + license-check + security + test + build (renamed from `ci`)",
         "commands": [
           "@$(MAKE) format-check",
           "@$(MAKE) lint",
@@ -161,8 +182,17 @@
           "@$(MAKE) test",
           "@$(MAKE) build",
           "@echo ''",
-          "@echo 'CI passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'",
+          "@echo 'Gate passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'",
           "@echo '(make typing reports cross-SDK type drifts; tracked separately)'"
+        ]
+      },
+      "manual": {
+        "targets": [
+          "manual"
+        ],
+        "description": "Build the system-wide architecture + AI context manual from the project graph (humans + agents).",
+        "commands": [
+          "poetry run forktex manual build"
         ]
       }
     }
@@ -171,7 +201,7 @@
     {
       "name": "forktex",
       "path": ".",
-      "version": "0.2.5",
+      "version": "0.4.0",
       "publishable": true,
       "language": "python",
       "registry": "https://pypi.org",

@@ -21,39 +21,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-name: CI
+"""``forktex manual`` Click subgroup.
 
-on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
+Internal package — not part of the public Python API. The supported
+surface for the manual capability is the ``forktex.manual`` Python
+package and the ``forktex manual`` CLI verbs.
+"""
 
-jobs:
-  ci:
-    name: CI gate (py${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.14"]
+from forktex.agent.manual.cli import manual
 
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install poetry
-        run: pipx install 'poetry>=2.0,<3.0'
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: "poetry"
-
-      - name: Install dependencies
-        run: poetry install --with dev
-
-      - name: Run pre-merge gate (make gate)
-        run: poetry run make gate
-
-      - name: Battle-test the published surface (make acceptance)
-        run: poetry run make acceptance
+__all__ = ["manual"]

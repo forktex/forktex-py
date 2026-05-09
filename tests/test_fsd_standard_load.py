@@ -72,7 +72,7 @@ ORG_SIDE_FORBIDDEN = frozenset(
 def test_catalog_is_software_only():
     s = _load()
     assert {d.id for d in s.domains} == {"code", "data", "infra", "ops"}
-    assert len(s.atoms) == 21
+    assert len(s.atoms) == 20
     assert {lvl.id for lvl in s.levels} == {"L0", "L1", "L2", "L3", "L4"}
 
 
@@ -109,10 +109,10 @@ def test_no_l5_compliant_level():
 
 def test_chord_aliases_present_no_deprecated_aliases():
     """Hard break: deprecated rename aliases (start→apply, etc.) must
-    not survive the cleanup; only chord aliases (quality, ci, release)
-    remain."""
+    not survive the cleanup; only chord aliases (quality, gate, release)
+    remain. Note: `ci` was renamed to `gate` in v1.2.0."""
     s = _load()
-    assert set(s.aliases.keys()) == {"quality", "ci", "release"}
+    assert set(s.aliases.keys()) == {"quality", "gate", "release"}
     assert s.aliases_deprecated == {}
 
 

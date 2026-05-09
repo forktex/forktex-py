@@ -21,3 +21,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+"""forktex.agent.scraper — Internal web-scraping helpers.
+
+Internal package — not part of the public Python API.
+"""
+
+__all__: list[str] = []
