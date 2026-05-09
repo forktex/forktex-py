@@ -94,14 +94,16 @@ async def chat(project):
 
     from forktex.agent.ui.display import handle_tool_event
 
+    from forktex.agent.intelligence.grounding import build_system_prompt
+
     agent_loop = _build_agent_loop(
         client,
         tool_server,
-        system=(
-            "You are Forktex, a development assistant. You have access to local tools "
-            "for reading/writing files, running bash commands, and git operations. "
-            "Use them to help the user with their development tasks."
-        ),
+        # Compose a grounded system prompt: persona + AGENTS.md +
+        # cached manual@agents bundle (if `forktex manual build` has
+        # been run). Falls back to the persona alone when nothing's
+        # available.
+        system=build_system_prompt(project_root),
         on_tool_event=handle_tool_event,
     )
 

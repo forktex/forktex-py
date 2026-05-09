@@ -21,10 +21,19 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""forktex.cloud — Re-exports from the standalone forktex_cloud SDK.
+"""forktex.cloud — Re-exports from the standalone ``forktex_cloud`` SDK.
 
-For standalone usage: pip install forktex-cloud
-    from forktex_cloud import ForktexCloudClient, CloudContext
+The friendly public name is ``Cloud``; ``ForktexCloudClient`` is its
+long-form alias (kept for back-compat with existing import sites).
+
+Usage::
+
+    from forktex.cloud import Cloud, CloudContext
+
+    with Cloud("https://cloud.forktex.com", account_key="ftx-...") as cloud:
+        servers = cloud.list_servers()
+
+For standalone usage outside forktex-py: ``pip install forktex-cloud``.
 """
 
 from forktex_cloud import (
@@ -50,8 +59,21 @@ from forktex_cloud import (
     WorkspaceRead,
 )
 
+# ``Cloud`` is the friendly public name. Sibling sdk-py 0.2.5+ ships
+# the alias at the package root; for older floors (current PyPI 0.2.4
+# and below), forktex-py provides the same alias here so
+# ``from forktex.cloud import Cloud`` works regardless of which SDK
+# floor is installed. Drop this fallback once the dep floor is bumped
+# past 0.2.5.
+try:
+    from forktex_cloud import Cloud  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover — pre-0.2.5 SDK
+    Cloud = ForktexCloudClient
+
+
 __all__ = [
-    # High-level API
+    # High-level API — `Cloud` is canonical; `ForktexCloudClient` is the alias.
+    "Cloud",
     "ForktexCloudClient",
     "CloudAPIError",
     "CloudContext",
