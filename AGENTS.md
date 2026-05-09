@@ -121,3 +121,55 @@ If the graph and FSD output disagree, treat that as a product bug and
 fix the toolchain rather than documenting around it. After
 `forktex fsd check`, the FSD level is stamped onto the package node so
 the C4 view reflects the latest evaluation.
+
+## Cloud SDK & Workspace Atoms (heads-up for parallel agents)
+
+The `forktex-cloud` SDK and the `cloud/` repo layout both moved a step
+forward — relevant when this repo's CLI talks to the controller.
+
+### SDK: prefer `Cloud` (forktex-cloud >= 0.2.5)
+
+```python
+from forktex_cloud import Cloud
+
+with Cloud("https://cloud.forktex.com", account_key="ftx-...") as cloud:
+    cloud.list_projects()
+```
+
+`ForktexCloudClient` remains exported as the long-form alias (`Cloud is
+ForktexCloudClient`), so every existing import in `src/forktex/agent/cloud/*`
+keeps working untouched. New code should use `Cloud`. The constructor
+signature is unchanged: `(base_url, account_key=None, *, access_token=None,
+org_id=None, timeout=30.0)`. `Cloud.from_context(ctx)` works the same.
+
+### Cloud repo: directory-per-VPS layout (in flight)
+
+The cloud repo is migrating to a symmetric directory-per-VPS layout
+(`cloud/backup/`, `cloud/registry/`, `cloud/code/`, `cloud/provider/`,
+each with its own `forktex.json` + own optional Makefile via `forktex fsd
+makefile sync`). The controller still lives at `cloud/api/` for now;
+Phase 3 of the migration moves it into `cloud/controller/`.
+
+Workspace atoms exposed at the root `cloud/Makefile` use the
+`<verb>@<instance>` convention (matches systemd / Docker idiom; chosen
+because it scales as more verbs land — `destroy@*`, `logs@*`, etc.):
+
+| Atom | What it does |
+|---|---|
+| `make apply@backup` | `cd backup && forktex cloud up --env $FORKTEX_ENV` (default `production`) |
+| `make apply@registry` | same shape, `cloud/registry/` |
+| `make apply@code` | same shape, `cloud/code/` |
+| `make apply@provider` | same shape, `cloud/provider/` (stub manifest until DockerProvider Phase 1B) |
+| `make ci@backup` | delegates to `cloud/backup/`'s own `make ci` (format-check + lint + pytest) |
+| `make ci-all` | aggregate CI: ci-fast + ci-api + ci-client + ci@backup + per-subsystem config sanity |
+| `make deps-all` | install deps for every subsystem |
+
+Flat verb names (`ci-fast`, `ci-api`, `ci-all`, `deps-all`,
+`deps`) are kept where the verb isn't parametric. Legacy
+`make deploy-{dev,staging,production}` (controller deploy via env
+overlay) is unchanged — operator runbook compat. Only the new
+per-subsystem atoms use the `<verb>@<instance>` form.
+
+VPN currently lives inside the controller (`cloud/api/src/vpn/`); no
+VPS extraction planned yet — promote when there's a real reason to
+separate it.

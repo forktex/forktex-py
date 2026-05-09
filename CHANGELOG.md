@@ -6,6 +6,61 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 
 ### Added
 
+- **`forktex.network` Python shim.** Mirrors `forktex.cloud` and
+  `forktex.intelligence` — re-exports `NetWork` (canonical, with
+  back-compat fallback to `NetworkClient` on older floors),
+  `NetworkClient`, `NetworkAPIError`, plus the settings layer
+  (`NetworkSettings`, `load_network_settings`, `save_network_global`,
+  `save_network_project`). Public Python API now symmetric across all
+  three platforms: `from forktex.{cloud,intelligence,network} import
+  {Cloud,Intelligence,NetWork}` works the same way.
+- **Auth-contract symmetry test** at `tests/test_auth_symmetry.py`.
+  Locks the cross-facet contract: every facet in `FACETS` has a
+  connect impl with the same kwargs, returns `AuthState` from
+  `load_state`, has a credential-file `EntrySpec` marked
+  `sensitivity="secret"`, has a public Python shim with the canonical
+  class in `__all__`, and `auth/cli.py` doesn't import the long-form
+  client classes (only canonical names through the shims). Eight
+  assertions — drift fails loudly at gate time.
+
+### Changed
+
+- **`auth/cli.py` migrated to canonical SDK names (hard break).**
+  `connect_cloud` uses `Cloud` (was `ForktexCloudClient`).
+  `connect_network` uses `NetWork` (was `NetworkClient`).
+  `connect_intelligence` uses `Intelligence` (was
+  `ForktexIntelligenceClient`); the auth flow bootstraps with a
+  placeholder `api_key` since `/auth/login` doesn't validate it, then
+  re-constructs `Intelligence` with the real key for verification.
+  Methods that don't yet exist on the `Intelligence()` facade
+  (`list_orgs`, `create_api_key`) are reached via `intel.client.*` so
+  forktex-py imports only `Intelligence` itself from the SDK. The
+  symmetry test enforces this going forward — the long-form classes
+  cannot be re-imported in `auth/cli.py` without failing CI.
+
+### Added (continued)
+
+- **Chat agent now boots with project grounding.** The bare `forktex`
+  REPL's system prompt is composed by `forktex.agent.intelligence.grounding.build_system_prompt`,
+  which injects (a) the project's `AGENTS.md` (root or `docs/AGENTS.md`,
+  root wins) and (b) the cached `manual@agents` bundle from
+  `<project>/.forktex/manual/manual_bundle.json` if `forktex manual
+  build` has been run — rules + key concepts (top-N by graph degree) +
+  common tasks (few-shots). When the bundle is missing the prompt
+  carries a one-line hint suggesting `forktex manual build`. Total
+  prompt length capped at 20000 chars with a `[truncated]` marker;
+  per-section caps prevent any one source from crowding out others.
+  This means an `AGENTS.md` edit (e.g. the recent Cloud SDK + workspace
+  atoms section) takes effect on the next chat boot — no code change
+  required to teach the agent new conventions.
+- **`from forktex.cloud import Cloud` works regardless of SDK floor.**
+  The `forktex.cloud` shim re-exports `Cloud` as the friendly public
+  name; on sibling sdk-py 0.2.5+ it routes to the SDK's own
+  `Cloud = ForktexCloudClient` alias, on PyPI 0.2.4 it falls back to
+  a forktex-py-side alias. New code should prefer `Cloud`;
+  `ForktexCloudClient` stays exported for back-compat with the ~108
+  existing import sites under `forktex.agent.cloud.*`. The fallback
+  drops once the dep floor is bumped past 0.2.5.
 - **Persistent REPL history.** Bare `forktex` now keeps line history
   across sessions in `<global_config_dir>/repl_history` (typically
   `~/.forktex/repl_history`). Up-arrow recalls previous prompts the
