@@ -34,7 +34,9 @@ pytestmark = pytest.mark.usefixtures("isolated_home")
 def test_bash_enabled_by_default(project_root):
     srv = ToolServer(project_root=str(project_root))
     assert srv.bash_enabled is True
+    assert srv.desktop_enabled is False
     assert "bash_execute" in srv.list_tools()
+    assert "desktop_observe" not in srv.list_tools()
 
 
 def test_enable_bash_false_removes_bash_execute(project_root):
@@ -75,3 +77,29 @@ def test_explicit_kwarg_overrides_env_var(project_root, monkeypatch):
     srv = ToolServer(project_root=str(project_root), enable_bash=True)
     assert srv.bash_enabled is True
     assert "bash_execute" in srv.list_tools()
+
+
+def test_desktop_tools_are_explicitly_gated(project_root):
+    srv = ToolServer(project_root=str(project_root))
+    assert srv.desktop_enabled is False
+    assert "desktop_info" not in srv.list_tools()
+    assert "desktop_screenshot" not in srv.list_tools()
+    assert "desktop_observe" not in srv.list_tools()
+
+
+def test_enable_desktop_registers_observe_only_tools(project_root):
+    srv = ToolServer(project_root=str(project_root), enable_desktop=True)
+    names = srv.list_tools()
+    assert srv.desktop_enabled is True
+    assert "desktop_info" in names
+    assert "desktop_screenshot" in names
+    assert "desktop_observe" in names
+    assert "desktop_click" not in names
+    assert "desktop_key" not in names
+
+
+def test_enable_desktop_env_var(project_root, monkeypatch):
+    monkeypatch.setenv("FORKTEX_ENABLE_DESKTOP", "1")
+    srv = ToolServer(project_root=str(project_root))
+    assert srv.desktop_enabled is True
+    assert "desktop_observe" in srv.list_tools()

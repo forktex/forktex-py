@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "forktex-orchestra-forktex-py-dev": {
+      "type": "http",
+      "url": "http://localhost:8001/api/mcp-native",
+      "headers": {
+        "X-API-Key": "ftx-OIVFVCGFT6UflRKc6XndAH7wH5F2-OfI8Pbu0Ne2AzE"
+      }
+    }
+  }
+}

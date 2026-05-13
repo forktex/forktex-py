@@ -65,12 +65,14 @@ class AgentManager:
         on_tool_event: Optional[Callable] = None,
         browser: Optional[Any] = None,
         truths_store: Optional[Any] = None,
+        enable_desktop: bool = False,
     ) -> None:
         self.project_root = project_root
         self._client = client
         self._on_tool_event = on_tool_event
         self._browser = browser
         self._truths_store = truths_store
+        self._enable_desktop = enable_desktop
         self._sessions: Dict[str, Session] = {}
         self._processes: Dict[str, AgentProcess] = {}
         self._state_store = AgentStateStore(project_root)
@@ -91,7 +93,11 @@ class AgentManager:
                 self._browser, self._truths_store, self.project_root
             )
 
-        full_server = FullToolServer(self.project_root, enable_web=True)
+        full_server = FullToolServer(
+            self.project_root,
+            enable_web=True,
+            enable_desktop=self._enable_desktop,
+        )
 
         # Register extra tools on the full server so they participate in filtering
         if extra_tools:
@@ -100,6 +106,8 @@ class AgentManager:
 
         filtered = IntelligenceToolServer.__new__(IntelligenceToolServer)
         filtered.project_root = self.project_root
+        filtered.bash_enabled = "bash_execute" in agent_type.allowed_tools
+        filtered.desktop_enabled = self._enable_desktop
 
         from forktex.agent.tools.base import ToolRegistry
 

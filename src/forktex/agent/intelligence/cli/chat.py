@@ -59,11 +59,11 @@ def _build_intelligence_client(project_root: Optional[str] = None):
     return ForktexIntelligenceClient.from_settings(settings)
 
 
-def _build_tool_server(project_root: str):
+def _build_tool_server(project_root: str, *, enable_desktop: bool = False):
     """Create the local tool server for tool intercepts."""
     from forktex.agent.intelligence.tool_server import ToolServer
 
-    return ToolServer(project_root)
+    return ToolServer(project_root, enable_desktop=enable_desktop)
 
 
 def _build_agent_loop(client, tool_server, system=None, on_tool_event=None):
@@ -80,7 +80,12 @@ def _build_agent_loop(client, tool_server, system=None, on_tool_event=None):
 
 @click.command()
 @click.option("--project", "-d", default=None, help="Project directory")
-async def chat(project):
+@click.option(
+    "--desktop",
+    is_flag=True,
+    help="Enable observe-only desktop tools for the local agent loop.",
+)
+async def chat(project, desktop):
     """Start an interactive chat session via the Intelligence API.
 
     Layout is driven by `prompt_toolkit`: input pinned at the bottom, slash
@@ -90,7 +95,7 @@ async def chat(project):
     project_root = project or _get_project_root()
 
     client = _build_intelligence_client(project_root)
-    tool_server = _build_tool_server(project_root)
+    tool_server = _build_tool_server(project_root, enable_desktop=desktop)
 
     from forktex.agent.ui.display import handle_tool_event
 
@@ -147,7 +152,15 @@ async def ask(prompt, project):
     project_root = project or _get_project_root()
 
     try:
-        async with Intelligence(project_root=project_root) as ai:
+        from forktex.agent.intelligence.settings import get_intelligence_settings
+
+        settings = get_intelligence_settings(project_root=project_root)
+        if not getattr(settings, "is_configured", False):
+            error("Intelligence API not configured.")
+            info("Run [bold]forktex intelligence connect[/bold] to set up.")
+            sys.exit(1)
+
+        async with Intelligence(endpoint=settings.endpoint, api_key=settings.api_key) as ai:
             with spinner("Thinking..."):
                 response = await ai.chat(prompt)
 

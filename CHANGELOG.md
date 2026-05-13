@@ -345,6 +345,35 @@ forktex fsd makefile sync
 
 then verify with `forktex fsd check && make ci`.
 
+## [0.5.0] — 2026-05-09
+
+Cut from the `## [Unreleased]` log above. This is the v0.5 release line —
+co-cut across the four ForkTex Python repos (`core-py`, `intelligence`,
+`network`, `cloud`, `forktex-py`). For the cross-repo release notes see
+the orchestra session entry tagged `release-notes`.
+
+The headline `forktex-py` items in this cut are:
+
+- `forktex.network` Python shim landed (mirrors `forktex.cloud` /
+  `forktex.intelligence`); `Cloud` / `Intelligence` / `NetWork`
+  imports are now symmetric across all three platforms.
+- Auth-contract symmetry test (`tests/test_auth_symmetry.py`) locks
+  the cross-facet contract: connect impls, `AuthState`,
+  `EntrySpec(secret)`, public shim with canonical class.
+- `auth/cli.py` migrated to canonical SDK names (`Cloud`, `NetWork`,
+  `Intelligence`); long-form classes can no longer leak in.
+- Chat REPL boots with project grounding from `AGENTS.md` +
+  cached `manual@agents` bundle.
+- `forktex intelligence orchestra` CLI group (`pull` / `push` / `beat`
+  / `status` / `tail` / `directives` / `directive-done` / `resume` /
+  `attach` + sync verbs) — replaces the old shell helpers; full
+  docs at `docs/orchestra-cli.md`.
+- Bare `forktex` REPL recognises "join orchestra <ident>" prompts and
+  hints / runs `attach` in-process.
+- `ask` cmd correctness fix (no more invalid `Intelligence(project_root=…)`
+  kwarg).
+- See the `## [Unreleased]` section above for the full per-PR delta.
+
 ## [0.4.0] — 2026-05-08
 
 ### Changed — breaking
@@ -688,6 +717,6 @@ V1 release. Classifier flipped to `Production/Stable`. SemVer contract guarantee
 2. Replace `make dev` / `make dev-down` / `make dev-logs` with `make local` / `make local-down` / `make local-logs` (or regenerate Makefiles via `forktex fsd makefile sync --all-packages`).
 3. Ensure `forktex-intelligence>=1.0.0` and `forktex-cloud>=1.0.0` resolve cleanly in your env.
 
-## [0.5.0] — prior release
+## [0.0.x] — pre-history (initial PyPI packaging)
 
-Initial PyPI packaging for the `forktex` CLI. Included agent, cloud commands, FSD, scraper, architecture discovery.
+Initial PyPI packaging for the `forktex` CLI. Included agent, cloud commands, FSD, scraper, architecture discovery. (Originally tagged `0.5.0` before the project re-cut its semver line at `0.2.0`; renamed to avoid colliding with the current `0.5.0` release.)

@@ -67,6 +67,7 @@ def test_generate_root_makefile_contains_expected_targets():
 
     content = generated[0].content
     assert ".DEFAULT_GOAL := help" in content
+    assert "python3 -m forktex.agent.help make --project-dir ." in content
     assert "PROJECT_NAME := forktex-py" in content
     assert (
         "install-global: ## Install the latest local forktex CLI globally in editable mode"

@@ -58,7 +58,8 @@ make build
 
 The repo currently self-assesses as:
 
-- FSD version: `1.2.0`
+- release line: `forktex` 0.5.0 (co-cut with the v0.5 line across `core-py` / `intelligence` / `network` / `cloud`; see `CHANGELOG.md`)
+- FSD version: `1.3.0`
 - profile: `package/python-library`
 - achieved level: `L4`
 - architecture packages: `forktex` (single-package repo — the four ecosystem SDKs live in their own repos and are installed as ordinary dependencies)
@@ -173,3 +174,30 @@ per-subsystem atoms use the `<verb>@<instance>` form.
 VPN currently lives inside the controller (`cloud/api/src/vpn/`); no
 VPS extraction planned yet — promote when there's a real reason to
 separate it.
+
+## Recall — graph + orchestra knowledge
+
+When you need to reorient inside this repo, prefer the project graph and
+the orchestra knowledge feed over re-reading code:
+
+```bash
+# project graph (built once via `forktex graph build --project .`)
+forktex graph query <topic>          # search nodes/edges by name or tag
+forktex graph c4 --format html       # C4 view of the same graph
+
+# orchestra knowledge — what peer agents observed about this repo
+forktex intelligence orchestra pull            # concerto + open directives + last 50 events
+forktex intelligence orchestra tail --since -  # event stream from cursor
+forktex intelligence orchestra status          # who's active/stale/gone
+```
+
+Push your own observations back so the next agent in this repo inherits
+them:
+
+```bash
+forktex intelligence orchestra push "<finding>" --tag finding
+```
+
+`docs/orchestra-cli.md` lists every verb (`pull` / `push` / `beat` /
+`status` / `tail` / `directives` / `directive-done` / `resume` /
+`attach` + sync verbs).
