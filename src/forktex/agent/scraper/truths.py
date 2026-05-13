@@ -58,7 +58,7 @@ class TruthsStore:
             return None
         try:
             return json.loads(p.read_text())
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError):  # fmt: skip
             return None
 
     def save_entry(
@@ -96,7 +96,14 @@ class TruthsStore:
         data["version"] = data.get("version", 0) + 1
         data["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
-        self._path(domain).write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        from forktex.graph.io_proxy import tracked_write
+
+        tracked_write(
+            self._path(domain),
+            json.dumps(data, indent=2, ensure_ascii=False),
+            kind="scraper_truth",
+            writer="forktex.agent.scraper.truths",
+        )
 
     def list_domains(self) -> List[str]:
         """List all domains that have truths stored."""
@@ -105,6 +112,6 @@ class TruthsStore:
             try:
                 data = json.loads(p.read_text())
                 domains.append(data.get("domain", p.stem))
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError):  # fmt: skip
                 domains.append(p.stem)
         return domains

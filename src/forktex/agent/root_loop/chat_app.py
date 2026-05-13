@@ -180,10 +180,16 @@ def build_app(
 
     conversation_buffer = Buffer(read_only=Condition(lambda: True))
     state.buffer = conversation_buffer
+
+    # Persistent input history shared with the menu PromptSession — same
+    # file at <global_config_dir>/repl_history.
+    from forktex.agent.root_loop.menu import _repl_history
+
     input_buffer = Buffer(
         multiline=False,
         completer=SlashCompleter(),
         complete_while_typing=True,
+        history=_repl_history(),
     )
 
     def emit(text: str) -> None:
@@ -244,7 +250,9 @@ def build_app(
                 elif event.event == SSEEventType.DONE:
                     pass
         except Exception as exc:
-            emit_markup(f"\n[red]stream error:[/red] {exc}\n")
+            from forktex.agent.root_loop._stream_errors import classify
+
+            emit_markup(classify(exc).markup)
         emit("\n")
         return False
 
@@ -355,5 +363,5 @@ async def run_chat(
 
     try:
         return await app.run_async() or "quit"
-    except (KeyboardInterrupt, EOFError):
+    except (KeyboardInterrupt, EOFError):  # fmt: skip
         return "quit"

@@ -37,14 +37,23 @@ PROJECT_ROOT = Path("/home/samanu/Desktop/forktex/forktex-py")
 
 
 def test_workspace_profile_limits_applicable_atoms():
+    """forktex-py uses `package/python-library` since v1.2.0 — ops atoms
+    are disabled (forktex-py is a CLI library, not a workspace runtime).
+    `acceptance` and `manual` are optional in this profile and forktex-py
+    declares both."""
     manifest = ForktexManifest.load(PROJECT_ROOT / "forktex.json")
     applicable, disabled = resolve_applicable_atoms(manifest)
 
     assert applicable is not None
-    assert "deps" in applicable
+    assert "install" in applicable
     assert "build" in applicable
-    assert "codegen" in applicable
-    assert "deploy" not in disabled
+    assert "sync" in applicable
+    assert "acceptance" in applicable
+    assert "manual" in applicable
+    assert "apply" in disabled
+    assert "destroy" in disabled
+    assert "monitor" in disabled
+    assert "rollback" in disabled
 
 
 def test_generate_root_makefile_contains_expected_targets():
@@ -58,6 +67,7 @@ def test_generate_root_makefile_contains_expected_targets():
 
     content = generated[0].content
     assert ".DEFAULT_GOAL := help" in content
+    assert "python3 -m forktex.agent.help make --project-dir ." in content
     assert "PROJECT_NAME := forktex-py" in content
     assert (
         "install-global: ## Install the latest local forktex CLI globally in editable mode"
@@ -96,7 +106,7 @@ def test_generate_root_makefile_skips_root_python_secondaries_for_workspace_only
         "install-global: ## Install the latest local forktex CLI globally"
         not in content
     )
-    assert "local: start" in content
+    assert "local: apply" in content
 
 
 def test_package_override_reenables_disabled_atom_and_suppresses_secondary_duplicates():
@@ -154,3 +164,88 @@ def test_package_override_reenables_disabled_atom_and_suppresses_secondary_dupli
     assert "python verify_format.py" in content
     assert content.count("lint-fix:") == 1
     assert "python fix_lint.py" in content
+
+
+# ── Variant-syntax custom atoms ─────────────────────────────────────────
+
+
+def test_custom_atom_with_at_qualifier_canonicalises():
+    """A user-declared override key like `apply@web@local` must render as
+    the canonical Make target `apply-web-local` (regardless of input order)."""
+    manifest = ForktexManifest.model_validate(
+        {
+            "manifestVersion": "1.1.0",
+            "name": "demo",
+            "fsd": {
+                "version": "1.1.0",
+                "profiles": ["workspace/python-monorepo"],
+                "atoms": {
+                    "apply@local@web": {
+                        "commands": ["echo 'apply web at local'"],
+                    },
+                    "build@api": {
+                        "commands": ["docker build -t api ."],
+                    },
+                    "test@is-interesting": {
+                        "commands": ["pytest -m interesting"],
+                    },
+                },
+            },
+            "packages": [
+                {
+                    "name": "demo-api",
+                    "path": "api",
+                    "version": "0.1.0",
+                    "publishable": False,
+                    "language": "python",
+                },
+                {
+                    "name": "demo-web",
+                    "path": "web",
+                    "version": "0.1.0",
+                    "publishable": False,
+                    "language": "python",
+                },
+            ],
+            "cloud": {"environments": [{"name": "local"}, {"name": "prod"}]},
+        }
+    )
+
+    content = generate_root_makefile(load_standard(), manifest)
+
+    # `apply@local@web` → canonical `apply-web-local` (service first).
+    assert "\napply-web-local:" in content
+    assert "apply-local-web:" not in content
+    # `build@api` → `build-api`.
+    assert "\nbuild-api:" in content
+    # Free-form qualifier preserves declared form.
+    assert "\ntest-is-interesting:" in content
+
+
+def test_format_check_renders_for_sub_package_only_workspace():
+    """Workspace with only sub-packages (no root-level Python) should still
+    get the format-check secondary target via subpackage recursion."""
+    manifest = ForktexManifest.model_validate(
+        {
+            "manifestVersion": "1.1.0",
+            "name": "demo",
+            "fsd": {
+                "version": "1.1.0",
+                "profiles": ["workspace/python-monorepo"],
+            },
+            "packages": [
+                {
+                    "name": "demo-sdk",
+                    "path": "sdk-py",
+                    "version": "0.1.0",
+                    "publishable": True,
+                    "language": "python",
+                }
+            ],
+        }
+    )
+    content = generate_root_makefile(load_standard(), manifest)
+    # Workspace recursion form, not the root-level ruff invocation.
+    assert "format-check:" in content
+    assert "$(MAKE) -C $$pkg format-check" in content
+    assert "ruff format --check src/ tests/" not in content

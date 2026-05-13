@@ -39,7 +39,7 @@ from typing import Optional
 import asyncclick as click
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
-from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.history import FileHistory, History, InMemoryHistory
 from prompt_toolkit.shortcuts import CompleteStyle
 from rich.columns import Columns
 from rich.console import Group
@@ -132,6 +132,26 @@ class _MenuCompleter(Completer):
 _session: Optional[PromptSession[str]] = None
 
 
+def _repl_history() -> History:
+    """Return a per-user persistent history backing for the REPL.
+
+    History lives at ``<global_config_dir>/repl_history`` (typically
+    ``~/.forktex/repl_history``). Falls back to in-memory storage when
+    the directory is not writable so the REPL still boots.
+    """
+    try:
+        from forktex.core.paths import (
+            ensure_global_config_dir,
+            get_global_config_dir,
+        )
+
+        ensure_global_config_dir()
+        history_path = get_global_config_dir() / "repl_history"
+        return FileHistory(str(history_path))
+    except OSError:  # read-only home, sandboxed env, etc.
+        return InMemoryHistory()
+
+
 def _get_session() -> PromptSession[str]:
     global _session
     if _session is None:
@@ -139,7 +159,7 @@ def _get_session() -> PromptSession[str]:
             completer=_MenuCompleter(),
             complete_while_typing=True,
             complete_style=CompleteStyle.MULTI_COLUMN,
-            history=InMemoryHistory(),
+            history=_repl_history(),
             mouse_support=False,
         )
     return _session
@@ -173,7 +193,7 @@ async def run(project: Optional[str] = None) -> None:
 
         try:
             choice = (await session.prompt_async("> ")).strip()
-        except (EOFError, KeyboardInterrupt):
+        except (EOFError, KeyboardInterrupt):  # fmt: skip
             console.print("[dim]bye.[/dim]")
             return
 
@@ -251,8 +271,15 @@ async def run(project: Optional[str] = None) -> None:
 
         if slash_head:
             info(f"unrecognised slash command: {slash_head}. try /help")
-        else:
-            info(f"unrecognised: {choice!r}. try /help or press h/r/s/c/i/n/q")
+            continue
+
+        # Free-form prompts that mention "orchestra" + a known stashed ident
+        # → offer to auto-attach. Lets users join an orchestra session by
+        # typing a sentence instead of remembering the verb path.
+        if await _maybe_offer_orchestra_attach(choice, session):
+            continue
+
+        info(f"unrecognised: {choice!r}. try /help or press h/r/s/c/i/n/q")
 
 
 # ── rendering ────────────────────────────────────────────────────────────────
@@ -442,11 +469,83 @@ async def _run_service_action(
             api_key=None,
             new_account=new_account,
         )
+    except KeyboardInterrupt:
+        info(
+            f"[dim]{service} {slash_head[1:]} cancelled — "
+            f"type 'c' / 'i' / 'n' to retry.[/dim]"
+        )
     except SystemExit:
-        # _render_connect_error already emitted the diagnostic panel.
-        pass
+        # _render_connect_error already emitted the diagnostic panel
+        # (auth failure, network unreachable, etc.). The user may have
+        # also Ctrl+C'd through the prompt — surface a friendly hint
+        # so the menu doesn't drop back silently.
+        info(
+            f"[dim]{service} {slash_head[1:]} did not complete — "
+            f"type 'c' / 'i' / 'n' to retry.[/dim]"
+        )
     except Exception as exc:
         info(f"{slash_head} failed: {exc}")
+
+
+def _detect_orchestra_ident(choice: str) -> Optional[str]:
+    """If *choice* mentions "orchestra" + a known stashed ident, return it."""
+    text = choice.strip()
+    if "orchestra" not in text.lower():
+        return None
+    try:
+        from forktex.agent.intelligence.cli.orchestra import known_idents
+    except Exception:
+        return None
+    idents = known_idents()
+    if not idents:
+        return None
+    tokens = {t.strip(".,;:!?'\"()[]<>") for t in text.split()}
+    return next((i for i in idents if i in tokens), None)
+
+
+async def _maybe_offer_orchestra_attach(
+    choice: str, session: PromptSession[str]
+) -> bool:
+    """If the prompt mentions an orchestra ident, offer to attach inline.
+
+    Returns True if the prompt was handled (attached, declined, or simply
+    the suggestion was printed). False means the menu should fall through
+    to its "unrecognised" handler.
+    """
+    hit = _detect_orchestra_ident(choice)
+    if hit is None:
+        return False
+    console.print(
+        f"[dim]→ orchestra hint:[/dim] detected mention of "
+        f"[cyan]{hit}[/cyan] — bootstrap stash on disk."
+    )
+    try:
+        answer = (
+            await session.prompt_async(f"  attach as {hit}? [Y/n] ", default="y")
+        ).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return True
+    if answer and answer not in ("y", "yes", ""):
+        console.print(
+            f"[dim]  dismissed — run [cyan]forktex intelligence orchestra "
+            f"attach {hit}[/cyan] later if you change your mind.[/dim]"
+        )
+        return True
+    try:
+        from forktex.agent.intelligence.cli.orchestra import do_attach
+
+        await do_attach(hit)
+    except SystemExit:
+        # do_attach already printed the diagnostic via error()
+        return True
+    except Exception as exc:
+        info(f"attach failed: {exc}")
+        return True
+    console.print(
+        "[dim]  next: run [cyan]forktex intelligence orchestra pull[/cyan] "
+        "to see the concerto, or [cyan]push <text>[/cyan] to post.[/dim]"
+    )
+    return True
 
 
 def _parse_forktex_shorthand(lc: str) -> Optional[tuple[str, list[str]]]:
@@ -495,7 +594,7 @@ async def _show_service_help(
             .strip()
             .lower()
         )
-    except (EOFError, KeyboardInterrupt):
+    except (EOFError, KeyboardInterrupt):  # fmt: skip
         return False
     if answer and answer not in ("y", "yes", ""):
         console.print("[dim]dismissed.[/dim]")

@@ -21,8 +21,14 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Bundled FSD standard data."""
+"""Bundled FSD standard data.
+
+Internal package — not part of the public Python API. To load the
+catalog programmatically, use ``forktex.fsd.loader.load_standard``.
+"""
 
 from pathlib import Path
 
 STANDARD_PATH = Path(__file__).parent / "standard.json"
+
+__all__ = ["STANDARD_PATH"]

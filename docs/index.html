@@ -186,9 +186,12 @@ playwright install</pre>
   <h2>Command Tree</h2>
   <div class="tree">
     <span class="cmd">forktex</span> <span class="desc">Interactive AI chat (default)</span><br>
-    <span class="cmd">forktex ask</span> <span class="desc">"..." — single question</span><br>
-    <span class="cmd">forktex run</span> <span class="desc">"..." — orchestrated task</span><br>
-    <span class="cmd">forktex info</span> <span class="desc">Show project context</span><br>
+    <span class="cmd">forktex intelligence ask</span> <span class="desc">"..." — single question</span><br>
+    <span class="cmd">forktex intelligence run</span> <span class="desc">"..." — multi-step workflow</span><br>
+    <span class="cmd">forktex status</span> <span class="desc">Project + sign-in state</span><br>
+    <span class="cmd">forktex graph</span> <span class="desc">Inspect project as a graph</span><br>
+    <span class="cmd">forktex serve</span> <span class="desc">Live web dashboard</span><br>
+    <span class="cmd">forktex clean</span> <span class="desc">Remove generated artifacts</span><br>
     <br>
     <span class="cmd">forktex intelligence</span><br>
     &nbsp;&nbsp;<span class="cmd">init</span> <span class="desc">Setup wizard</span><br>
@@ -264,14 +267,14 @@ forktex fsd report                   # Run gates, generate evidence</pre>
   </table>
 </section>
 
-<!-- Git -->
-<section id="git">
-  <h2>Git (Multi-repo)</h2>
-  <p>Operate across multiple repositories at once.</p>
-  <pre>forktex git status-all                         # All sibling repos
-forktex git branch-all forktex-standard        # Branch all repos
-forktex git checkout-all master                # Switch all to master
-forktex git status-all -p docs -p cloud -p net # Specific repos</pre>
+<!-- Graph -->
+<section id="graph">
+  <h2>Graph (Project + Architecture)</h2>
+  <p>Inspect your project as a typed multi-edge graph; project the same data onto a C4 architecture view.</p>
+  <pre>forktex graph build              # Refresh .forktex/graph.{json,dsl,html}
+forktex graph c4 --format html   # Drill-down C4 view
+forktex graph importers httpx    # Who imports this library?
+forktex graph ecosystem -b ../   # Walk every project under a parent dir</pre>
 </section>
 
 <!-- Scrape -->
@@ -303,12 +306,11 @@ forktex cloud logs &lt;server&gt;</pre>
   </div>
 
   <div class="pattern">
-    <h4>Multi-project Standard Rollout</h4>
-    <pre>forktex git branch-all forktex-standard -p docs -p cloud -p network
-# ... implement changes on each ...
-forktex fsd check --project-dir ~/cloud
-forktex fsd check --project-dir ~/network
-forktex git status-all</pre>
+    <h4>Multi-project Compliance</h4>
+    <pre>forktex fsd ecosystem --base-dir ~/Desktop/forktex
+# FSD level matrix across every project
+forktex graph ecosystem --base-dir ~/Desktop/forktex --render c4 --per-project
+# C4 architecture per project + a unified host view</pre>
   </div>
 </section>
 

@@ -23,27 +23,92 @@
 
 """forktex.agent.state — Agent state persistence to .forktex/agents/.
 
-Stores agent process history as JSONL files for later inspection and resume.
+Stores agent process history as JSONL files for later inspection and
+resume. Hardened per ``SECURITY.md §G``:
+
+* Each ``{agent_id}.jsonl`` is chmod'd to ``0o600`` after every append
+  (POSIX). Tool-call records can contain code, prompts, and command
+  output — keep them user-only.
+* :class:`AgentStateStore` accepts ``redact_patterns``: a list of
+  regexes whose matches are masked before the entry is serialised.
+  Default redactions cover common credential shapes (``ftx-*`` API
+  keys, JWT-shaped strings, ``Bearer …`` headers, ``-----BEGIN`` PEM
+  blocks). Customers can extend the list when integrating with internal
+  secret formats.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import re
+import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Pattern
 
 from forktex_cloud import paths as _cloud_paths
 
 
-class AgentStateStore:
-    """Persists agent process metadata to .forktex/agents/history/.
+# Default redactions — conservative and meant to be a safety net, not the
+# primary control. Real secrets should never be in agent stdout in the
+# first place; these patterns catch the cases where a tool surfaces one
+# unexpectedly.
+_DEFAULT_REDACTIONS: tuple[Pattern[str], ...] = (
+    re.compile(r"ftx-[A-Za-z0-9_\-]{16,}"),  # ForkTex API keys
+    re.compile(
+        r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\b"
+    ),  # JWTs
+    re.compile(r"\bBearer\s+[A-Za-z0-9_\-\.=+/]{16,}", re.IGNORECASE),
+    re.compile(r"-----BEGIN [A-Z ]+-----.*?-----END [A-Z ]+-----", re.DOTALL),
+    re.compile(r"\b(?:sk|pk|rk)[_-][A-Za-z0-9_\-]{16,}\b"),  # Stripe-shape keys
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{16,}\b"),  # GitHub tokens
+)
+_REDACTION_PLACEHOLDER = "***REDACTED***"
 
-    Each agent gets a JSONL file: {agent_id}.jsonl
-    Each line is a state snapshot (status change, tool call, etc).
+
+def _redact_string(text: str, patterns: Iterable[Pattern[str]]) -> str:
+    redacted = text
+    for pat in patterns:
+        redacted = pat.sub(_REDACTION_PLACEHOLDER, redacted)
+    return redacted
+
+
+def _redact_obj(obj: Any, patterns: Iterable[Pattern[str]]) -> Any:
+    """Recursively walk *obj*, redacting matches in every string leaf."""
+    if isinstance(obj, str):
+        return _redact_string(obj, patterns)
+    if isinstance(obj, dict):
+        return {k: _redact_obj(v, patterns) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_redact_obj(v, patterns) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(_redact_obj(v, patterns) for v in obj)
+    return obj
+
+
+class AgentStateStore:
+    """Persists agent process metadata to ``.forktex/agents/history/``.
+
+    Each agent gets a JSONL file: ``{agent_id}.jsonl``. Each line is a
+    state snapshot (status change, tool call, etc). Files are written
+    with ``0o600`` permissions on POSIX and run through the redaction
+    patterns before serialisation.
     """
 
-    def __init__(self, project_root: str) -> None:
+    def __init__(
+        self,
+        project_root: str,
+        *,
+        redact_patterns: Optional[Iterable[str | Pattern[str]]] = None,
+        use_default_redactions: bool = True,
+    ) -> None:
         self._root = _cloud_paths.agents_history_dir(Path(project_root))
+        compiled: list[Pattern[str]] = (
+            list(_DEFAULT_REDACTIONS) if use_default_redactions else []
+        )
+        for pat in redact_patterns or ():
+            compiled.append(re.compile(pat) if isinstance(pat, str) else pat)
+        self._redact_patterns: tuple[Pattern[str], ...] = tuple(compiled)
 
     def _ensure_dir(self) -> None:
         self._root.mkdir(parents=True, exist_ok=True)
@@ -51,12 +116,28 @@ class AgentStateStore:
     def _agent_path(self, agent_id: str) -> Path:
         return self._root / f"{agent_id}.jsonl"
 
+    def _harden_perms(self, path: Path) -> None:
+        if sys.platform == "win32":  # pragma: no cover — POSIX only
+            return
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+
     def append(self, agent_id: str, entry: Dict[str, Any]) -> None:
-        """Append a state entry for an agent."""
+        """Append a state entry for an agent (redacted + 0o600)."""
+        from forktex.graph.io_proxy import tracked_append
+
         self._ensure_dir()
         path = self._agent_path(agent_id)
-        with path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, default=str) + "\n")
+        redacted = _redact_obj(entry, self._redact_patterns)
+        tracked_append(
+            path,
+            json.dumps(redacted, default=str),
+            kind="agent_history",
+            writer="forktex.agent.state",
+        )
+        self._harden_perms(path)
 
     def save_snapshot(self, agent_data: Dict[str, Any]) -> None:
         """Save a full agent snapshot (usually on status change)."""

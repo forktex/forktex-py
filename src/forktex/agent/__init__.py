@@ -21,4 +21,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""forktex.agent — CLI, agents, and interactive tools."""
+"""forktex.agent — CLI, agents, and interactive tools.
+
+Internal package — not part of the public Python API. The supported
+surface is the ``forktex`` CLI (entry point ``forktex.agent.cli:main``).
+"""
+
+__all__: list[str] = []

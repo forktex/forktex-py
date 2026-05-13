@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import asyncclick as click
+from forktex.agent.cloud.errors import translate_cloud_errors
 
 
 @click.command()
@@ -35,8 +36,9 @@ import asyncclick as click
 @click.option("--env", "environment", default=None, help="Environment overlay")
 @click.option("-v", "--verbose", is_flag=True, help="Verbose output")
 @click.pass_context
+@translate_cloud_errors
 async def deploy(ctx, server_id, service, tags, environment, verbose):
-    """Deploy to a server via the cloud controller."""
+    """Push a new release to one of your cloud servers."""
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 

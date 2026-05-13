@@ -21,15 +21,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""forktex agents ground — Regenerate AGENTS.md from filesystem inspection.
+"""forktex agents ground — Refresh project documentation that AI agents read.
 
-Scans sibling git repositories, reads their forktex.json manifests and
-project metadata, and updates AGENTS.md files with current state.
+Walks the projects in your workspace, reads their manifests and metadata,
+and rewrites the per-project markdown briefing the AI assistant uses as
+system context.
 
-Also provides nested git management utilities:
-    forktex agents ground           Regenerate AGENTS.md for current project
-    forktex agents ground --all     Regenerate for all sibling projects
-    forktex agents ground --status  Show ecosystem status (all repos)
+    forktex agents ground            Refresh briefing for the current project
+    forktex agents ground --all      Refresh briefings for every project
+    forktex agents ground --status   Show what's discoverable in your workspace
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def _discover_repos(root: Path) -> list[dict]:
                 pkg = manifest.get("package")
                 if pkg:
                     repo_info["package"] = pkg.get("name")
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError):  # fmt: skip
                 pass
 
         # Check for client/web subdirectories
@@ -123,27 +123,27 @@ def _generate_repo_summary(repo: dict) -> str:
 
 @click.group()
 async def ground():
-    """Ecosystem grounding — manage AGENTS.md and nested repos."""
+    """Refresh project documentation across every repo in your workspace."""
     pass
 
 
 @ground.command(name="status")
-@click.option("--dir", "-d", "root_dir", default=None, help="Ecosystem root directory")
+@click.option("--dir", "-d", "root_dir", default=None, help="Workspace root directory")
 async def ground_status(root_dir: str | None):
-    """Show ecosystem status: all repos, their AGENTS.md, manifests, and packages."""
+    """Show what's discoverable in your workspace: projects, briefings, manifests."""
     if root_dir:
         root = Path(root_dir)
     else:
         root = _find_ecosystem_root(Path.cwd())
 
     if not root or not root.is_dir():
-        error("Could not find ecosystem root. Use --dir to specify.")
+        error("Could not find your workspace root. Use --dir to specify.")
         return
 
     repos = _discover_repos(root)
 
-    console.print(f"\n[bold]FORKTEX Ecosystem[/bold] ({root})\n")
-    console.print(f"  Found [cyan]{len(repos)}[/cyan] repositories:\n")
+    console.print(f"\n[bold]Workspace[/bold] ({root})\n")
+    console.print(f"  Found [cyan]{len(repos)}[/cyan] projects:\n")
 
     for repo in repos:
         agents_status = (
@@ -174,7 +174,7 @@ async def ground_status(root_dir: str | None):
 
 
 @ground.command(name="repos")
-@click.option("--dir", "-d", "root_dir", default=None, help="Ecosystem root directory")
+@click.option("--dir", "-d", "root_dir", default=None, help="Workspace root directory")
 @click.option("--json-out", is_flag=True, help="Output as JSON")
 async def ground_repos(root_dir: str | None, json_out: bool):
     """List all discovered repos with metadata."""
@@ -184,7 +184,7 @@ async def ground_repos(root_dir: str | None, json_out: bool):
         root = _find_ecosystem_root(Path.cwd())
 
     if not root or not root.is_dir():
-        error("Could not find ecosystem root. Use --dir to specify.")
+        error("Could not find your workspace root. Use --dir to specify.")
         return
 
     repos = _discover_repos(root)
@@ -196,3 +196,211 @@ async def ground_repos(root_dir: str | None, json_out: bool):
     else:
         for repo in repos:
             console.print(f"  {_generate_repo_summary(repo)}")
+
+
+# ─── refresh: regenerate AGENTS.md per project ─────────────────────────
+
+
+_AGENTS_HEADER = "<!-- forktex-agents:autogen -->"
+
+
+def _render_agents_md(repo: dict, root: Path) -> str:
+    """Render an AGENTS.md body from manifest + filesystem snapshot.
+
+    The output is bounded (~40 lines per project) so an LLM ingesting
+    this as context doesn't pay an oversized prompt.
+    """
+    name = repo["name"]
+    repo_path = root / name
+    manifest_path = repo_path / "forktex.json"
+
+    description = ""
+    packages: list[dict] = []
+    target_level = ""
+    profiles: list[str] = []
+    atoms: list[str] = []
+    services: list[str] = repo.get("services", []) or []
+
+    if manifest_path.is_file():
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except OSError, json.JSONDecodeError:
+            data = {}
+        description = (data.get("description") or "").strip()
+        fsd = data.get("fsd") or {}
+        target_level = fsd.get("targetLevel") or ""
+        profiles = fsd.get("profiles") or []
+        atoms = sorted((fsd.get("atoms") or {}).keys())
+        for pkg in data.get("packages") or []:
+            packages.append(
+                {
+                    "name": pkg.get("name", "?"),
+                    "path": pkg.get("path", "."),
+                    "language": pkg.get("language", "?"),
+                    "publishable": bool(pkg.get("publishable", False)),
+                }
+            )
+
+    make_targets: list[str] = []
+    makefile = repo_path / "Makefile"
+    if makefile.is_file():
+        for line in makefile.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if line and ":" in line and not line.startswith(("\t", "#", " ", ".")):
+                head = line.split(":", 1)[0].strip()
+                if head and "=" not in head and not head.startswith(("-", "$")):
+                    if "## " in line:
+                        make_targets.append(head)
+
+    lines: list[str] = [
+        _AGENTS_HEADER,
+        "",
+        f"# {name}",
+        "",
+    ]
+    if description:
+        lines.extend([description, ""])
+
+    lines.append("## At a glance")
+    if profiles:
+        lines.append(f"- profiles: {', '.join(profiles)}")
+    if target_level:
+        lines.append(f"- target FSD level: {target_level}")
+    if services:
+        lines.append(f"- cloud services: {', '.join(services)}")
+    if not (profiles or target_level or services):
+        lines.append("- (no FSD or cloud manifest declared)")
+    lines.append("")
+
+    if packages:
+        lines.append("## Packages")
+        for pkg in packages:
+            pub = " (publishable)" if pkg["publishable"] else ""
+            lines.append(f"- `{pkg['path']}` — {pkg['name']} ({pkg['language']}){pub}")
+        lines.append("")
+
+    if make_targets:
+        # Cap the displayed list to keep AGENTS.md compact.
+        head = make_targets[:20]
+        lines.append("## Make targets")
+        lines.append(f"`{' · '.join(head)}`")
+        if len(make_targets) > 20:
+            lines.append(f"_…and {len(make_targets) - 20} more_")
+        lines.append("")
+
+    if atoms:
+        head = atoms[:15]
+        lines.append("## FSD atom overrides")
+        lines.append(f"`{' · '.join(head)}`")
+        if len(atoms) > 15:
+            lines.append(f"_…and {len(atoms) - 15} more_")
+        lines.append("")
+
+    lines.append(
+        "Refresh this file with `forktex agents ground refresh` "
+        "(reads forktex.json + Makefile)."
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _is_autogen(path: Path) -> bool:
+    """An AGENTS.md is autogen-managed if its first content line is the marker."""
+    try:
+        content = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    for raw in content.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        return line == _AGENTS_HEADER
+    return False
+
+
+@ground.command(name="refresh")
+@click.option("--dir", "-d", "root_dir", default=None, help="Workspace root directory")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would change without writing",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Overwrite even hand-authored AGENTS.md files (dangerous)",
+)
+async def ground_refresh(root_dir: str | None, dry_run: bool, force: bool):
+    """Regenerate AGENTS.md per project from forktex.json + Makefile.
+
+    Idempotent: writes only when the rendered body differs. Skips
+    hand-authored AGENTS.md files (those without the autogen marker)
+    unless ``--force`` is set; the rendered body always begins with a
+    visible marker so authors can opt in by adding it to the top of
+    their existing file.
+    """
+    if root_dir:
+        root = Path(root_dir)
+    else:
+        root = _find_ecosystem_root(Path.cwd())
+
+    if not root or not root.is_dir():
+        error("Could not find your workspace root. Use --dir to specify.")
+        return
+
+    repos = _discover_repos(root)
+    written = 0
+    skipped_handauthored = 0
+    unchanged = 0
+    skipped_no_manifest = 0
+
+    for repo in repos:
+        if not repo.get("has_forktex_json"):
+            skipped_no_manifest += 1
+            continue
+        repo_path = root / repo["name"]
+        agents_path = repo_path / "AGENTS.md"
+        new_body = _render_agents_md(repo, root)
+
+        if agents_path.is_file():
+            existing = agents_path.read_text(encoding="utf-8", errors="ignore")
+            if existing == new_body:
+                unchanged += 1
+                continue
+            if not _is_autogen(agents_path) and not force:
+                skipped_handauthored += 1
+                console.print(
+                    f"  [yellow]skip[/yellow] {repo['name']:<20} "
+                    f"AGENTS.md exists and is hand-authored "
+                    f"(add `{_AGENTS_HEADER}` at the top to opt in, "
+                    "or pass --force)"
+                )
+                continue
+
+        if dry_run:
+            console.print(
+                f"  [cyan]would write[/cyan] {repo['name']}/AGENTS.md "
+                f"({len(new_body.splitlines())} lines)"
+            )
+        else:
+            agents_path.write_text(new_body, encoding="utf-8")
+            console.print(
+                f"  [green]✓[/green] {repo['name']:<20} "
+                f"AGENTS.md ({len(new_body.splitlines())} lines)"
+            )
+        written += 1
+
+    console.print()
+    if dry_run:
+        console.print(
+            f"  [bold]Dry run:[/bold] would write {written}, "
+            f"unchanged {unchanged}, "
+            f"skipped {skipped_handauthored} (hand-authored), "
+            f"skipped {skipped_no_manifest} (no forktex.json)"
+        )
+    else:
+        console.print(
+            f"  [bold]Refreshed:[/bold] wrote {written}, "
+            f"unchanged {unchanged}, "
+            f"skipped {skipped_handauthored} (hand-authored), "
+            f"skipped {skipped_no_manifest} (no forktex.json)"
+        )

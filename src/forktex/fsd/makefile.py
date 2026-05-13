@@ -28,6 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from forktex.fsd.help_tree import project_axes
 from forktex.fsd.models import Atom, FSDStandard
 from forktex.fsd.profiles import resolve_applicable_atoms
 from forktex.manifest.models import AtomOverride, ForktexManifest
@@ -155,14 +156,36 @@ def _get_atom_override(
 
 
 def _make_target_names(
-    atom: Atom, override: AtomOverride | None
+    atom: Atom,
+    override: AtomOverride | None,
+    *,
+    services: set[str] | None = None,
+    envs: set[str] | None = None,
 ) -> tuple[str, list[str]]:
-    canonical = atom.make_targets or [atom.id]
+    """Resolve the primary Make target + alias list for an atom.
+
+    Override-supplied targets win unconditionally. Otherwise the atom's
+    canonical target is used; if the canonical name is variant-syntax
+    (contains ``@``), it's parsed via :mod:`forktex.fsd.variants` so a
+    user-declared key like ``apply@web@local`` becomes the canonical
+    Make target ``apply-web-local`` regardless of qualifier order.
+    """
     if override and override.targets:
         primary = override.targets[0]
         aliases = _dedupe(override.aliases)
         return primary, aliases
-    return canonical[0], (override.aliases if override else [])
+    canonical = atom.make_targets or [atom.id]
+    primary = canonical[0]
+    if "@" in primary:
+        from forktex.fsd.variants import parse_atom_key
+
+        parsed = parse_atom_key(
+            primary,
+            services=services or set(),
+            envs=envs or set(),
+        )
+        primary = parsed.make_target
+    return primary, (override.aliases if override else [])
 
 
 def _make_target_comment(
@@ -225,22 +248,19 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
     # KnowledgeDirectory), emit a TODO stub and let `fsd.atoms[*].commands`
     # in the manifest supply the real body via _override_commands().
     python_specific = {
-        "deps",
+        "install",
         "format",
         "lint",
-        "typecheck",
+        "typing",
         "test",
-        "security-audit",
+        "security",
         "build",
         "publish",
-        "publish-check",
-        "publish-test",
     }
     if not has_python and atom_id in python_specific:
         return [f'@echo "TODO: configure {atom_id} for $(PROJECT_NAME)"']
 
-    if atom_id == "deps":
-        return _deps_lines(manifest)
+    # ── code domain ─────────────────────────────────────────────────────────
     if atom_id == "format":
         return [
             "ruff format src/ tests/",
@@ -257,7 +277,7 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
             "\t\truff check $$pkg/src/ $$pkg/tests/ 2>/dev/null || true; \\",
             "\tdone",
         ]
-    if atom_id == "typecheck":
+    if atom_id == "typing":
         return ["python -m pyright src/ 2>/dev/null || python -m mypy src/"]
     if atom_id == "test":
         lines = ["poetry run pytest tests/ -x -q"]
@@ -266,21 +286,36 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
                 f"cd {pkg} && poetry run pytest tests/ -x -q 2>/dev/null || true"
             )
         return lines
-    if atom_id == "security-audit":
-        return ['pip-audit 2>/dev/null || echo "pip-audit not installed, skipping"']
-    if atom_id == "start":
+    if atom_id == "security":
         return [
-            "@$(MAKE) deps",
-            '@echo ""',
-            '@echo "$(PROJECT_NAME) runtime ready."',
-            '@echo "  Run: forktex --version"',
-            '@echo "  Run: make test"',
-            '@echo ""',
+            'pip-audit --skip-editable 2>/dev/null || echo "pip-audit not installed, skipping"'
         ]
-    if atom_id == "stop":
-        return ['@echo "$(PROJECT_NAME) has no managed long-running runtime to stop."']
-    if atom_id == "logs":
-        return ['@echo "$(PROJECT_NAME) has no managed runtime logs to stream."']
+    if atom_id == "license":
+        return [
+            "@if [ -x scripts/license_headers.py ]; then \\",
+            "\t\tpython3 scripts/license_headers.py check; \\",
+            "\telse \\",
+            '\t\techo "license: no scripts/license_headers.py — declare overrides in forktex.json"; \\',
+            "\tfi",
+        ]
+    if atom_id == "sync":
+        return [
+            '@echo "$(PROJECT_NAME): sync — no codegen targets declared. Add fsd.atoms.\\"sync@<kind>\\" overrides in forktex.json (e.g. sync@migration, sync@types, sync@api, sync@docs)."',
+        ]
+    if atom_id == "docs":
+        return [
+            '@echo "$(PROJECT_NAME): docs — declare fsd.atoms.\\"docs@<kind>\\" overrides (e.g. docs@arch via \'forktex graph c4\')."',
+        ]
+    if atom_id == "manual":
+        return [
+            '@echo "$(PROJECT_NAME): manual — declare fsd.atoms.\\"manual\\" or use \'forktex manual build [--scope arch|graph|agents|search]\'."',
+        ]
+
+    # ── infra domain ─────────────────────────────────────────────────────────
+    if atom_id == "install":
+        # Bootstrap recipe: detects .venv/poetry/pip and chooses the right
+        # invocation. Honours dev deps when the manifest exposes a dev group.
+        return _install_lines(manifest)
     if atom_id == "build":
         return [
             "@for pkg in $(PUBLISHABLE_PACKAGES); do \\",
@@ -297,25 +332,6 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
             "\tdone",
             '@echo "All packages published."',
         ]
-    if atom_id == "publish-check":
-        return [
-            "@for pkg in $(PUBLISHABLE_PACKAGES); do \\",
-            '\t\techo "Checking $$pkg..."; \\',
-            "\t\t$(MAKE) -C $$pkg publish-check; \\",
-            "\tdone",
-        ]
-    if atom_id == "publish-test":
-        return [
-            "@for pkg in $(PUBLISHABLE_PACKAGES); do \\",
-            '\t\techo "Test-publishing $$pkg..."; \\',
-            "\t\t$(MAKE) -C $$pkg publish-test; \\",
-            "\tdone",
-        ]
-    if atom_id == "ci":
-        return [
-            "@$(MAKE) format-check lint test",
-            '@echo "CI passed for $(PROJECT_NAME)"',
-        ]
     if atom_id == "clean":
         return [
             "find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true",
@@ -328,16 +344,82 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
             "find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null; true",
             "find . -type f -name .coverage -delete 2>/dev/null; true",
         ]
-    if atom_id == "help":
+    # ── ops domain ───────────────────────────────────────────────────────────
+    # apply / destroy with no env qualifier are local-process verbs; env-
+    # qualified variants are produced by the variant parser (Phase A.3) and
+    # wired through _custom_atoms / forktex.json overrides.
+    if atom_id == "apply":
         return [
-            "@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
-            '\t\tawk \'BEGIN {FS = ":.*?## "}; {printf "  \\033[36m%-22s\\033[0m %s\\n", $$1, $$2}\'',
+            "@$(MAKE) install",
+            '@echo ""',
+            '@echo "$(PROJECT_NAME) runtime ready."',
+            '@echo "  Run: forktex --version"',
+            '@echo "  Run: make test"',
+            '@echo ""',
         ]
+    if atom_id == "destroy":
+        return [
+            '@echo "$(PROJECT_NAME) has no managed long-running runtime locally."',
+            '@echo "  For env teardown declare fsd.atoms.\\"destroy@<env>\\" in forktex.json."',
+        ]
+    if atom_id == "monitor":
+        return [
+            '@echo "$(PROJECT_NAME): monitor — declare fsd.atoms.\\"monitor@<env>\\" (health, metrics, logs) or use \'forktex status\'."',
+        ]
+    if atom_id == "rollback":
+        return [
+            '@echo "$(PROJECT_NAME): rollback is env-only; declare fsd.atoms.\\"rollback@<env>\\" in forktex.json."',
+        ]
+    if atom_id == "acceptance":
+        return [
+            '@echo "$(PROJECT_NAME): acceptance — declare fsd.atoms.\\"acceptance@<scope>\\" (e.g. @battle, @e2e, @load)."',
+        ]
+    if atom_id == "backup":
+        return [
+            '@echo "$(PROJECT_NAME): backup is env-only; declare fsd.atoms.\\"backup@<env>\\" in forktex.json."',
+        ]
+
+    # ── data domain ──────────────────────────────────────────────────────────
+    if atom_id == "seed":
+        return [
+            '@echo "$(PROJECT_NAME): seed — declare fsd.atoms.\\"seed@<pack>\\" overrides (e.g. seed@minimal, seed@e2e)."',
+        ]
+
     return [f'@echo "TODO: implement {atom_id} for $(PROJECT_NAME)"']
 
 
+def _install_lines(manifest: ForktexManifest) -> list[str]:
+    """Cross-platform bootstrap recipe for the ``install`` atom.
+
+    Idempotent: detects an existing ``.venv``, the presence of poetry, and
+    the manifest's package layout, then chooses the right invocation. Each
+    detection branch echoes what it picked so the user can see the
+    auto-correction trail.
+    """
+    _, subpaths = _package_paths(manifest)
+    editable_paths = subpaths + ["."]
+    editable_args = " ".join(f"-e {path}" for path in editable_paths)
+    return [
+        "@if command -v poetry >/dev/null 2>&1; then \\",
+        '\t\techo "  install: poetry detected → poetry install --with dev"; \\',
+        "\t\tpoetry install --with dev; \\",
+        "\telif [ -d .venv ]; then \\",
+        '\t\techo "  install: .venv detected → pip install -e ."; \\',
+        f"\t\t.venv/bin/pip install {editable_args}; \\",
+        "\telif command -v pip >/dev/null 2>&1; then \\",
+        '\t\techo "  install: pip --user fallback → pip install --user -e ."; \\',
+        f"\t\tpip install --user {editable_args} 2>/dev/null || pip install --break-system-packages {editable_args}; \\",
+        "\telse \\",
+        '\t\techo "  install: no python toolchain found. Install Python ≥ 3.14 first."; \\',
+        "\t\texit 1; \\",
+        "\tfi",
+        '@echo ""',
+        '@echo "$(PROJECT_NAME) installed."',
+    ]
+
+
 def _package_atom_commands(atom_id: str, src_dir: str = "src") -> list[str]:
-    if atom_id == "deps":
+    if atom_id == "install":
         return [
             "pip install --break-system-packages -e . 2>/dev/null || \\",
             "\tpip install -e .",
@@ -346,36 +428,20 @@ def _package_atom_commands(atom_id: str, src_dir: str = "src") -> list[str]:
         return [f"ruff format {src_dir}/ tests/ 2>/dev/null || ruff format {src_dir}/"]
     if atom_id == "lint":
         return [f"ruff check {src_dir}/ tests/ 2>/dev/null || ruff check {src_dir}/"]
-    if atom_id == "typecheck":
+    if atom_id == "typing":
         return [
             f"python -m pyright {src_dir}/ 2>/dev/null || python -m mypy {src_dir}/"
         ]
     if atom_id == "test":
         return ["poetry run pytest tests/ -x -q 2>/dev/null || poetry run pytest -x -q"]
-    if atom_id == "security-audit":
-        return ['pip-audit 2>/dev/null || echo "pip-audit not installed, skipping"']
+    if atom_id == "security":
+        return [
+            'pip-audit --skip-editable 2>/dev/null || echo "pip-audit not installed, skipping"'
+        ]
     if atom_id == "build":
         return ["rm -rf dist/ && python3 -m build"]
     if atom_id == "publish":
         return ["twine upload dist/*"]
-    if atom_id == "publish-check":
-        return [
-            '@echo "Checking publish readiness..."',
-            "@test -f README.md || (echo 'ERROR: README.md missing' && exit 1)",
-            "@test -f LICENSE || (echo 'ERROR: LICENSE missing' && exit 1)",
-            "python3 -m build 2>/dev/null && twine check dist/* && rm -rf dist/",
-            '@echo "Ready to publish."',
-        ]
-    if atom_id == "publish-test":
-        return [
-            "rm -rf dist/ && python3 -m build",
-            "twine upload --repository testpypi dist/*",
-        ]
-    if atom_id == "ci":
-        return [
-            "@$(MAKE) format-check lint test",
-            '@echo "CI passed for $(PROJECT_NAME)"',
-        ]
     if atom_id == "clean":
         return [
             "find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true",
@@ -390,7 +456,7 @@ def _package_atom_commands(atom_id: str, src_dir: str = "src") -> list[str]:
         ]
     if atom_id == "help":
         return [
-            "@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
+            "@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
             '\t\tawk \'BEGIN {FS = ":.*?## "}; {printf "  \\033[36m%-18s\\033[0m %s\\n", $$1, $$2}\'',
         ]
     return [f'@echo "TODO: implement {atom_id} for $(PROJECT_NAME)"']
@@ -423,23 +489,124 @@ def _render_target(
     return lines
 
 
+def _alias_invocation_to_target(
+    invocation: str,
+    *,
+    services: set[str] | None = None,
+    envs: set[str] | None = None,
+) -> str:
+    """Convert an atom-variant invocation into a Make target name.
+
+    Routes through ``forktex.fsd.variants.parse_atom_key`` so canonical
+    axes (service / env) reorder to ``<atom>-<service>-<env>-<custom>``
+    regardless of input order, and free-form qualifiers preserve their
+    declared order. When *services* / *envs* aren't supplied, every
+    qualifier falls through to the free-form bucket — equivalent to the
+    historical ``replace('@', '-')``.
+    """
+    from forktex.fsd.variants import parse_atom_key
+
+    parsed = parse_atom_key(
+        invocation,
+        services=services or set(),
+        envs=envs or set(),
+    )
+    return parsed.make_target
+
+
+def _project_axes(manifest: ForktexManifest) -> tuple[set[str], set[str]]:
+    """Extract the canonical axis values declared in a manifest.
+
+    Services come from ``packages[*].name`` and ``packages[*].path``
+    (so both the full name and the directory shorthand match). Envs
+    come from ``cloud.environments[*].name`` when the manifest carries
+    a typed cloud block.
+    """
+    return project_axes(manifest)
+
+
+def _render_aliases_section(
+    standard: FSDStandard,
+    *,
+    declared_targets: set[str],
+    services: set[str] | None = None,
+    envs: set[str] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Render chord aliases and deprecated rename aliases as PHONY targets.
+
+    A chord (e.g. ``quality: format lint typing``) lists its atom-variant
+    invocations as Make dependencies. A deprecated rename
+    (e.g. ``start → apply``) emits a redirect target that prints a
+    deprecation warning then dispatches via ``$(MAKE) <new-target>``.
+    Aliases whose targets aren't declared anywhere are silently skipped.
+    """
+    lines: list[str] = []
+    phony: list[str] = []
+
+    for alias, invocations in standard.aliases.items():
+        if alias in declared_targets:
+            continue
+        targets = [
+            _alias_invocation_to_target(inv, services=services, envs=envs)
+            for inv in invocations
+        ]
+        if not all(t in declared_targets for t in targets):
+            continue
+        chord_label = " + ".join(invocations)
+        lines.extend(
+            [
+                f"{alias}: {' '.join(targets)} ## chord ({chord_label})",
+                "",
+            ]
+        )
+        phony.append(alias)
+
+    for old, new_invocations in standard.aliases_deprecated.items():
+        if old in declared_targets:
+            continue
+        if not new_invocations:
+            continue
+        new_target = _alias_invocation_to_target(
+            new_invocations[0], services=services, envs=envs
+        )
+        if new_target not in declared_targets:
+            continue
+        lines.extend(
+            [
+                f"{old}: ## (deprecated; use `{new_target}`)",
+                f"\t@echo \"  ⚠  'make {old}' is deprecated; use 'make {new_target}'\" >&2",
+                f"\t@$(MAKE) {new_target}",
+                "",
+            ]
+        )
+        phony.append(old)
+
+    return lines, phony
+
+
 def _declared_target_names(
     atoms: list[Atom],
     custom: list[tuple[Atom, AtomOverride]],
     *,
     manifest: ForktexManifest,
     package_manifest: ForktexManifest | None = None,
+    services: set[str] | None = None,
+    envs: set[str] | None = None,
 ) -> set[str]:
     names: set[str] = set()
     for atom in atoms:
         target, aliases = _make_target_names(
             atom,
             _get_atom_override(manifest, atom.id, package_manifest=package_manifest),
+            services=services,
+            envs=envs,
         )
         names.add(target)
         names.update(aliases)
     for synthetic, override in custom:
-        target, aliases = _make_target_names(synthetic, override)
+        target, aliases = _make_target_names(
+            synthetic, override, services=services, envs=envs
+        )
         names.add(target)
         names.update(aliases)
     return names
@@ -455,9 +622,9 @@ def _root_secondary_targets(
     has_workspace_runtime = bool(root_paths or subpaths)
     if not has_workspace_runtime:
         # Non-python root manifests (e.g. KnowledgeDirectory) don't need
-        # ruff/pytest/poetry secondaries, and their start/stop/logs atoms
-        # are typically disabled by the profile so the alias rules would
-        # dangle. Emit nothing.
+        # ruff/pytest/poetry secondaries, and their apply/destroy/monitor
+        # atoms are typically disabled by the profile so the alias rules
+        # would dangle. Emit nothing.
         return [], []
 
     lines: list[str] = []
@@ -475,6 +642,20 @@ def _root_secondary_targets(
             ]
         )
         phony.append("format-check")
+    elif not has_root_python and subpaths and "format-check" not in existing_targets:
+        # Sub-package-only workspace (e.g. intelligence, network): delegate to
+        # each subpackage's own format-check target, tolerating absence so
+        # languages with prettier (TS) and ruff (Python) all work.
+        lines.extend(
+            [
+                "format-check: ## Check formatting across every subpackage (workspace recursion)",
+                "\t@for pkg in $(SUBPACKAGES); do \\",
+                "\t\t$(MAKE) -C $$pkg format-check 2>/dev/null || true; \\",
+                "\tdone",
+                "",
+            ]
+        )
+        phony.append("format-check")
 
     if has_root_python and "lint-fix" not in existing_targets:
         lines.extend(
@@ -483,6 +664,17 @@ def _root_secondary_targets(
                 "\truff check --fix src/ tests/",
                 "\t@for pkg in $(SUBPACKAGES); do \\",
                 "\t\truff check --fix $$pkg/src/ $$pkg/tests/ 2>/dev/null || true; \\",
+                "\tdone",
+                "",
+            ]
+        )
+        phony.append("lint-fix")
+    elif not has_root_python and subpaths and "lint-fix" not in existing_targets:
+        lines.extend(
+            [
+                "lint-fix: ## Lint and auto-fix across every subpackage (workspace recursion)",
+                "\t@for pkg in $(SUBPACKAGES); do \\",
+                "\t\t$(MAKE) -C $$pkg lint-fix 2>/dev/null || true; \\",
                 "\tdone",
                 "",
             ]
@@ -509,14 +701,20 @@ def _root_secondary_targets(
         )
         phony.append("deps-lock")
 
-    for alias in ("local", "local-down", "local-logs"):
+    # Local-env shortcuts: render only when the project has cloud-aware
+    # apply@local / destroy@local / monitor@local variants declared. Bare
+    # `apply` / `destroy` are process-level, not env-aware, so the alias
+    # would be misleading — skip rather than dangle.
+    for alias, target_options in (
+        ("local", ("apply-local", "apply")),
+        ("local-down", ("destroy-local", "destroy")),
+        ("local-monitor", ("monitor-local", "monitor")),
+    ):
         if alias in existing_targets:
             continue
-        target = {
-            "local": "start",
-            "local-down": "stop",
-            "local-logs": "logs",
-        }[alias]
+        target = next((t for t in target_options if t in existing_targets), None)
+        if target is None:
+            continue
         lines.extend([f"{alias}: {target}", ""])
         phony.append(alias)
 
@@ -547,7 +745,20 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         if publishable_paths
         else "PUBLISHABLE_PACKAGES :=",
         "",
+        # Self-documenting `make help`. Static preamble rule — kept here
+        # rather than as an FSD atom because target-listing is a Makefile
+        # convention, not a delivery-evidence concept.
+        "help: ## Self-documenting target listing",
+        "\t@python3 -m forktex.agent.help make --project-dir . || \\",
+        "\t\tgrep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
+        '\t\tawk \'BEGIN {FS = ":.*?## "}; {printf "  \\033[36m%-22s\\033[0m %s\\n", $$1, $$2}\'',
+        "",
     ]
+
+    # Pre-compute the project's canonical variant axes so that custom
+    # atom IDs containing ``@`` (e.g. ``apply@web@local``) render as
+    # canonical Make targets (``apply-web-local``).
+    services_axis, envs_axis = _project_axes(manifest)
 
     # Resolve custom atoms first so the standard-atom loop can skip any
     # atom whose primary make-target collides with a custom override.
@@ -558,13 +769,17 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
     custom = _custom_atoms(manifest, standard)
     custom_target_collisions: set[str] = set()
     for synthetic, override in custom:
-        ctarget, caliases = _make_target_names(synthetic, override)
+        ctarget, caliases = _make_target_names(
+            synthetic, override, services=services_axis, envs=envs_axis
+        )
         custom_target_collisions.add(ctarget)
         custom_target_collisions.update(caliases)
 
     for atom in atoms:
         override = _get_atom_override(manifest, atom.id)
-        target, aliases = _make_target_names(atom, override)
+        target, aliases = _make_target_names(
+            atom, override, services=services_axis, envs=envs_axis
+        )
         if target in custom_target_collisions:
             continue
         commands = _override_commands(_root_atom_commands(atom.id, manifest), override)
@@ -580,7 +795,9 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         lines.append("")
 
     for synthetic, override in custom:
-        target, aliases = _make_target_names(synthetic, override)
+        target, aliases = _make_target_names(
+            synthetic, override, services=services_axis, envs=envs_axis
+        )
         lines.extend(
             _render_target(
                 synthetic,
@@ -592,12 +809,30 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         )
         lines.append("")
 
-    declared_targets = _declared_target_names(atoms, custom, manifest=manifest)
+    declared_targets = _declared_target_names(
+        atoms, custom, manifest=manifest, services=services_axis, envs=envs_axis
+    )
     secondary_lines, secondary_phony = _root_secondary_targets(
         manifest, existing_targets=declared_targets
     )
     lines.extend(secondary_lines)
-    custom_target_names = [_make_target_names(s, o)[0] for s, o in custom]
+
+    # Render alias chord shortcuts (quality, ci, release) and deprecated-name
+    # aliases (start → apply, etc.) declared in the standard. Reuses the
+    # already-computed canonical axes so chord targets canonicalise.
+    alias_lines, alias_phony = _render_aliases_section(
+        standard,
+        declared_targets=declared_targets | set(secondary_phony),
+        services=services_axis,
+        envs=envs_axis,
+    )
+    lines.extend(alias_lines)
+    secondary_phony.extend(alias_phony)
+
+    custom_target_names = [
+        _make_target_names(s, o, services=services_axis, envs=envs_axis)[0]
+        for s, o in custom
+    ]
     root_paths, subpaths = _package_paths(manifest)
     has_root_python = bool(root_paths)
     extra_targets: list[str] = []
@@ -615,7 +850,12 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         + " ".join(
             _dedupe(
                 [
-                    _make_target_names(atom, _get_atom_override(manifest, atom.id))[0]
+                    _make_target_names(
+                        atom,
+                        _get_atom_override(manifest, atom.id),
+                        services=services_axis,
+                        envs=envs_axis,
+                    )[0]
                     for atom in atoms
                 ]
                 + custom_target_names
@@ -676,8 +916,9 @@ def generate_package_makefile(
         if atom_id in standard.atoms_by_id
     ]
 
-    # Detect package layout: prefer `app/` (FastAPI convention) when present,
-    # fall back to `src/` (Python library convention).
+    # Detect package layout. Canonical ForkTex DDL layout is `src/{domain}/...`
+    # (matches network/api, intelligence/api). `app/` is a FastAPI fallback only
+    # used when `src/` is absent.
     src_dir = "src"
     if (
         package_dir is not None
@@ -692,12 +933,21 @@ def generate_package_makefile(
         ".DEFAULT_GOAL := help",
         f"PROJECT_NAME := {package_manifest.project_name or package_manifest.name or 'package'}",
         "",
+        "help: ## Self-documenting target listing",
+        "\t@python3 -m forktex.agent.help make --project-dir . || \\",
+        "\t\tgrep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
+        '\t\tawk \'BEGIN {FS = ":.*?## "}; {printf "  \\033[36m%-22s\\033[0m %s\\n", $$1, $$2}\'',
+        "",
     ]
+
+    services_axis, envs_axis = _project_axes(package_manifest)
 
     custom = _custom_atoms(manifest, standard, package_manifest=package_manifest)
     custom_target_collisions: set[str] = set()
     for synthetic, override in custom:
-        ctarget, caliases = _make_target_names(synthetic, override)
+        ctarget, caliases = _make_target_names(
+            synthetic, override, services=services_axis, envs=envs_axis
+        )
         custom_target_collisions.add(ctarget)
         custom_target_collisions.update(caliases)
 
@@ -705,7 +955,9 @@ def generate_package_makefile(
         override = _get_atom_override(
             manifest, atom.id, package_manifest=package_manifest
         )
-        target, aliases = _make_target_names(atom, override)
+        target, aliases = _make_target_names(
+            atom, override, services=services_axis, envs=envs_axis
+        )
         if target in custom_target_collisions:
             continue
         commands = _override_commands(
@@ -723,7 +975,9 @@ def generate_package_makefile(
         lines.append("")
 
     for synthetic, override in custom:
-        target, aliases = _make_target_names(synthetic, override)
+        target, aliases = _make_target_names(
+            synthetic, override, services=services_axis, envs=envs_axis
+        )
         lines.extend(
             _render_target(
                 synthetic,
@@ -740,13 +994,18 @@ def generate_package_makefile(
         custom,
         manifest=manifest,
         package_manifest=package_manifest,
+        services=services_axis,
+        envs=envs_axis,
     )
     secondary_lines, secondary_phony = _package_secondary_targets(
         src_dir, existing_targets=declared_targets
     )
     lines.extend(secondary_lines)
 
-    custom_target_names = [_make_target_names(s, o)[0] for s, o in custom]
+    custom_target_names = [
+        _make_target_names(s, o, services=services_axis, envs=envs_axis)[0]
+        for s, o in custom
+    ]
     phony_targets = _dedupe(
         [
             _make_target_names(
@@ -754,6 +1013,8 @@ def generate_package_makefile(
                 _get_atom_override(
                     manifest, atom.id, package_manifest=package_manifest
                 ),
+                services=services_axis,
+                envs=envs_axis,
             )[0]
             for atom in atoms
         ]

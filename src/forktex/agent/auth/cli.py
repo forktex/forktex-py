@@ -151,7 +151,7 @@ def _render_connect_error(service: str, url: str, exc: BaseException) -> None:
 @click.option("--no-probe", is_flag=True, help="Skip reachability checks (offline).")
 @click.option("--json", "as_json", is_flag=True, help="Machine-readable output.")
 async def status_cmd(project, no_probe, as_json):
-    """Aggregate status table across cloud, intelligence, and network."""
+    """Quick overview: are you signed in to Cloud, Intelligence, and Network?"""
     root = _project_root(project)
     states = await collect_auth_status(root, probe=not no_probe)
 
@@ -172,6 +172,19 @@ async def status_cmd(project, no_probe, as_json):
         }
         console.print_json(json.dumps(out))
         return
+
+    # Project + environment header (formerly `forktex info`).
+    import sys
+
+    from forktex.agent.ui.display import CLI_VERSION
+
+    console.print(
+        f"[bold]ForkTex[/bold] [dim]v{CLI_VERSION}[/dim]   "
+        f"project: [cyan]{root}[/cyan]   "
+        f"python: [dim]{sys.version.split()[0]}[/dim]   "
+        f"platform: [dim]{sys.platform}[/dim]"
+    )
+    console.print()
 
     table = Table(title="forktex status", show_lines=False)
     table.add_column("Facet", style="bold")
@@ -288,8 +301,10 @@ async def connect_cloud(
     *, project, save_global, endpoint, email, password, api_key, new_account
 ):
     from forktex.agent.cloud.settings import save_cloud_context_global
-    from forktex_cloud.client import ForktexCloudClient
-    from forktex_cloud.config import CloudContext
+    from forktex.cloud import (
+        Cloud,
+        CloudContext,
+    )  # `Cloud` is the canonical name; falls back to `ForktexCloudClient` on older SDK floors
 
     url = endpoint or Prompt.ask("Controller URL", default="https://cloud.forktex.com")
     url = url.rstrip("/")
@@ -305,7 +320,7 @@ async def connect_cloud(
         ctx = CloudContext(controller=url, account_key=api_key)
         save_cloud_context_global(ctx)
         try:
-            with ForktexCloudClient(url, account_key=api_key) as client:
+            with Cloud(url, account_key=api_key) as client:
                 client.health()
             success(f"cloud: saved api_key for {url}")
         except Exception as exc:
@@ -316,10 +331,10 @@ async def connect_cloud(
     password = password or Prompt.ask("Password", password=True)
 
     try:
-        with ForktexCloudClient(url) as client:
+        with Cloud(url) as client:
             token_resp = client.login(email, password)
-            access_token = token_resp.access_token
-            with ForktexCloudClient(url, access_token=access_token) as authed:
+            access_token = token_resp.accessToken
+            with Cloud(url, access_token=access_token) as authed:
                 orgs = authed.list_orgs()
             if not orgs:
                 error("no organizations for this account.")
@@ -334,7 +349,7 @@ async def connect_cloud(
                     "Select organization", type=click.IntRange(1, len(orgs)), default=1
                 )
                 org = orgs[choice - 1]
-            with ForktexCloudClient(url) as client:
+            with Cloud(url) as client:
                 region = client.health().region
     except Exception as exc:
         _render_connect_error("cloud", url, exc)
@@ -357,8 +372,7 @@ async def connect_intelligence(
         save_intelligence_global,
         save_intelligence_project,
     )
-    from forktex_intelligence.client.client import ForktexIntelligenceClient
-    from forktex_intelligence.config import IntelligenceSettings
+    from forktex.intelligence import Intelligence, IntelligenceSettings
 
     url = endpoint or Prompt.ask(
         "API endpoint", default="https://intelligence.forktex.com/api"
@@ -369,37 +383,46 @@ async def connect_intelligence(
     else:
         email = email or Prompt.ask("Email")
         password = password or Prompt.ask("Password", password=True)
-        client = ForktexIntelligenceClient(url)
+        # Bootstrap phase: we don't have an API key yet (we're about to
+        # create one). `Intelligence()` requires api_key to be non-empty,
+        # so pass a placeholder — the `/auth/login` and `/auth/register`
+        # endpoints don't validate it. Once we have the real key we
+        # re-construct Intelligence with it for verification.
+        intel = Intelligence(endpoint=url, api_key="bootstrap")
         try:
             if new_account:
-                await client.register(email, password)
+                await intel.register(email, password)
             else:
                 try:
-                    await client.login(email, password)
+                    await intel.login(email, password)
                 except Exception:
-                    await client.register(email, password)
-            orgs = await client.list_orgs()
+                    await intel.register(email, password)
+            # Org discovery: `Intelligence.me()` returns user + orgs in
+            # one round-trip. The list-orgs / create-api-key verbs live
+            # on the underlying client (exposed via `intel.client`) — we
+            # access them through the facade so the only `forktex_*`
+            # symbol forktex-py imports is `Intelligence` itself.
+            orgs = await intel.client.list_orgs()
             if not orgs:
                 error("no orgs for this account.")
                 sys.exit(1)
             org_id = orgs[0]["id"]
-            client.set_org(org_id)
-            key_resp = await client.create_api_key("forktex-cli")
+            intel.set_org(org_id)
+            key_resp = await intel.client.create_api_key("forktex-cli")
             key = key_resp.get("raw_key", "")
         except Exception as exc:
-            await client.close()
+            await intel.close()
             _render_connect_error("intelligence", url, exc)
             sys.exit(1)
-        await client.close()
+        await intel.close()
         if not key:
             error("intelligence: server did not return an API key.")
             sys.exit(1)
 
     settings = IntelligenceSettings(endpoint=url, api_key=key)
     try:
-        verify_client = ForktexIntelligenceClient(url, key)
-        health = await verify_client.health()
-        await verify_client.close()
+        async with Intelligence(endpoint=url, api_key=key) as verify:
+            health = await verify.health()
         info(f"verified: intelligence v{getattr(health, 'version', '?')}")
     except Exception as exc:
         info(f"saved, but verification failed: {exc}")
@@ -418,9 +441,10 @@ async def connect_network(
 ):
     from datetime import datetime, timezone
 
-    from forktex_network import NetworkClient
-
-    from forktex.agent.network.settings import (
+    # `NetWork` is the canonical name; falls back to `NetworkClient`
+    # on older SDK floors. The forktex-py shim handles the alias.
+    from forktex.network import (
+        NetWork,
         NetworkSettings,
         save_network_global,
         save_network_project,
@@ -437,7 +461,7 @@ async def connect_network(
     email = email or Prompt.ask("Email")
     password = password or Prompt.ask("Password", password=True)
 
-    client = NetworkClient(base_url=url)
+    client = NetWork(base_url=url)
     try:
         if new_account:
             token = await client.register(email, password)

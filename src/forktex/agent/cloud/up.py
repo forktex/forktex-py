@@ -21,7 +21,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""forktex cloud up — hybrid: local mode or production (remote)."""
+"""forktex cloud up — start your project locally or deploy to your cloud."""
 
 from __future__ import annotations
 
@@ -30,7 +30,8 @@ import sys
 
 import asyncclick as click
 
-from forktex_cloud import paths as _cloud_paths
+from forktex_cloud import paths as cloud_paths
+from forktex.agent.cloud.errors import translate_cloud_errors
 
 
 @click.command()
@@ -59,7 +60,7 @@ from forktex_cloud import paths as _cloud_paths
 )
 @click.option("--raw", is_flag=True, help="Use docker compose logs directly (local)")
 @click.option(
-    "--no-observability", is_flag=True, help="Disable Loki + Promtail (local)"
+    "--no-observability", is_flag=True, help="Disable the local logs/metrics stack"
 )
 @click.option("-v", "--verbose", is_flag=True, help="Verbose output")
 @click.option(
@@ -69,6 +70,7 @@ from forktex_cloud import paths as _cloud_paths
     help="Upload images via docker save instead of registry pull (for locally-built images)",
 )
 @click.pass_context
+@translate_cloud_errors
 async def up(
     ctx,
     environment,
@@ -116,7 +118,16 @@ async def up(
 
 
 def _run_remote(
-    ctx, *, environment, name, flavour, region, skip_dns, skip_ssl, verbose, archive_delivery=False
+    ctx,
+    *,
+    environment,
+    name,
+    flavour,
+    region,
+    skip_dns,
+    skip_ssl,
+    verbose,
+    archive_delivery=False,
 ):
     """Deploy via the cloud controller API (POST /api/v1/up)."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -127,7 +138,12 @@ def _run_remote(
 
     with ForktexCloudClient.from_context(cloud_ctx) as client:
         click.echo(f"  Dispatching deploy via {cloud_ctx.controller}...")
-        result = client.up(
+        # archive_delivery is implicitly always-on whenever project_dir is
+        # provided — the SDK auto-tarballs local Dockerfile build contexts
+        # in client.up(). The CLI flag is kept for forward-compat but is a
+        # no-op against the current SDK signature.
+        _ = archive_delivery
+        result = client.apply(
             name=name,
             flavour=flavour,
             region=region,
@@ -135,98 +151,71 @@ def _run_remote(
             skip_dns=skip_dns,
             skip_ssl=skip_ssl,
             project_dir=project_root,
-            archive_delivery=archive_delivery,
         )
         deployment_id = result.deployment_id
+        run_id = result.job_id
         click.echo(f"  Deployment: {deployment_id}")
+        click.echo(f"  Flow run:   {run_id}")
         click.echo()
 
-        _stream_run(client, deployment_id=deployment_id, verbose=verbose)
+        _stream_run(client, run_id=run_id, verbose=verbose)
 
 
-def _stream_run(client, *, run_id: str | None = None, deployment_id: str | None = None, verbose: bool = False) -> None:
-    """Stream and render flow run events until terminal state.
+def _stream_run(client, *, run_id: str, verbose: bool = False) -> None:
+    """Poll the flow run via `client.flow_get` and print step transitions
+    until the run terminates. Replaces the prior SSE-based version that
+    relied on `client.stream_flow_run_events` (no longer exists) and a
+    StepRunRead/RunRead event shape (no longer matches the API)."""
+    import time as _time
 
-    Pass either ``run_id`` (flow run UUID) or ``deployment_id`` (cloud deployment ID).
-    When only ``deployment_id`` is provided, the run UUID is resolved via the runs API.
-    """
-    if not run_id and deployment_id:
-        import time as _time
-        # The flow run is created asynchronously — poll briefly until it appears.
-        deadline = _time.monotonic() + 15
-        while _time.monotonic() < deadline:
-            runs = client.list_flow_runs(deployment_id=deployment_id, limit=1)
-            if runs:
-                run_id = str(runs[0].runId)
-                break
-            _time.sleep(1)
-        if not run_id:
-            click.echo(f"  No flow run found for deployment {deployment_id} — check: forktex cloud status")
-            return
-    _STEP_STATUS_COLOR = {
-        "running":   ("cyan",   "▶"),
-        "completed": ("green",  "✓"),
-        "failed":    ("red",    "✗"),
+    _COLOR = {
+        "running": ("cyan", "▶"),
+        "completed": ("green", "✓"),
+        "failed": ("red", "✗"),
         "cancelled": ("yellow", "⊘"),
-        "pending":   ("white",  "·"),
+        "pending": ("white", "·"),
     }
 
-    step_lines: dict[str, int] = {}  # step_name → line index for overwrite
+    def _fmt(name: str, status: str) -> str:
+        color, icon = _COLOR.get(status, ("white", "?"))
+        return f"  {click.style(icon + ' ' + name, fg=color)}"
 
-    def _fmt_step(name: str, status: str) -> str:
-        color, icon = _STEP_STATUS_COLOR.get(status, ("white", "?"))
-        label = click.style(f"{icon} {name}", fg=color)
-        return f"  {label}"
-
-    try:
-        for event in client.stream_flow_run_events(run_id):
-            # Events are typed: StepRunRead has stepName, RunRead has workflowName
-            step_name = getattr(event, "stepName", None) or (
-                event.get("stepName") if isinstance(event, dict) else None
-            )
-            status = getattr(event, "status", None) or (
-                event.get("status", "") if isinstance(event, dict) else ""
-            )
-
-            if not step_name:
-                # Top-level run transition
-                if status in ("completed", "failed", "cancelled"):
-                    color = "green" if status == "completed" else "red" if status == "failed" else "yellow"
-                    icon = "✓" if status == "completed" else "✗" if status == "failed" else "⊘"
-                    click.echo()
-                    click.echo(f"  {click.style(icon + ' Deploy ' + status, fg=color, bold=True)}")
-                    if status == "failed" and verbose:
-                        error = getattr(event, "error", None) or (
-                            event.get("error", "") if isinstance(event, dict) else ""
-                        )
-                        if error:
-                            click.echo(f"  {click.style('Error:', fg='red')} {str(error)[:400]}")
-                continue
-
-            # Step-level: print once, overwrite on status change
-            line = _fmt_step(step_name, status)
-            if step_name not in step_lines:
-                click.echo(line)
-                step_lines[step_name] = len(step_lines)
-            else:
-                steps_below = len(step_lines) - step_lines[step_name] - 1
-                if steps_below > 0:
-                    click.echo(f"\033[{steps_below + 1}A\033[2K{line}\033[{steps_below}B", nl=False)
-                else:
-                    click.echo(f"\r\033[2K{line}", nl=False)
-                    click.echo()
-
-    except Exception as exc:
-        # SSE stream broken (server restarted, network blip) — fall back
-        # to polling the final state
-        click.echo(f"\n  (stream disconnected: {exc}) — fetching final state...")
+    seen: dict[str, str] = {}
+    deadline = _time.monotonic() + 30 * 60  # 30 min safety cap
+    while _time.monotonic() < deadline:
         try:
-            run = client.get_flow_run(run_id)
-            final = run.status
-            color = "green" if final == "completed" else "red"
-            click.echo(f"  Deploy {click.style(final, fg=color, bold=True)}")
-        except Exception:
-            click.echo(f"  Could not fetch run {run_id} — check: forktex cloud status")
+            run = client.flow_get(run_id)
+        except Exception as exc:
+            click.echo(f"  (poll error: {exc}) — retrying...")
+            _time.sleep(5)
+            continue
+        for node in run.get("nodes") or []:
+            name = node.get("name") or ""
+            status = node.get("status") or ""
+            if seen.get(name) != status:
+                click.echo(_fmt(name, status))
+                seen[name] = status
+        run_status = run.get("status")
+        if run_status in ("completed", "failed", "cancelled"):
+            color = (
+                "green"
+                if run_status == "completed"
+                else "red"
+                if run_status == "failed"
+                else "yellow"
+            )
+            click.echo()
+            click.echo(f"  {click.style('Deploy ' + run_status, fg=color, bold=True)}")
+            if run_status == "failed" and verbose:
+                for node in run.get("nodes") or []:
+                    if node.get("status") == "failed" and node.get("error"):
+                        click.echo(
+                            f"  {click.style('Error:', fg='red')} "
+                            f"{node['name']}: {str(node['error'])[:400]}"
+                        )
+            return
+        _time.sleep(2)
+    click.echo(f"  poll deadline reached without terminal state for run {run_id}")
 
 
 def _run_local(
@@ -243,18 +232,18 @@ def _run_local(
 ):
     """Run the stack locally via docker compose."""
     project_root = ctx.obj["project_root"]
-    compose_file = str(_cloud_paths.compose_path(project_root, "local"))
+    compose_file = str(cloud_paths.compose_path(project_root, "local"))
     env_name = "local"
 
     if tear_down:
         # Resolve project name for compose isolation
         project_name = "forktex"
         try:
-            from forktex_cloud.manifest.loader import Manifest
+            from forktex.agent.cloud._manifest_cache import load_manifest
 
-            manifest = Manifest.load(project_root / "forktex.json", env=env_name)
+            manifest = load_manifest(project_root, env=env_name)
             project_name = manifest.name or "forktex"
-        except (FileNotFoundError, ValueError, KeyError):
+        except (FileNotFoundError, ValueError, KeyError):  # fmt: skip
             click.echo(
                 f"Warning: could not load manifest, using project name '{project_name}'",
                 err=True,
@@ -279,11 +268,11 @@ def _run_local(
             # Resolve project name for compose isolation
             pname = "forktex"
             try:
-                from forktex_cloud.manifest.loader import Manifest
+                from forktex.agent.cloud._manifest_cache import load_manifest
 
-                m = Manifest.load(project_root / "forktex.json", env=env_name)
+                m = load_manifest(project_root, env=env_name)
                 pname = m.name or "forktex"
-            except (FileNotFoundError, ValueError, KeyError):
+            except (FileNotFoundError, ValueError, KeyError):  # fmt: skip
                 click.echo(
                     f"Warning: could not load manifest, using project name '{pname}'",
                     err=True,
@@ -294,11 +283,12 @@ def _run_local(
         return
 
     from forktex_cloud.bridge.local_compose import write_local_compose
-    from forktex_cloud.manifest.loader import Manifest, ManifestError
+    from forktex_cloud.manifest.loader import ManifestError
 
-    manifest_path = project_root / "forktex.json"
+    from forktex.agent.cloud._manifest_cache import load_manifest
+
     try:
-        manifest = Manifest.load(manifest_path, env=env_name)
+        manifest = load_manifest(project_root, env=env_name)
     except ManifestError as e:
         raise click.ClickException(str(e))
 
@@ -307,16 +297,35 @@ def _run_local(
         from forktex_cloud.secrets.factory import get_secrets_provider
 
         secrets_provider = get_secrets_provider(project_root=project_root)
-    except (ValueError, ImportError):
+    except (ValueError, ImportError):  # fmt: skip
         pass
 
     obs_enabled = not no_observability
-    compose_path = write_local_compose(
-        manifest,
-        project_root,
-        secrets_provider=secrets_provider,
-        observability=obs_enabled,
-    )
+    manifest_obs_enabled = manifest.observability.get("enabled")
+    if manifest_obs_enabled is False:
+        obs_enabled = False
+
+    from forktex.agent.ui.console import console
+    from forktex.runtime.decorators import sdk_boundary
+
+    # Wrap the SDK write so any unspec'd file it produces inside .forktex/
+    # surfaces as a structure violation rather than a silent compose error.
+    _wrapped_write = sdk_boundary(
+        scope="project",
+        project_root_arg="project_root",
+        strict=False,
+    )(write_local_compose)
+
+    with console.status(
+        f"[cyan]rendering compose for[/cyan] [bold]{env_name}[/bold]…",
+        spinner="dots",
+    ):
+        compose_path = _wrapped_write(
+            manifest,
+            project_root,
+            secrets_provider=secrets_provider,
+            observability=obs_enabled,
+        )
     compose_file = str(compose_path)
 
     project_name = manifest.name or "forktex"
@@ -338,14 +347,14 @@ def _run_local(
 
 
 def _print_port_table(manifest, *, observability: bool = True, env_name: str = "local"):
-    from forktex_cloud.bridge.local_compose import (
-        _OBSERVABILITY_PORTS,
-        _allocate_host_ports,
+    from forktex.agent.cloud._local_constants import (
+        OBSERVABILITY_PORTS,
+        allocate_host_ports,
     )
 
     local_services = manifest.services_for_env(env=env_name)
-    reserved = _OBSERVABILITY_PORTS if observability else set()
-    ports = _allocate_host_ports(local_services, reserved=reserved)
+    reserved = OBSERVABILITY_PORTS if observability else set()
+    ports = allocate_host_ports(local_services, reserved=reserved)
     click.echo()
     click.echo(f"  {'Service':<16} {'Type':<14} {'Port':<8} {'Host'}")
     click.echo(f"  {'─' * 52}")
@@ -385,7 +394,7 @@ def _tail_loki(project_root, *, service, since, env_name="local"):
     except ImportError:
         host_port = 3100
 
-    compose_file = str(_cloud_paths.compose_path(project_root, "local"))
+    compose_file = str(cloud_paths.compose_path(project_root, "local"))
     base_url = f"http://localhost:{host_port}"
     if not loki_ready(base_url):
         click.echo(
@@ -406,9 +415,9 @@ def _tail_loki(project_root, *, service, since, env_name="local"):
         all_ids = services
     else:
         try:
-            from forktex_cloud.manifest.loader import Manifest
+            from forktex.agent.cloud._manifest_cache import load_manifest
 
-            manifest = Manifest.load(project_root / "forktex.json", env=env_name)
+            manifest = load_manifest(project_root, env=env_name)
             all_ids = [s["id"] for s in manifest.services_for_env(env=env_name)]
         except Exception:
             all_ids = []

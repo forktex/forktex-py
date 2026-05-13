@@ -68,6 +68,7 @@ SKIP_DIRS = {
     "node_modules", ".venv", "__pycache__", ".expo", ".git",
     "api_client", ".next", "dist", "build", ".mypy_cache",
     "redis-data", "network-db-data", "minio-data",
+    ".forktex",
 }
 
 

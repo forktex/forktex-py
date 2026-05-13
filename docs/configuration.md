@@ -13,26 +13,23 @@ Settings are also read from `~/.forktex/` (global) and `<project>/.forktex/` (pr
 
 ## On-disk layout
 
-The full layout — every file under `.forktex/` and `~/.forktex/`, what writes it, whether it's gitignored — is defined by the [forktex directory spec](https://github.com/forktex/cloud/blob/master/docs/forktex-directory-spec.md) and enforced in code via `forktex_cloud.paths`.
+The full layout — every file under `.forktex/` and `~/.forktex/`, what writes it, whether it's gitignored — is enforced by the structure spec at `forktex.graph.structure`. Path constants live in `forktex_cloud.paths` (the SDK) and are re-exported by `forktex.graph.io_proxy`.
 
 ## Manifest — `forktex.json`
 
-The manifest is the source of truth for project metadata, FSD profile, atoms (CI/test/build commands), and cloud stack composition. `forktex fsd makefile sync` regenerates the Makefile from the atoms; `forktex cloud up` reads the same manifest to bring up local infra.
+The manifest is the source of truth for project metadata, FSD profile, atom overrides (the recipe behind every Make target), and (when the cloud SDK is connected) deployment composition. `forktex fsd makefile sync` regenerates the Makefile from the atoms.
 
-## Ecosystem
+## Optional integrations
 
-```
-forktex-core             Shared PostgreSQL/Redis primitives
-forktex-cloud            Cloud platform SDK (httpx client)
-forktex-intelligence     Intelligence API SDK (LLM, embeddings, search)
-forktex-network          Network platform SDK (identity, projects, channels)
-      |        |        |        |
-      +--------+--------+--------+
-                       |
-                  forktex          CLI + agent + FSD (this package)
-```
+`forktex` is a generic software-tooling library on its own. Three optional integrations bolt on through their own SDKs — each `pip install`able alone, each connected with `forktex <name> connect`:
 
-Each SDK is independently versioned and published to PyPI. `forktex` re-exports their surfaces under `forktex.cloud`, `forktex.intelligence`, and `forktex.network` as convenience shims so app code can `from forktex.intelligence import …` instead of pinning the SDK directly.
+| Integration | What it adds | SDK package |
+| --- | --- | --- |
+| **cloud** | environment lifecycle (`apply`, `destroy`, `monitor`, deploy) | `forktex-cloud` |
+| **intelligence** | LLM, embeddings, agentic runs | `forktex-intelligence` |
+| **network** | identity, projects, tasks, worklogs | `forktex-network` |
+
+Each SDK is independently versioned and published to PyPI. `forktex` re-exports the SDK surfaces under `forktex.cloud`, `forktex.intelligence`, and `forktex.network` as convenience shims so app code can `from forktex.intelligence import …` instead of pinning the SDK directly.
 
 ## Brand assets
 

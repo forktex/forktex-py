@@ -21,4 +21,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""forktex.agent.intelligence — Interactive agent loop and CLI commands."""
+"""forktex.agent.intelligence — Interactive agent loop and CLI commands.
+
+Internal package — not part of the public Python API. For programmatic
+use of the intelligence SDK, import from ``forktex.intelligence``.
+"""
+
+__all__: list[str] = []

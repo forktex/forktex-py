@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import asyncclick as click
+from forktex.agent.cloud.errors import translate_cloud_errors
 
 
 @click.group()
@@ -37,6 +38,7 @@ async def project(ctx):
 
 @project.command("list")
 @click.pass_context
+@translate_cloud_errors
 async def project_list(ctx):
     """List projects."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -59,6 +61,7 @@ async def project_list(ctx):
 @click.option("--manifest", default=None, help="Manifest path")
 @click.option("--id", "project_id", default=None, help="Custom project ID")
 @click.pass_context
+@translate_cloud_errors
 async def project_create(ctx, name, manifest, project_id):
     """Create a project."""
     cloud_ctx = ctx.obj["cloud_ctx"]
@@ -74,6 +77,7 @@ async def project_create(ctx, name, manifest, project_id):
 @project.command("show")
 @click.option("--id", "project_id", required=True, help="Project ID")
 @click.pass_context
+@translate_cloud_errors
 async def project_show(ctx, project_id):
     """Show project details."""
     cloud_ctx = ctx.obj["cloud_ctx"]

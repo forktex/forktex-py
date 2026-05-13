@@ -386,7 +386,11 @@ def evaluate(
 
         ok = all(
             atom_status.get(aid, AtomStatus.FAILED)
-            in (AtomStatus.SATISFIED, AtomStatus.SKIPPED)
+            in (
+                AtomStatus.SATISFIED,
+                AtomStatus.SKIPPED,
+                AtomStatus.OUT_OF_SCOPE,
+            )
             for aid in required
         )
 

@@ -23,7 +23,9 @@
 
 """forktex.agent.cloud — Cloud CLI command group.
 
-Registers as a subcommand of the main ``forktex`` CLI.
+Registers as a subcommand of the main ``forktex`` CLI. Internal package
+— not part of the public Python API. For programmatic use of the cloud
+SDK, import from ``forktex.cloud``.
 """
 # ruff: noqa: E402
 
@@ -60,7 +62,7 @@ from forktex.agent.cloud.deployment import deployment
 )
 @click.pass_context
 async def cloud(ctx, project_dir):
-    """ForkTex Cloud — deploy, manage, and monitor your infrastructure."""
+    """Deploy, manage, and observe your infrastructure."""
     from pathlib import Path
     from forktex.agent.cloud.settings import load_cloud_context
 
@@ -100,3 +102,6 @@ cloud.add_command(tree)
 cloud.add_command(use)
 cloud.add_command(inspect)
 cloud.add_command(deployment)
+
+
+__all__: list[str] = []

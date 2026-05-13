@@ -1,12 +1,36 @@
 # Copyright (C) 2026 FORKTEX S.R.L.
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+# Copyright (C) 2026 FORKTEX S.R.L.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
 
 """forktex cloud vault — hybrid: local vault or remote API."""
 
 from __future__ import annotations
 
 import asyncclick as click
+from forktex.agent.cloud.errors import translate_cloud_errors
 
 
 @click.group()
@@ -70,8 +94,11 @@ def _resolve_env_id(client, cloud_ctx, env_name: str | None) -> str | None:
 @vault.command("set")
 @click.argument("key")
 @click.argument("value")
-@click.option("--env", default=None, help="Environment name or UUID (default: active context env)")
+@click.option(
+    "--env", default=None, help="Environment name or UUID (default: active context env)"
+)
 @click.pass_context
+@translate_cloud_errors
 async def vault_set(ctx, key, value, env):
     """Store a secret value."""
     mode = _resolve_mode(ctx)
@@ -86,6 +113,7 @@ async def vault_set(ctx, key, value, env):
     else:
         project_root = ctx.obj["project_root"]
         from forktex_cloud.secrets.factory import get_secrets_provider
+
         provider = get_secrets_provider(project_root=project_root)
         provider.set(key, value, env or "default")
 
@@ -97,6 +125,7 @@ async def vault_set(ctx, key, value, env):
 @click.argument("key")
 @click.option("--env", default=None, help="Environment name or UUID")
 @click.pass_context
+@translate_cloud_errors
 async def vault_get(ctx, key, env):
     """Retrieve a secret value."""
     mode = _resolve_mode(ctx)
@@ -112,6 +141,7 @@ async def vault_get(ctx, key, env):
     else:
         project_root = ctx.obj["project_root"]
         from forktex_cloud.secrets.factory import get_secrets_provider
+
         try:
             provider = get_secrets_provider(project_root=project_root)
             click.echo(provider.get(key, env or "default"))
@@ -122,6 +152,7 @@ async def vault_get(ctx, key, env):
 @vault.command("list")
 @click.option("--env", default=None, help="Environment name or UUID")
 @click.pass_context
+@translate_cloud_errors
 async def vault_list(ctx, env):
     """List all secret keys."""
     mode = _resolve_mode(ctx)
@@ -136,6 +167,7 @@ async def vault_list(ctx, env):
     else:
         project_root = ctx.obj["project_root"]
         from forktex_cloud.secrets.factory import get_secrets_provider
+
         provider = get_secrets_provider(project_root=project_root)
         keys = provider.list_keys(env or "default")
 
@@ -149,6 +181,7 @@ async def vault_list(ctx, env):
 @click.argument("key")
 @click.option("--env", default=None, help="Environment name or UUID")
 @click.pass_context
+@translate_cloud_errors
 async def vault_delete(ctx, key, env):
     """Remove a secret."""
     mode = _resolve_mode(ctx)
@@ -163,6 +196,7 @@ async def vault_delete(ctx, key, env):
     else:
         project_root = ctx.obj["project_root"]
         from forktex_cloud.secrets.factory import get_secrets_provider
+
         provider = get_secrets_provider(project_root=project_root)
         provider.delete(key, env or "default")
 

@@ -80,6 +80,9 @@ _RW_TOOLS = _RO_TOOLS | frozenset(
 
 _BASH_TOOLS = frozenset({"bash_execute"})
 _WEB_TOOLS = frozenset({"web_search", "web_fetch"})
+_DESKTOP_TOOLS = frozenset(
+    {"desktop_info", "desktop_screenshot", "desktop_observe"}
+)
 
 _SCRAPER_TOOLS = frozenset(
     {
@@ -104,7 +107,7 @@ _SCRAPER_TOOLS = frozenset(
 DEVELOPER = AgentType(
     name="developer",
     description="Full-access development agent with read/write, bash, and git",
-    allowed_tools=_RW_TOOLS | _BASH_TOOLS,
+    allowed_tools=_RW_TOOLS | _BASH_TOOLS | _DESKTOP_TOOLS,
     can_spawn=True,
     system_prompt=(
         "You are a development assistant. You have access to filesystem, "
@@ -116,7 +119,7 @@ DEVELOPER = AgentType(
 RESEARCHER = AgentType(
     name="researcher",
     description="Read-only agent with web access for research tasks",
-    allowed_tools=_RO_TOOLS | _WEB_TOOLS,
+    allowed_tools=_RO_TOOLS | _WEB_TOOLS | _DESKTOP_TOOLS,
     can_spawn=False,
     system_prompt=(
         "You are a research assistant. You can read files and search the web "
@@ -127,7 +130,7 @@ RESEARCHER = AgentType(
 REVIEWER = AgentType(
     name="reviewer",
     description="Read-only agent for code review with bash for running tests",
-    allowed_tools=_RO_TOOLS | _BASH_TOOLS,
+    allowed_tools=_RO_TOOLS | _BASH_TOOLS | _DESKTOP_TOOLS,
     can_spawn=False,
     system_prompt=(
         "You are a code reviewer. You can read files and run commands "
@@ -138,7 +141,7 @@ REVIEWER = AgentType(
 DEPLOYER = AgentType(
     name="deployer",
     description="Read-only agent for deployment verification",
-    allowed_tools=_RO_TOOLS,
+    allowed_tools=_RO_TOOLS | _DESKTOP_TOOLS,
     can_spawn=False,
     system_prompt=(
         "You are a deployment assistant. You can inspect the project "
@@ -235,7 +238,7 @@ class AgentTypeRegistry:
                 )
                 self._types[agent_type.name] = agent_type
 
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError):  # fmt: skip
             pass
 
     def __contains__(self, name: str) -> bool:

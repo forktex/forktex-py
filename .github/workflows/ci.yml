@@ -52,5 +52,8 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
 
-      - name: Run CI gate (make ci)
-        run: poetry run make ci
+      - name: Run pre-merge gate (make gate)
+        run: poetry run make gate
+
+      - name: Battle-test the published surface (make acceptance)
+        run: poetry run make acceptance

@@ -21,10 +21,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""forktex fsd report - generate ISO compliance evidence by running quality gates.
+"""forktex fsd report - generate FSD evidence by running quality gates.
 
-Runs the actual Make targets (format-check, lint, test, audit) and captures
-their output as structured audit evidence. Outputs JSON + HTML.
+Runs the declared Make targets (format-check, lint, test, security)
+and captures their output as structured evidence. Outputs JSON + HTML.
 """
 
 from __future__ import annotations
@@ -38,50 +38,55 @@ from pathlib import Path
 import asyncclick as click
 from jinja2 import Environment, FileSystemLoader
 
-from forktex.agent.fsd.standard import ISOMapping
 from forktex.core.paths import get_fsd_evidence_dir
 from forktex.fsd.loader import load_standard
+from forktex.fsd.models import ISORef
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
+
+def _iso(standard: str, clause: str, control: str) -> ISORef:
+    return ISORef(standard=standard, clause=clause, control=control)
+
+
 # Quality gates: (make target, label, ISO mappings)
-GATES: list[tuple[str, str, list[ISOMapping]]] = [
+GATES: list[tuple[str, str, list[ISORef]]] = [
     (
         "format-check",
         "Format Check",
         [
-            ISOMapping("27001", "A.8.26", "Application security requirements"),
-            ISOMapping("9001", "8.3.4", "Design and development controls"),
+            _iso("27001", "A.8.26", "Application security requirements"),
+            _iso("9001", "8.3.4", "Design and development controls"),
         ],
     ),
     (
         "lint",
         "Lint",
         [
-            ISOMapping("27001", "A.8.28", "Secure coding"),
-            ISOMapping("9001", "8.3.4", "Design and development controls"),
+            _iso("27001", "A.8.28", "Secure coding"),
+            _iso("9001", "8.3.4", "Design and development controls"),
         ],
     ),
     (
         "test",
         "Test",
         [
-            ISOMapping("27001", "A.8.29", "Security testing"),
-            ISOMapping("9001", "8.6", "Release of products"),
-            ISOMapping("9001", "9.1.1", "Monitoring and measurement"),
+            _iso("27001", "A.8.29", "Security testing"),
+            _iso("9001", "8.6", "Release of products"),
+            _iso("9001", "9.1.1", "Monitoring and measurement"),
         ],
     ),
     (
         "audit",
         "Security Audit",
         [
-            ISOMapping("27001", "A.8.8", "Technical vulnerability management"),
+            _iso("27001", "A.8.8", "Technical vulnerability management"),
         ],
     ),
 ]
 
 
-def _run_gate(target: str, label: str, iso: list[ISOMapping], cwd: Path) -> dict:
+def _run_gate(target: str, label: str, iso: list[ISORef], cwd: Path) -> dict:
     """Run a make target and capture output as evidence."""
     start = datetime.now(timezone.utc)
     try:
@@ -166,7 +171,6 @@ async def report(ctx, output_dir, as_json):
     out = Path(output_dir) if output_dir else get_fsd_evidence_dir(project_root)
     out.mkdir(parents=True, exist_ok=True)
 
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     gate_results = []
     all_passed = True
 
@@ -206,13 +210,24 @@ async def report(ctx, output_dir, as_json):
         "iso_evidence": iso_evidence,
     }
 
-    # Write JSON
-    json_path = out / f"report-{ts}.json"
-    json_path.write_text(json.dumps(data, indent=2))
+    from forktex.graph.io_proxy import tracked_write
 
-    # Write HTML
-    html_path = out / f"report-{ts}.html"
-    html_path.write_text(_render_html(data))
+    # Stable filenames; timestamp is in the JSON body + filesystem mtime.
+    json_path = out / "report.json"
+    tracked_write(
+        json_path,
+        json.dumps(data, indent=2),
+        kind="fsd_evidence",
+        writer="forktex.agent.fsd.report",
+    )
+
+    html_path = out / "report.html"
+    tracked_write(
+        html_path,
+        _render_html(data),
+        kind="fsd_evidence",
+        writer="forktex.agent.fsd.report",
+    )
 
     click.echo()
     click.echo(f"Overall: {'PASSED' if all_passed else 'FAILED'}")
