@@ -40,6 +40,7 @@ from typing import Any, Dict, List, Optional
 
 from forktex.agent.tools.base import Tool, ToolRegistry, ToolResult
 from forktex.agent.tools.bash import create_bash_tools
+from forktex.agent.tools.desktop import create_desktop_tools, desktop_enabled_default
 from forktex.agent.tools.filesystem import create_filesystem_tools
 from forktex.agent.tools.git import create_git_tools
 from forktex.agent.tools.graph_tools import create_graph_tools
@@ -73,11 +74,15 @@ class ToolServer:
         extra_tools: Optional[List[Tool]] = None,
         *,
         enable_bash: Optional[bool] = None,
+        enable_desktop: Optional[bool] = None,
     ) -> None:
         self.project_root = project_root
         self.registry = ToolRegistry()
         self.bash_enabled = (
             _bash_enabled_default() if enable_bash is None else enable_bash
+        )
+        self.desktop_enabled = (
+            desktop_enabled_default() if enable_desktop is None else enable_desktop
         )
 
         for tool in create_filesystem_tools(project_root):
@@ -89,6 +94,9 @@ class ToolServer:
             self.registry.register(tool)
         for tool in create_graph_tools(project_root):
             self.registry.register(tool)
+        if self.desktop_enabled:
+            for tool in create_desktop_tools(project_root):
+                self.registry.register(tool)
 
         if extra_tools:
             for tool in extra_tools:

@@ -143,7 +143,7 @@ def _run_remote(
         # in client.up(). The CLI flag is kept for forward-compat but is a
         # no-op against the current SDK signature.
         _ = archive_delivery
-        result = client.up(
+        result = client.apply(
             name=name,
             flavour=flavour,
             region=region,

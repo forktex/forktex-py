@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional
 from forktex.agent.tools.base import Tool, ToolRegistry, ToolResult
 from forktex.agent.tools.filesystem import create_filesystem_tools
 from forktex.agent.tools.bash import create_bash_tools
+from forktex.agent.tools.desktop import create_desktop_tools, desktop_enabled_default
 from forktex.agent.tools.git import create_git_tools
 from forktex.agent.tools.web import create_web_tools
 
@@ -44,9 +45,17 @@ class ToolServer:
     - get_schemas() -> list of tool schemas for LLM
     """
 
-    def __init__(self, project_root: str, enable_web: bool = True):
+    def __init__(
+        self,
+        project_root: str,
+        enable_web: bool = True,
+        enable_desktop: Optional[bool] = None,
+    ):
         self.project_root = project_root
         self.registry = ToolRegistry()
+        self.desktop_enabled = (
+            desktop_enabled_default() if enable_desktop is None else enable_desktop
+        )
 
         # Register all tool groups
         for tool in create_filesystem_tools(project_root):
@@ -55,6 +64,9 @@ class ToolServer:
             self.registry.register(tool)
         for tool in create_git_tools(project_root):
             self.registry.register(tool)
+        if self.desktop_enabled:
+            for tool in create_desktop_tools(project_root):
+                self.registry.register(tool)
 
         if enable_web:
             try:

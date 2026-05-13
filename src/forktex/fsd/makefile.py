@@ -28,6 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from forktex.fsd.help_tree import project_axes
 from forktex.fsd.models import Atom, FSDStandard
 from forktex.fsd.profiles import resolve_applicable_atoms
 from forktex.manifest.models import AtomOverride, ForktexManifest
@@ -521,36 +522,7 @@ def _project_axes(manifest: ForktexManifest) -> tuple[set[str], set[str]]:
     come from ``cloud.environments[*].name`` when the manifest carries
     a typed cloud block.
     """
-    services: set[str] = set()
-    for pkg in manifest.packages:
-        if pkg.name:
-            services.add(pkg.name)
-        if pkg.path and pkg.path != ".":
-            services.add(pkg.path)
-
-    envs: set[str] = set()
-    cloud = getattr(manifest, "cloud", None)
-    if cloud is not None:
-        cloud_envs = getattr(cloud, "environments", None)
-        if isinstance(cloud_envs, list):
-            for entry in cloud_envs:
-                if isinstance(entry, dict):
-                    name = entry.get("name")
-                    if isinstance(name, str):
-                        envs.add(name)
-                else:
-                    name = getattr(entry, "name", None)
-                    if isinstance(name, str):
-                        envs.add(name)
-        # Also accept the dict-shaped cloud block (some manifests don't
-        # validate against the typed CloudManifest model).
-        if isinstance(cloud, dict):
-            cloud_envs_raw = cloud.get("environments")
-            if isinstance(cloud_envs_raw, list):
-                for entry in cloud_envs_raw:
-                    if isinstance(entry, dict) and isinstance(entry.get("name"), str):
-                        envs.add(entry["name"])
-    return services, envs
+    return project_axes(manifest)
 
 
 def _render_aliases_section(
@@ -777,7 +749,8 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         # rather than as an FSD atom because target-listing is a Makefile
         # convention, not a delivery-evidence concept.
         "help: ## Self-documenting target listing",
-        "\t@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
+        "\t@python3 -m forktex.agent.help make --project-dir . || \\",
+        "\t\tgrep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
         '\t\tawk \'BEGIN {FS = ":.*?## "}; {printf "  \\033[36m%-22s\\033[0m %s\\n", $$1, $$2}\'',
         "",
     ]
@@ -959,6 +932,11 @@ def generate_package_makefile(
         "# Unit: package",
         ".DEFAULT_GOAL := help",
         f"PROJECT_NAME := {package_manifest.project_name or package_manifest.name or 'package'}",
+        "",
+        "help: ## Self-documenting target listing",
+        "\t@python3 -m forktex.agent.help make --project-dir . || \\",
+        "\t\tgrep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \\",
+        '\t\tawk \'BEGIN {FS = ":.*?## "}; {printf "  \\033[36m%-22s\\033[0m %s\\n", $$1, $$2}\'',
         "",
     ]
 

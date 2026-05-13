@@ -53,6 +53,7 @@ from typing import Iterable
 
 import asyncclick as click
 
+from forktex.fsd.help_tree import HelpTree, build_help_tree, project_axes
 from forktex.fsd.models import Atom, FSDStandard
 from forktex.fsd.variants import ParsedAtom, parse_atom_key
 
@@ -118,6 +119,23 @@ def register_atom_commands(
     registered: list[str] = []
 
     existing = set(cli.commands.keys())
+    cli_available: set[str] = set()
+    for atom in standard.atoms:
+        existing_cmd = cli.commands.get(atom.id)
+        if existing_cmd is None:
+            cli_available.add(atom.id)
+        elif (
+            isinstance(existing_cmd, click.Group)
+            and existing_cmd.invoke_without_command
+        ):
+            cli_available.add(atom.id)
+
+    help_tree = (
+        build_help_tree(standard, manifest, cli_atoms=cli_available)
+        if manifest is not None
+        else None
+    )
+
     for atom in standard.atoms:
         if atom.id in existing:
             existing_cmd = cli.commands[atom.id]
@@ -130,7 +148,12 @@ def register_atom_commands(
             # Plain command — it owns the name; atom is reachable via make only.
             continue
 
-        cmd = _build_atom_command(atom, services=services, envs=envs)
+        cmd = _build_atom_command(
+            atom,
+            services=services,
+            envs=envs,
+            help_tree=help_tree,
+        )
         cli.add_command(cmd, name=atom.id)
         registered.append(atom.id)
 
@@ -179,32 +202,15 @@ def _project_axes(manifest) -> tuple[set[str], set[str]]:
     Mirrors ``forktex.fsd.makefile._project_axes`` but kept local to
     avoid importing the generator (which pulls a much larger graph).
     """
-    services: set[str] = set()
-    envs: set[str] = set()
-    if manifest is None:
-        return services, envs
-    for pkg in getattr(manifest, "packages", []) or []:
-        name = getattr(pkg, "name", None)
-        if name:
-            services.add(name)
-        path = getattr(pkg, "path", None)
-        if path and path != ".":
-            services.add(path)
-    cloud = getattr(manifest, "cloud", None)
-    if cloud is not None:
-        for env in getattr(cloud, "environments", []) or []:
-            name = (
-                getattr(env, "name", None)
-                if not isinstance(env, dict)
-                else env.get("name")
-            )
-            if name:
-                envs.add(name)
-    return services, envs
+    return project_axes(manifest)
 
 
 def _build_atom_command(
-    atom: Atom, *, services: set[str], envs: set[str]
+    atom: Atom,
+    *,
+    services: set[str],
+    envs: set[str],
+    help_tree: HelpTree | None = None,
 ) -> click.Command:
     """Construct a single Click command for an atom."""
     help_lines: list[str] = []
@@ -213,6 +219,11 @@ def _build_atom_command(
     if atom.common_variants:
         help_lines.append("")
         help_lines.append("Common variants: " + ", ".join(atom.common_variants))
+    if help_tree is not None:
+        from forktex.fsd.help_tree import render_help_text
+
+        help_lines.append("")
+        help_lines.append(render_help_text(help_tree, atom_id=atom.id))
     short_help = atom.description.split(".")[0] if atom.description else atom.id
     help_text = "\n".join(help_lines) or atom.id
 

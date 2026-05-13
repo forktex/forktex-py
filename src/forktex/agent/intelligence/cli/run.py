@@ -51,7 +51,12 @@ def _get_project_root() -> str:
     default="developer",
     help="Agent type (developer, researcher, reviewer, assistant)",
 )
-async def run(task, project, agent_type):
+@click.option(
+    "--desktop",
+    is_flag=True,
+    help="Enable observe-only desktop tools for the local agent loop.",
+)
+async def run(task, project, agent_type, desktop):
     """Run a task with full orchestration via the Intelligence API.
 
     Creates a session and agent process, then executes the task.
@@ -82,6 +87,7 @@ async def run(task, project, agent_type):
         project_root,
         client,
         on_tool_event=handle_tool_event,
+        enable_desktop=desktop,
     )
 
     session = manager.create_session()

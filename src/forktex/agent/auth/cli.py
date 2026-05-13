@@ -333,7 +333,7 @@ async def connect_cloud(
     try:
         with Cloud(url) as client:
             token_resp = client.login(email, password)
-            access_token = token_resp.access_token
+            access_token = token_resp.accessToken
             with Cloud(url, access_token=access_token) as authed:
                 orgs = authed.list_orgs()
             if not orgs:

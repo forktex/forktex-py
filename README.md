@@ -12,6 +12,13 @@
 
 `forktex` ships as a single binary. By itself it gives you an agent that reads your repo, runs commands, writes patches, audits your delivery standard, and discovers your architecture — no account required. Plug in any of the three ForkTex platforms (cloud, intelligence, network) and the same CLI gains LLM reasoning, infra deploys, and identity / projects / channels.
 
+### What's new in v0.5
+
+- **`forktex intelligence orchestra`** — 20+ verbs to participate in a multi-agent Orchestra session (push/pull/beat/status/tail/directives/claim/release/barrier/lock/propose/vote/decisions/knowledge). Bring-your-own loop; same protocol whether the runtime is Claude Code, codex, or `forktex` REPL via Intelligence().
+- **`attach` + bare-`forktex` REPL hint** — `forktex intelligence orchestra attach <ident>` mutates the current shell's `OA_*` env from a stashed bootstrap kit and sends hello + heartbeat. Bare `forktex` detects "orchestra <ident>" intent in the menu.
+- **PID-suffixed venv** in the Makefile (`$$PPID`) eliminates the dual-runtime acceptance race when two `make acceptance` runs overlap.
+- See [`docs/orchestra-cli.md`](./docs/orchestra-cli.md) for the auth contract, 4-step flow, and verb reference.
+
 ---
 
 ## Install
