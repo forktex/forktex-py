@@ -43,26 +43,7 @@ def provider():
 @translate_cloud_errors
 async def provider_list(ctx):
     """List all registered provider credentials."""
-    cloud_ctx = ctx.obj["cloud_ctx"]
-    cloud_ctx.require_connection()
-
-    from forktex_cloud.client import ForktexCloudClient
-
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
-        creds = client.list_providers()
-        if not creds:
-            click.echo("  No provider credentials registered.")
-            return
-        for c in creds:
-            status = (
-                click.style("✓", fg="green")
-                if getattr(c, "isActive", True)
-                else click.style("✗", fg="red")
-            )
-            last_used = getattr(c, "lastUsedAt", None) or "never"
-            click.echo(
-                f"  {status}  {getattr(c, 'id', '?')}  {getattr(c, 'provider', '?'):12}  {getattr(c, 'kind', '?'):8}  {getattr(c, 'label', '')}  last_used={last_used}"
-            )
+    _gate(ctx, "list_providers")
 
 
 @provider.command("add")
@@ -76,49 +57,8 @@ async def provider_add(ctx, kind, token, label, env):
     """Register a provider credential.
 
     KIND is 'compute' (for VPS provisioning) or 'dns' (for DNS management).
-    The provider vendor (Hetzner, Cloudflare, etc.) is detected automatically.
-
-    \b
-    Examples:
-        forktex cloud provider add compute --token <hetzner-token>
-        forktex cloud provider add dns --token <cloudflare-token>
     """
-    cloud_ctx = ctx.obj["cloud_ctx"]
-    cloud_ctx.require_connection()
-
-    from forktex_cloud.client import ForktexCloudClient
-
-    provider_name = _detect_provider(kind, token)
-
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
-        cred = client.add_provider(
-            provider=provider_name,
-            kind=kind,
-            payload={"token": token},
-            label=label or f"{provider_name}-{kind}",
-            environment=env,
-        )
-        click.echo(f"  ✓  {kind} credential registered")
-        click.echo(
-            f"     id={getattr(cred, 'id', '?')}  provider={getattr(cred, 'provider', '?')}"
-        )
-
-        # Auto-verify after adding
-        cred_id = str(getattr(cred, "id", ""))
-        if cred_id:
-            result = client.verify_provider(cred_id)
-            ok = (
-                result.get("ok", result.get("verified", False))
-                if isinstance(result, dict)
-                else getattr(result, "ok", False)
-            )
-            if ok:
-                click.echo(f"     {click.style('verified ✓', fg='green')}")
-            else:
-                detail = result.get("detail", "") if isinstance(result, dict) else ""
-                click.echo(
-                    f"     {click.style('verification failed', fg='yellow')}: {detail}"
-                )
+    _gate(ctx, "add_provider")
 
 
 @provider.command("verify")
@@ -127,23 +67,7 @@ async def provider_add(ctx, kind, token, label, env):
 @translate_cloud_errors
 async def provider_verify(ctx, credential_id):
     """Test connectivity for a provider credential."""
-    cloud_ctx = ctx.obj["cloud_ctx"]
-    cloud_ctx.require_connection()
-
-    from forktex_cloud.client import ForktexCloudClient
-
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
-        result = client.verify_provider(credential_id)
-        ok = (
-            result.get("ok", False)
-            if isinstance(result, dict)
-            else getattr(result, "ok", False)
-        )
-        detail = result.get("detail", "") if isinstance(result, dict) else ""
-        if ok:
-            click.echo(f"  {click.style('✓ verified', fg='green')}  {detail}")
-        else:
-            click.echo(f"  {click.style('✗ failed', fg='red')}  {detail}")
+    _gate(ctx, "verify_provider")
 
 
 @provider.command("remove")
@@ -152,29 +76,14 @@ async def provider_verify(ctx, credential_id):
 @translate_cloud_errors
 async def provider_remove(ctx, credential_id):
     """Remove a provider credential."""
-    cloud_ctx = ctx.obj["cloud_ctx"]
-    cloud_ctx.require_connection()
-
-    from forktex_cloud.client import ForktexCloudClient
-
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
-        client.delete_provider(credential_id)
-        click.echo(f"  ✓  credential {credential_id[:8]}… removed")
+    _gate(ctx, "delete_provider")
 
 
-def _detect_provider(kind: str, token: str) -> str:
-    """Detect the vendor from token format. Returns provider name string."""
-    if kind == "compute":
-        # Hetzner tokens are 64-char hex strings
-        if len(token) == 64 and all(
-            c in "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-"
-            for c in token
-        ):
-            return "hetzner"
-        return "hetzner"  # default compute provider
-    elif kind == "dns":
-        # Cloudflare tokens start with common prefixes or have specific formats
-        if token.startswith("cfut_") or token.startswith("cf_"):
-            return "cloudflare"
-        return "cloudflare"  # default DNS provider
-    return "generic"
+def _gate(ctx, missing_method: str) -> None:
+    click.echo(
+        f"  `forktex cloud provider` is not surfaced by SDK 0.3.0 "
+        f"(client.{missing_method} missing). Manage providers via the "
+        f"cloud-API admin endpoints directly until the SDK grows the method.",
+        err=True,
+    )
+    raise click.exceptions.Exit(2)

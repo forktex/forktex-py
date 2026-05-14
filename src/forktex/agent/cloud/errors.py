@@ -23,7 +23,7 @@
 
 """SDK exception → ``click.ClickException`` translation.
 
-Cloud subcommands talk to ``forktex_cloud.client.ForktexCloudClient``,
+Cloud subcommands talk to ``forktex_cloud.client.Cloud``,
 which raises ``CloudAPIError`` for non-2xx responses and any
 ``httpx.HTTPError`` subclass for network failures. Without this
 module those bubble out as raw tracebacks. The decorator below wraps
@@ -53,7 +53,7 @@ from typing import Any, Callable, TypeVar
 
 import asyncclick as click
 import httpx
-from forktex_cloud.client import CloudAPIError
+from forktex_cloud import CloudAPIError
 
 
 F = TypeVar("F", bound=Callable[..., Any])

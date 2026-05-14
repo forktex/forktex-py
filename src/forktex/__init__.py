@@ -35,7 +35,7 @@ Includes:
 Quick Start:
     from forktex.core.state import StateManager
     from forktex_intelligence import Intelligence
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
 CLI:
     forktex chat

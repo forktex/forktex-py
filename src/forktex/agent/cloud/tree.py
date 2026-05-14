@@ -48,9 +48,9 @@ async def tree(ctx, org):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         me = client.me()
         orgs = client.list_orgs()
         projects = client.list_projects()
@@ -85,7 +85,7 @@ async def tree(ctx, org):
 
         # Providers
         try:
-            with ForktexCloudClient.from_context(cloud_ctx) as client:
+            with Cloud.from_context(cloud_ctx) as client:
                 providers = client.list_providers()
             if providers:
                 pstr = "  ".join(
@@ -100,8 +100,8 @@ async def tree(ctx, org):
 
         # Vault key count
         try:
-            with ForktexCloudClient.from_context(cloud_ctx) as client:
-                vault_keys = client.list_vault_keys()
+            with Cloud.from_context(cloud_ctx) as client:
+                vault_keys = client.vault_list()
             if vault_keys is not None:
                 click.echo(f"    ├── vault: {len(vault_keys)} keys (global)")
         except Exception:
@@ -132,7 +132,7 @@ async def tree(ctx, org):
 
             # Environments
             try:
-                with ForktexCloudClient.from_context(cloud_ctx) as client:
+                with Cloud.from_context(cloud_ctx) as client:
                     envs = client.list_project_environments(str(p_id))
             except Exception:
                 envs = []
@@ -184,7 +184,7 @@ async def tree(ctx, org):
 
                 # Deployments (last one)
                 try:
-                    with ForktexCloudClient.from_context(cloud_ctx) as client:
+                    with Cloud.from_context(cloud_ctx) as client:
                         deployments = client.list_deployments(str(p_id), str(e_id))
                     if deployments:
                         last = deployments[-1]
@@ -213,7 +213,7 @@ async def tree(ctx, org):
                 # Services
                 if env_server:
                     try:
-                        with ForktexCloudClient.from_context(cloud_ctx) as client:
+                        with Cloud.from_context(cloud_ctx) as client:
                             services = client.list_services(str(p_id), str(e_id))
                         for si, svc in enumerate(services):
                             svc_name = getattr(svc, "name", None) or getattr(

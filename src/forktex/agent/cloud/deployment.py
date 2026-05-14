@@ -21,11 +21,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# Copyright (C) 2026 FORKTEX S.R.L.
-#
-# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
-
-"""forktex cloud deployment — list, cancel, and retry deployments."""
+"""forktex cloud deployment — inspect recent flow runs (the unit of deployment)."""
 
 from __future__ import annotations
 
@@ -48,68 +44,67 @@ def deployment():
 @click.pass_context
 @translate_cloud_errors
 async def deployment_list(ctx, status, limit):
-    """List recent deployments for the connected org."""
+    """List recent flow runs (deploys, destroys, backups, restores) for the connected org."""
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
-        items = client.list_org_deployments(status=status, limit=limit)
+    with Cloud.from_context(cloud_ctx) as client:
+        items = client.list_flow_runs(status=status, limit=limit)
 
     if not items:
-        click.echo("  (no deployments found)")
+        click.echo("  (no flow runs found)")
         return
 
-    click.echo(f"  {'ID':38s} {'Status':12s} {'Env':36s} Started")
+    click.echo(f"  {'RUN ID':38s} {'PIPELINE':28s} {'STATUS':12s} STARTED")
     click.echo(f"  {'─' * 100}")
-    for d in items:
-        did = d.get("id", "?")[:36]
-        st = d.get("status", "?")
-        env = (d.get("environmentId") or d.get("environment_id") or "?")[:36]
-        started = (d.get("startedAt") or d.get("started_at") or "?")[:19]
+    for run in items:
+        run_id = (run.get("runId") or run.get("run_id") or "?")[:36]
+        pipeline = (run.get("pipeline") or run.get("name") or "?")[:26]
+        st = run.get("status", "?")
+        started = (run.get("startedAt") or run.get("started_at") or "?")[:19]
         color = {
-            "success": "green",
+            "completed": "green",
             "failed": "red",
             "cancelled": "yellow",
-            "started": "cyan",
+            "running": "cyan",
         }.get(st, "white")
-        click.echo(f"  {did:38s} {click.style(st, fg=color):20s} {env:38s} {started}")
+        click.echo(f"  {run_id:38s} {pipeline:28s} {click.style(st, fg=color):20s} {started}")
 
 
 @deployment.command("cancel")
-@click.argument("deployment_id")
+@click.argument("run_id")
 @click.pass_context
 @translate_cloud_errors
-async def deployment_cancel(ctx, deployment_id):
-    """Cancel a running deployment."""
+async def deployment_cancel(ctx, run_id):
+    """Cancel a running flow run (deploy in progress)."""
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
-        client.cancel_deployment(deployment_id)
+    with Cloud.from_context(cloud_ctx) as client:
+        # The API exposes /api/org/{org_id}/flows/{run_id}/cancel — no SDK
+        # wrapper yet; use the raw httpx escape hatch. Re-wrap once
+        # `Cloud.cancel_flow_run` lands in a future SDK release.
+        client._check(client._client.post(f"{client._org_prefix}/flows/{run_id}/cancel"))
 
     click.echo(
-        f"  {click.style('✓', fg='yellow')} Deployment {deployment_id[:8]}… cancelled"
+        f"  {click.style('✓', fg='yellow')} Flow run {run_id[:8]}… cancellation requested"
     )
 
 
 @deployment.command("retry")
-@click.argument("deployment_id")
+@click.argument("run_id")
 @click.pass_context
 @translate_cloud_errors
-async def deployment_retry(ctx, deployment_id):
-    """Re-dispatch a failed or cancelled deployment."""
-    cloud_ctx = ctx.obj["cloud_ctx"]
-    cloud_ctx.require_connection()
-
-    from forktex_cloud.client import ForktexCloudClient
-
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
-        result = client.retry_deployment(deployment_id)
-
-    new_id = getattr(result, "deployment_id", "?")
-    click.echo(f"  {click.style('✓', fg='green')} Retried as deployment {new_id}")
-    click.echo("  Watch: forktex cloud logs")
+async def deployment_retry(ctx, run_id):
+    """Re-dispatch a failed or cancelled flow run."""
+    click.echo(
+        "  `forktex cloud deployment retry` is not surfaced by the cloud API yet — "
+        "there is no /flows/{id}/retry route. Re-dispatch via `forktex cloud apply` "
+        "or `forktex cloud deploy` against the original project/environment.",
+        err=True,
+    )
+    raise click.exceptions.Exit(2)

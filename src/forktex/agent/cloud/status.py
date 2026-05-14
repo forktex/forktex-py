@@ -44,9 +44,9 @@ async def status(ctx, server_id):
             "No server ID given and no active server set. Run: forktex cloud use server <id>"
         )
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         result = client.server_status(server_id)
 
     click.echo(

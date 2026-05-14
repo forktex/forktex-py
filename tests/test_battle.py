@@ -385,13 +385,13 @@ class TestCoreLibraryImports:
     def test_standalone_cloud_imports(self):
         """Verify that forktex_cloud standalone package imports work."""
         from forktex_cloud import (
-            ForktexCloudClient,
+            Cloud,
             CloudContext,
             Manifest,
             ProjectRead,
         )
 
-        assert ForktexCloudClient is not None
+        assert Cloud is not None
         assert CloudContext is not None
         assert Manifest is not None
         assert ProjectRead is not None

@@ -571,14 +571,14 @@ files = [
 
 [[package]]
 name = "forktex-cloud"
-version = "0.2.3"
+version = "0.2.4"
 description = "Typed Python SDK for the ForkTex Cloud platform — provision, deploy, and manage VPS-backed apps via a declarative manifest."
 optional = false
-python-versions = ">=3.12"
+python-versions = ">=3.11"
 groups = ["main"]
 files = [
-    {file = "forktex_cloud-0.2.3-py3-none-any.whl", hash = "sha256:c62cecae91a977eadf1523acebcc83a8745a40d919dc284d51a8a4f12a8bcbaa"},
-    {file = "forktex_cloud-0.2.3.tar.gz", hash = "sha256:5312b640afba8eb6b81093b302a923b41a03c15159f058419117a1bc7c45c31d"},
+    {file = "forktex_cloud-0.2.4-py3-none-any.whl", hash = "sha256:a41f94fbba88fb4bd98331f53210e06a589f2d755daa624587630776d906562f"},
+    {file = "forktex_cloud-0.2.4.tar.gz", hash = "sha256:e6fa8fece6710fa75c88fc03a8431416bab429ba02765ac0a07cd2c783dd08ee"},
 ]
 
 [package.dependencies]
@@ -2198,4 +2198,4 @@ web = ["fastapi", "uvicorn"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<4.0"
-content-hash = "17a9dbe14da09c568cf9f26422ac26798a73683315242c1a5ac9157932f65d5c"
+content-hash = "6afe084fa996ec2f8e6bec2ce100cd973d072bcc117743b57ca3f88eeba58ffd"

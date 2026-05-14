@@ -105,9 +105,9 @@ async def vault_set(ctx, key, value, env):
 
     if mode == "remote":
         cloud_ctx = ctx.obj["cloud_ctx"]
-        from forktex_cloud.client import ForktexCloudClient
+        from forktex_cloud import Cloud
 
-        with ForktexCloudClient.from_context(cloud_ctx) as client:
+        with Cloud.from_context(cloud_ctx) as client:
             env_id = _resolve_env_id(client, cloud_ctx, env)
             client.vault_set(key, value, environment_id=env_id)
     else:
@@ -132,9 +132,9 @@ async def vault_get(ctx, key, env):
 
     if mode == "remote":
         cloud_ctx = ctx.obj["cloud_ctx"]
-        from forktex_cloud.client import ForktexCloudClient
+        from forktex_cloud import Cloud
 
-        with ForktexCloudClient.from_context(cloud_ctx) as client:
+        with Cloud.from_context(cloud_ctx) as client:
             env_id = _resolve_env_id(client, cloud_ctx, env)
             result = client.vault_get(key, environment_id=env_id)
             click.echo(result.value or "")
@@ -159,9 +159,9 @@ async def vault_list(ctx, env):
 
     if mode == "remote":
         cloud_ctx = ctx.obj["cloud_ctx"]
-        from forktex_cloud.client import ForktexCloudClient
+        from forktex_cloud import Cloud
 
-        with ForktexCloudClient.from_context(cloud_ctx) as client:
+        with Cloud.from_context(cloud_ctx) as client:
             env_id = _resolve_env_id(client, cloud_ctx, env)
             keys = client.vault_list(environment_id=env_id)
     else:
@@ -188,9 +188,9 @@ async def vault_delete(ctx, key, env):
 
     if mode == "remote":
         cloud_ctx = ctx.obj["cloud_ctx"]
-        from forktex_cloud.client import ForktexCloudClient
+        from forktex_cloud import Cloud
 
-        with ForktexCloudClient.from_context(cloud_ctx) as client:
+        with Cloud.from_context(cloud_ctx) as client:
             env_id = _resolve_env_id(client, cloud_ctx, env)
             client.vault_delete(key, environment_id=env_id)
     else:

@@ -46,21 +46,71 @@ from forktex.agent.cloud.errors import translate_cloud_errors
 @click.pass_context
 @translate_cloud_errors
 async def new(ctx, template_slug, name, domain, env, list_only):
-    """Create a new project from a template with guided onboarding.
+    """Create a new project from a template by slug.
 
     \b
     Examples:
-        forktex cloud new --list                          # browse templates
-        forktex cloud new hello-world --name my-site     # instant deploy
-        forktex cloud new fullstack --name my-app        # guided with secrets
+        forktex cloud new hello-world --name my-site
+        forktex cloud new fullstack --name my-app
+
+    Note: ``--list`` and template discovery aren't surfaced by the cloud API
+    yet (no ``list_templates`` / ``get_template`` routes). Pass the slug of a
+    known template (hello-world, fullstack, static-react, single-container,
+    native-go, website, ...) directly.
     """
+    if list_only:
+        click.echo(
+            "  Template listing isn't surfaced by the cloud API yet. Available "
+            "slugs are documented in templates/ in the cloud repo; common ones:\n"
+            "    hello-world  fullstack  static-react  single-container  native-go",
+            err=True,
+        )
+        raise click.exceptions.Exit(2)
+
+    if not template_slug:
+        raise click.ClickException(
+            "Pass a template slug (e.g. `forktex cloud new hello-world --name my-site`)."
+        )
+
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
-        templates = client.list_templates()
+    project_name = name or template_slug
+    overrides: dict | None = None
+    if domain:
+        overrides = {
+            "cloud": {"gateway": {"domains": [{"host": domain, "primary": True}]}}
+        }
+
+    with Cloud.from_context(cloud_ctx) as client:
+        resp = client.create_from_template(
+            slug=template_slug,
+            project_name=project_name,
+            overrides=overrides,
+        )
+
+    project_id = getattr(resp, "projectId", None) or getattr(resp, "project_id", "")
+    environment_id = (
+        getattr(resp, "environmentId", None) or getattr(resp, "environment_id", "")
+    )
+    bundle_url = getattr(resp, "bundleUrl", None) or getattr(resp, "bundle_url", None)
+
+    click.echo(click.style("  ✓  Project created", fg="green"))
+    click.echo(f"     project_id={project_id}")
+    click.echo(f"     environment_id={environment_id}")
+    if bundle_url:
+        click.echo()
+        click.echo(click.style("  Starter code:", bold=True))
+        click.echo(f"  {cloud_ctx.controller}{bundle_url}")
+    click.echo()
+    click.echo(click.style("  Ready to deploy:", bold=True))
+    click.echo(f"  {click.style('forktex cloud up', fg='cyan', bold=True)}")
+    return  # pragma: no cover — old guided-onboarding path below retained for reference
+
+    with Cloud.from_context(cloud_ctx) as client:
+        templates = client.list_templates()  # noqa: F841 — gated until route exists
 
         if list_only or not template_slug:
             _print_template_list(templates)

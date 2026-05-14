@@ -23,9 +23,6 @@
 
 """forktex.cloud — Re-exports from the standalone ``forktex_cloud`` SDK.
 
-The friendly public name is ``Cloud``; ``ForktexCloudClient`` is its
-long-form alias (kept for back-compat with existing import sites).
-
 Usage::
 
     from forktex.cloud import Cloud, CloudContext
@@ -37,7 +34,7 @@ For standalone usage outside forktex-py: ``pip install forktex-cloud``.
 """
 
 from forktex_cloud import (
-    ForktexCloudClient,
+    Cloud,
     CloudAPIError,
     CloudContext,
     Manifest,
@@ -45,7 +42,6 @@ from forktex_cloud import (
     ApiKeyCreated,
     ApiKeyRead,
     EnvironmentRead,
-    AuditEventRead,
     HealthRead,
     JobResponse,
     MeResponse,
@@ -59,22 +55,17 @@ from forktex_cloud import (
     WorkspaceRead,
 )
 
-# ``Cloud`` is the friendly public name. Sibling sdk-py 0.2.5+ ships
-# the alias at the package root; for older floors (current PyPI 0.2.4
-# and below), forktex-py provides the same alias here so
-# ``from forktex.cloud import Cloud`` works regardless of which SDK
-# floor is installed. Drop this fallback once the dep floor is bumped
-# past 0.2.5.
+# Added to the SDK in 0.3.0 — guard so forktex-py still works against
+# the 0.2.4 PyPI floor while local-dev uses the in-tree 0.3.0 sdk-py.
 try:
-    from forktex_cloud import Cloud  # type: ignore[attr-defined]
-except ImportError:  # pragma: no cover — pre-0.2.5 SDK
-    Cloud = ForktexCloudClient
+    from forktex_cloud import AuditEventRead  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover — older SDK floor
+    AuditEventRead = None  # type: ignore[assignment]
 
 
 __all__ = [
-    # High-level API — `Cloud` is canonical; `ForktexCloudClient` is the alias.
+    # High-level API
     "Cloud",
-    "ForktexCloudClient",
     "CloudAPIError",
     "CloudContext",
     "Manifest",

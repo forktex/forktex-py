@@ -44,9 +44,9 @@ async def server_list(ctx):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         servers = client.list_servers()
 
     if not servers:
@@ -86,9 +86,9 @@ async def server_create(
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         result = client.create_server(
             name,
             flavour=flavour,
@@ -110,9 +110,9 @@ async def server_show(ctx, server_id):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         srv = client.get_server(server_id)
     click.echo(srv.model_dump_json(indent=2))
 
@@ -130,9 +130,9 @@ async def server_destroy(ctx, server_id, yes):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         result = client.destroy_server(server_id)
     click.echo(f"Server {server_id} destroyed: {result.status}")
 
@@ -147,9 +147,9 @@ async def server_restart_cmd(ctx, server_id, service):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         result = client.server_restart(server_id, service=service)
     click.echo(f"Restart: {result.status}")
     if result.output:
@@ -167,9 +167,9 @@ async def server_exec_cmd(ctx, server_id, service, command):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         result = client.server_exec(server_id, service=service, command=command)
     click.echo(result.output or result.status)
 
@@ -192,9 +192,9 @@ async def server_switch_cmd(ctx, server_id, component, to_color):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         result = client.server_switch(server_id, component=component, to_color=to_color)
     click.echo(f"Switch {component} -> {to_color}: {result.status}")
     if result.output:
@@ -216,9 +216,9 @@ async def server_update_cmd(ctx, server_id, component, new_image):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         result = client.server_update(
             server_id, component=component, new_image=new_image
         )
@@ -239,8 +239,8 @@ async def server_import_cmd(ctx, name, host, user, project_id):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         result = client.import_server(name, host, user=user, project_id=project_id)
     click.echo(result.model_dump_json(indent=2))

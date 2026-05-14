@@ -4,6 +4,18 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 
 ## [Unreleased]
 
+### Changed
+
+- **Cloud SDK 0.3.0 retires the `ForktexCloudClient` long-form name.**
+  `Cloud` is now the only exported client class — the `Cloud =
+  ForktexCloudClient` alias has been removed from the SDK and from
+  `forktex.cloud.__init__`. Every agent-CLI command (`down`, `up`,
+  `deploy`, `server`, `project`, `vault`, `logs`, `status`, `dns`,
+  `ssl`, `registry`, `use`, `inspect`, `tree`, `new`) imports `from
+  forktex_cloud import Cloud` directly. Consumers still pinned to
+  `forktex-cloud<0.3.0` keep working since older SDKs still export
+  both names; new code should only reach for `Cloud`.
+
 ### Added
 
 - **`forktex.network` Python shim.** Mirrors `forktex.cloud` and

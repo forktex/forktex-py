@@ -44,9 +44,9 @@ async def project_list(ctx):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         projects = client.list_projects()
 
     if not projects:
@@ -67,9 +67,9 @@ async def project_create(ctx, name, manifest, project_id):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         result = client.create_project(name, manifest=manifest, project_id=project_id)
     click.echo(result.model_dump_json(indent=2))
 
@@ -83,8 +83,8 @@ async def project_show(ctx, project_id):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         proj = client.get_project(project_id)
     click.echo(proj.model_dump_json(indent=2))

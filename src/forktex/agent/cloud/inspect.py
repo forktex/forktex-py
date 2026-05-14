@@ -53,17 +53,16 @@ async def inspect():
 @click.pass_context
 @translate_cloud_errors
 async def inspect_org(ctx):
-    """Inspect the active organisation: quota, providers, members."""
+    """Inspect the active organisation."""
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         orgs = client.list_orgs()
-        providers = client.list_providers()
-        usage = client.get_usage()
         projects = client.list_projects()
+        usage = client.get_usage(months=0)
 
     if not orgs:
         raise click.ClickException("No organisations found.")
@@ -77,28 +76,23 @@ async def inspect_org(ctx):
     click.echo(f"  Projects: {len(projects)}")
     click.echo()
 
-    if providers:
-        click.echo(click.style("  Provider credentials:", bold=True))
-        for p in providers:
-            status = (
-                click.style("✓ active", fg="green")
-                if p.is_active
-                else click.style("revoked", fg="red")
-            )
-            env_tag = f"  [{p.environment}]" if p.environment else ""
-            click.echo(
-                f"    {p.provider}/{p.kind}{env_tag}  {status}  label={p.label!r}"
-            )
-    else:
-        click.echo("  Provider credentials: (none)")
-
+    current = usage.get("current") if isinstance(usage, dict) else {}
+    if current:
+        click.echo(click.style("  Usage (this month):", bold=True))
+        hours = current.get("totalVpsHours", current.get("total_vps_hours", 0))
+        cost = current.get("totalCost", current.get("total_cost", 0))
+        servers = current.get("activeServerCount", current.get("active_server_count", 0))
+        click.echo(f"    VPS-hours: {hours:.1f}")
+        click.echo(f"    Cost:      {cost:.2f}")
+        click.echo(f"    Active:    {servers} server(s)")
     click.echo()
-    if usage:
-        click.echo(click.style("  Usage:", bold=True))
-        for field in ("deployments", "environments", "projects", "storage_bytes"):
-            val = getattr(usage, field, None)
-            if val is not None:
-                click.echo(f"    {field}: {val}")
+    click.echo(
+        click.style(
+            "  (provider credentials are managed via the cloud-API admin "
+            "endpoints — no SDK wrapper yet.)",
+            dim=True,
+        )
+    )
 
 
 @inspect.command(name="project")
@@ -116,9 +110,9 @@ async def inspect_project(ctx, project_id):
             "No project ID given and no active project set. Run: forktex cloud use project <name>"
         )
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         project = client.get_project(pid)
         envs = client.list_project_environments(pid)
 
@@ -149,7 +143,7 @@ async def inspect_project(ctx, project_id):
         )
 
         try:
-            with ForktexCloudClient.from_context(cloud_ctx) as client:
+            with Cloud.from_context(cloud_ctx) as client:
                 deployments = client.list_deployments(str(p_id), str(e_id))
             if deployments:
                 last = deployments[-1]
@@ -189,7 +183,6 @@ async def inspect_env(ctx, environment_id):
 
     pid = cloud_ctx.current_project
     eid = environment_id or cloud_ctx.current_environment
-
     if not pid:
         raise click.ClickException(
             "No active project. Run: forktex cloud use project <name>"
@@ -199,9 +192,9 @@ async def inspect_env(ctx, environment_id):
             "No environment ID given and no active env set. Run: forktex cloud use env <name>"
         )
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         env = client.get_environment(pid, eid)
         deployments = client.list_deployments(pid, eid)
         services = client.list_services(pid, eid)
@@ -271,9 +264,9 @@ async def inspect_server(ctx, server_id):
             "No server ID given and no active server set. Run: forktex cloud use server <id>"
         )
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         server = client.get_server(sid)
         status = client.server_status(sid)
 

@@ -60,10 +60,10 @@ async def use_org(ctx, slug_or_id):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
     from forktex.agent.cloud.settings import save_cloud_context_global
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         orgs = client.list_orgs()
 
     match = _find(orgs, slug_or_id, ["id", "slug", "orgId"])
@@ -91,10 +91,10 @@ async def use_project(ctx, name_or_id):
     cloud_ctx.require_connection()
     project_root = ctx.obj["project_root"]
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
     from forktex.agent.cloud.settings import save_cloud_context_project
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         projects = client.list_projects()
 
     match = _find(projects, name_or_id, ["id", "name", "projectId"])
@@ -130,10 +130,10 @@ async def use_env(ctx, name_or_id):
             "No active project. Run: forktex cloud use project <name>"
         )
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
     from forktex.agent.cloud.settings import save_cloud_context_project
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         envs = client.list_project_environments(project_id)
 
     match = _find(envs, name_or_id, ["id", "name", "environmentId"])
@@ -161,10 +161,10 @@ async def use_server(ctx, id_or_ip):
     cloud_ctx.require_connection()
     project_root = ctx.obj["project_root"]
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
     from forktex.agent.cloud.settings import save_cloud_context_project
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         servers = client.list_servers()
 
     match = _find(servers, id_or_ip, ["id", "ip", "ipv4", "name", "serverId"])

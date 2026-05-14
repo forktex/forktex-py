@@ -128,7 +128,7 @@ the C4 view reflects the latest evaluation.
 The `forktex-cloud` SDK and the `cloud/` repo layout both moved a step
 forward — relevant when this repo's CLI talks to the controller.
 
-### SDK: prefer `Cloud` (forktex-cloud >= 0.2.5)
+### SDK: `Cloud` is the only client name (forktex-cloud >= 0.3.0)
 
 ```python
 from forktex_cloud import Cloud
@@ -137,9 +137,9 @@ with Cloud("https://cloud.forktex.com", account_key="ftx-...") as cloud:
     cloud.list_projects()
 ```
 
-`ForktexCloudClient` remains exported as the long-form alias (`Cloud is
-ForktexCloudClient`), so every existing import in `src/forktex/agent/cloud/*`
-keeps working untouched. New code should use `Cloud`. The constructor
+`Cloud` is the canonical (and only) SDK client class. The long-form
+`ForktexCloudClient` was retired in `forktex-cloud` 0.3.0; agent-CLI
+imports use `from forktex_cloud import Cloud` directly. The constructor
 signature is unchanged: `(base_url, account_key=None, *, access_token=None,
 org_id=None, timeout=30.0)`. `Cloud.from_context(ctx)` works the same.
 

@@ -65,9 +65,9 @@ async def dns_status(ctx, server_id):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         status = client.server_status(server_id)
         dns_records = status.get("dns", []) if isinstance(status, dict) else []
         if dns_records:

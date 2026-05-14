@@ -134,9 +134,9 @@ def _run_remote(
     cloud_ctx.require_connection()
     project_root = ctx.obj["project_root"]
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         click.echo(f"  Dispatching deploy via {cloud_ctx.controller}...")
         # archive_delivery is implicitly always-on whenever project_dir is
         # provided — the SDK auto-tarballs local Dockerfile build contexts
@@ -163,9 +163,7 @@ def _run_remote(
 
 def _stream_run(client, *, run_id: str, verbose: bool = False) -> None:
     """Poll the flow run via `client.flow_get` and print step transitions
-    until the run terminates. Replaces the prior SSE-based version that
-    relied on `client.stream_flow_run_events` (no longer exists) and a
-    StepRunRead/RunRead event shape (no longer matches the API)."""
+    until the run terminates."""
     import time as _time
 
     _COLOR = {

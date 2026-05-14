@@ -89,9 +89,9 @@ async def logs(ctx, run_id, server_id, service_filter, deployment_id, lines, sin
     if not server_id and cloud_ctx.current_server:
         server_id = cloud_ctx.current_server
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         if server_id:
             _stream_service_logs(
                 client, server_id, service=service_filter, lines=lines, since=since
@@ -114,7 +114,7 @@ def _stream_service_logs(
     )
     click.echo()
     try:
-        for line in client.stream_service_logs(
+        for line in client.stream_logs(
             server_id,
             service=service,
             lines=lines,
@@ -139,9 +139,9 @@ def _stream_run_events(client, run_id: str) -> None:
     }
 
     try:
-        for event in client.stream_flow_run_events(run_id):
-            step_name = getattr(event, "stepName", None)
-            status = getattr(event, "status", "")
+        for event in client.stream_flow_run(run_id):
+            step_name = event.get("stepName") if isinstance(event, dict) else getattr(event, "stepName", None)
+            status = (event.get("status") if isinstance(event, dict) else getattr(event, "status", "")) or ""
 
             if step_name:
                 color, icon = _COLORS.get(status, ("white", "?"))
@@ -179,29 +179,33 @@ def _stream_latest_run(client) -> None:
         return
 
     run = runs[0]
-    run_id = str(run.runId)
-    status = run.status
+    # list_flow_runs returns raw dicts — accessor shape may evolve in
+    # forktex_core.flow; iterate defensively.
+    run_id = str(run.get("runId") or run.get("run_id") or "")
+    status = run.get("status") or ""
 
     click.echo(click.style(f"  Last run: {run_id[:8]}…  status={status}", dim=True))
 
-    if status in ("running",):
+    if status == "running":
         _stream_run_events(client, run_id)
     else:
         _render_finished_run(run)
 
 
-def _render_finished_run(run) -> None:
-    """Print a summary of a finished flow run."""
+def _render_finished_run(run: dict) -> None:
+    """Print a summary of a finished flow run (raw dict from list_flow_runs)."""
     _COLORS = {
         "completed": "green",
         "failed": "red",
         "cancelled": "yellow",
     }
-    color = _COLORS.get(run.status, "white")
-    click.echo(f"  {click.style(run.status.upper(), fg=color, bold=True)}")
+    status = run.get("status") or ""
+    color = _COLORS.get(status, "white")
+    click.echo(f"  {click.style(status.upper(), fg=color, bold=True)}")
     click.echo()
-    for step in run.steps or []:
-        step_status = getattr(step, "status", "")
+    for step in run.get("steps") or run.get("nodes") or []:
+        step_status = step.get("status", "") if isinstance(step, dict) else ""
+        step_name = step.get("stepName") or step.get("name") or step_status if isinstance(step, dict) else "?"
         step_color = _COLORS.get(step_status, "white")
         icon = (
             "✓"
@@ -210,19 +214,17 @@ def _render_finished_run(run) -> None:
             if step_status == "failed"
             else "·"
         )
-        click.echo(
-            f"  {click.style(icon, fg=step_color)} {getattr(step, 'stepName', step_status)}"
-        )
+        click.echo(f"  {click.style(icon, fg=step_color)} {step_name}")
 
-    if run.error:
+    err = run.get("error")
+    if err:
         click.echo()
         click.echo(click.style("  Error:", fg="red", bold=True))
-        click.echo(f"  {run.error[:400]}")
+        click.echo(f"  {str(err)[:400]}")
 
 
 def _show_deployment_logs(client, deployment_id: str, ctx) -> None:
     """Show stored DeploymentLog entries for a deployment."""
-    # Find the environment for this deployment via projects
     projects = client.list_projects()
     for project in projects:
         envs = client.list_project_environments(str(project.id))
@@ -235,39 +237,39 @@ def _show_deployment_logs(client, deployment_id: str, ctx) -> None:
                     else str(getattr(dep, "id", ""))
                 )
                 if dep_id == deployment_id or dep_id.startswith(deployment_id):
-                    logs_resp = client.get_deployment_logs(
+                    entries = client.get_deployment_logs(
                         str(project.id), str(env.id), dep_id
                     )
-                    _render_deployment_logs(logs_resp)
+                    _render_deployment_logs(dep, entries)
                     return
     click.echo(f"  Deployment {deployment_id} not found.")
 
 
-def _render_deployment_logs(logs_resp: dict) -> None:
-    status = logs_resp.get("status", "?")
-    details = logs_resp.get("details", "")
-    log_entries = logs_resp.get("logs", [])
+def _render_deployment_logs(deployment, entries) -> None:
+    status = deployment.get("status", "?") if isinstance(deployment, dict) else getattr(deployment, "status", "?")
+    details = deployment.get("details", "") if isinstance(deployment, dict) else getattr(deployment, "details", "")
 
     color = "green" if status == "success" else "red" if status == "failed" else "white"
     click.echo(f"\n  Deployment: {click.style(status.upper(), fg=color, bold=True)}")
     if details:
-        click.echo(f"  {details[:300]}")
+        click.echo(f"  {str(details)[:300]}")
     click.echo()
 
-    if not log_entries:
+    if not entries:
         click.echo("  (no log entries)")
         return
 
-    for entry in log_entries:
-        stage = entry.get("stage", "?")
-        output = entry.get("output") or ""
-        error = entry.get("error") or ""
-        ts = entry.get("createdAt", "")[:19]
+    for entry in entries:
+        # DeploymentLogRead is a Pydantic model — use attribute access
+        stage = getattr(entry, "stage", "?")
+        output = getattr(entry, "output", "") or ""
+        error = getattr(entry, "error", "") or ""
+        ts = str(getattr(entry, "createdAt", None) or getattr(entry, "created_at", ""))[:19]
 
         stage_color = "red" if error else "white"
         click.echo(click.style(f"  [{ts}] {stage}", fg=stage_color))
         if error:
-            click.echo(click.style(f"    ERROR: {error[:300]}", fg="red"))
+            click.echo(click.style(f"    ERROR: {str(error)[:300]}", fg="red"))
         if output and not error:
-            for line in output.splitlines()[:5]:
+            for line in str(output).splitlines()[:5]:
                 click.echo(f"    {line}")

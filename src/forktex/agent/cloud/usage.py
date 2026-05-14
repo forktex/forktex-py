@@ -47,14 +47,10 @@ async def usage(ctx, months):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
-        params = {"months": months} if months else {}
-        resp = client._check(
-            client._client.get(f"{client._org_prefix}/usage", params=params)
-        )
-        data = resp.json()
+    with Cloud.from_context(cloud_ctx) as client:
+        data = client.get_usage(months=months or 0)
 
     current = data.get("current", {})
     click.echo(f"Usage for org {current.get('org_id', '?')}")

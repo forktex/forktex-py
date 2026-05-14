@@ -103,7 +103,7 @@ boundary draws a single horizontal line through it:
 
 3. SUBSTRATE                                                   docker compose -f … up -d         (compose-local)
                                                                  DOCKER_HOST=ssh://… docker …    (docker-sandbox)
-                                                                 ForktexCloudClient.deploy(…)   (managed)
+                                                                 Cloud.deploy(…)   (managed)
 
 4. VERIFY                                                      monitor@<env>      (healthcheck)
                                                                  acceptance@<env>   (e2e / battle / load)
@@ -160,7 +160,7 @@ async def apply_cmd(env: str, project_root: Path):
 
     elif provider == "managed":
         # 3. SUBSTRATE — controller is the source of truth
-        async with ForktexCloudClient.from_context(ctx) as client:
+        async with Cloud.from_context(ctx) as client:
             await client.deploy(env=env, manifest=manifest.to_cloud_payload())
 
     # 4. VERIFY

@@ -42,11 +42,11 @@ async def deploy(ctx, server_id, service, tags, environment, verbose):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
     project_root = ctx.obj["project_root"]
     tag_list = tags.split(",") if tags else None
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         click.echo(f"Deploying to {server_id}...")
         result = client.deploy(
             server_id,

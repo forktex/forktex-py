@@ -333,7 +333,7 @@ under `forktex.*` is internal and may change in a patch release.
 | `from forktex import Settings, get_settings` | Aggregated settings accessor |
 | `from forktex.core import …` | Same primitives as above, by module |
 | `from forktex.intelligence import Intelligence, IntelligenceSettings, …` | Re-exports from the `forktex-intelligence` SDK |
-| `from forktex.cloud import Cloud, CloudContext, Manifest, …` (alias: `ForktexCloudClient`) | Re-exports from the `forktex-cloud` SDK |
+| `from forktex.cloud import Cloud, CloudContext, Manifest, …` | Re-exports from the `forktex-cloud` SDK |
 | `from forktex.agent.auth import build_facet_commands, connect_cloud, …` | Auth-flow building blocks |
 | `from forktex.agent.network import …` | `forktex network` Click subgroup + settings |
 | `from forktex.manual import generate_manual, ManualBundle, ManualScope, SearchIndex, SearchHit` | Generate the architecture/context manual + keyword search over the project graph |

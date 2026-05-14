@@ -304,7 +304,7 @@ async def connect_cloud(
     from forktex.cloud import (
         Cloud,
         CloudContext,
-    )  # `Cloud` is the canonical name; falls back to `ForktexCloudClient` on older SDK floors
+    )  # `Cloud` is the canonical (and only) SDK client name.
 
     url = endpoint or Prompt.ask("Controller URL", default="https://cloud.forktex.com")
     url = url.rstrip("/")

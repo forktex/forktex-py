@@ -35,27 +35,30 @@ from forktex.agent.cloud.errors import translate_cloud_errors
 @click.pass_context
 @translate_cloud_errors
 async def events(ctx, project_id, limit):
-    """View deployment events and history."""
+    """View audit events for the connected org."""
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
-        items = client.list_events(project_id=project_id)
+    with Cloud.from_context(cloud_ctx) as client:
+        items = client.list_audit_events(limit=limit, project_id=project_id)
 
     if not items:
         click.echo("No events.")
         return
 
-    items = items[:limit]
     for ev in items:
-        # SDK models expose camelCase attribute names (no snake-case alias).
-        ts = ev.createdAt.isoformat(timespec="seconds") if ev.createdAt else ""
-        action = ev.action or "?"
-        status = ev.status or "?"
-        details = ev.details or ""
-        # Colorize status
+        ts = ""
+        created = getattr(ev, "createdAt", None) or getattr(ev, "created_at", None)
+        if created is not None:
+            try:
+                ts = created.isoformat(timespec="seconds")
+            except (AttributeError, TypeError):
+                ts = str(created)[:19]
+        action = getattr(ev, "action", None) or "?"
+        status = getattr(ev, "status", None) or "?"
+        details = getattr(ev, "details", None) or ""
         if status == "success":
             status_str = click.style(status, fg="green")
         elif status == "failed":

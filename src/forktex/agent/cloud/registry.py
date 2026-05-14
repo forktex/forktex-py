@@ -46,9 +46,9 @@ async def registry_list(ctx):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         regs = client.list_registries()
         if not regs:
             click.echo("  No registries registered.")
@@ -99,9 +99,9 @@ async def registry_add(ctx, name, url, user, password, reg_type):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         reg = client.add_registry(
             name=name,
             type=reg_type,
@@ -137,9 +137,9 @@ async def registry_verify(ctx, registry_id):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         result = client.verify_registry(registry_id)
         verified = getattr(result, "verified", False)
         detail = getattr(result, "detail", "")
@@ -158,8 +158,8 @@ async def registry_remove(ctx, registry_id):
     cloud_ctx = ctx.obj["cloud_ctx"]
     cloud_ctx.require_connection()
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
+    with Cloud.from_context(cloud_ctx) as client:
         client.delete_registry(registry_id)
         click.echo(f"  ✓  registry {registry_id[:8]}… removed")

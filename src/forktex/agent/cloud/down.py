@@ -85,12 +85,13 @@ async def down(ctx, yes, keep_dns, environment):
     cloud_ctx.require_connection()
     project_root = ctx.obj["project_root"]
 
-    from forktex_cloud.client import ForktexCloudClient
+    from forktex_cloud import Cloud
 
-    with ForktexCloudClient.from_context(cloud_ctx) as client:
-        click.echo(f"Running down pipeline via {cloud_ctx.controller}...")
-        result = client.down(
+    with Cloud.from_context(cloud_ctx) as client:
+        click.echo(f"Running destroy pipeline via {cloud_ctx.controller}...")
+        result = client.destroy(
             keep_dns=keep_dns,
+            env=environment,
             project_dir=project_root,
         )
-        click.echo(f"Down pipeline complete: {result.status}")
+        click.echo(f"Destroy pipeline dispatched: job {result.job_id}")
