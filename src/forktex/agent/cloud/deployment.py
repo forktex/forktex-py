@@ -70,7 +70,9 @@ async def deployment_list(ctx, status, limit):
             "cancelled": "yellow",
             "running": "cyan",
         }.get(st, "white")
-        click.echo(f"  {run_id:38s} {pipeline:28s} {click.style(st, fg=color):20s} {started}")
+        click.echo(
+            f"  {run_id:38s} {pipeline:28s} {click.style(st, fg=color):20s} {started}"
+        )
 
 
 @deployment.command("cancel")
@@ -88,7 +90,9 @@ async def deployment_cancel(ctx, run_id):
         # The API exposes /api/org/{org_id}/flows/{run_id}/cancel — no SDK
         # wrapper yet; use the raw httpx escape hatch. Re-wrap once
         # `Cloud.cancel_flow_run` lands in a future SDK release.
-        client._check(client._client.post(f"{client._org_prefix}/flows/{run_id}/cancel"))
+        client._check(
+            client._client.post(f"{client._org_prefix}/flows/{run_id}/cancel")
+        )
 
     click.echo(
         f"  {click.style('✓', fg='yellow')} Flow run {run_id[:8]}… cancellation requested"

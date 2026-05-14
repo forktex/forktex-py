@@ -54,7 +54,7 @@ async def events(ctx, project_id, limit):
         if created is not None:
             try:
                 ts = created.isoformat(timespec="seconds")
-            except (AttributeError, TypeError):
+            except AttributeError, TypeError:
                 ts = str(created)[:19]
         action = getattr(ev, "action", None) or "?"
         status = getattr(ev, "status", None) or "?"

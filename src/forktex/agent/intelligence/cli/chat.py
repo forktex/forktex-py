@@ -160,7 +160,9 @@ async def ask(prompt, project):
             info("Run [bold]forktex intelligence connect[/bold] to set up.")
             sys.exit(1)
 
-        async with Intelligence(endpoint=settings.endpoint, api_key=settings.api_key) as ai:
+        async with Intelligence(
+            endpoint=settings.endpoint, api_key=settings.api_key
+        ) as ai:
             with spinner("Thinking..."):
                 response = await ai.chat(prompt)
 

@@ -1,6 +1,25 @@
 # Copyright (C) 2026 FORKTEX S.R.L.
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
+#
+# This file is part of ForkTex Python.
+#
+# For commercial licensing -- including use in proprietary products, SaaS
+# deployments, or any context where AGPL obligations cannot be met -- you
+# MUST obtain a commercial license from FORKTEX S.R.L. (info@forktex.com).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """``forktex intelligence orchestra`` — external-participant CLI primitives.
 
@@ -83,7 +102,9 @@ async def orchestra():
 
 
 @orchestra.command(name="pull")
-@click.option("--json", "as_json", is_flag=True, help="Emit raw JSON instead of a human summary")
+@click.option(
+    "--json", "as_json", is_flag=True, help="Emit raw JSON instead of a human summary"
+)
 async def pull_cmd(as_json: bool) -> None:
     """Fetch concerto state + open directives + recent events."""
     env = _need(*_REQUIRED)
@@ -95,6 +116,7 @@ async def pull_cmd(as_json: bool) -> None:
 
     if as_json:
         import json as _json
+
         out = {
             "concerto": c.json() if c.is_success else {"error": c.status_code},
             "directives": d.json() if d.is_success else [],
@@ -115,11 +137,13 @@ async def pull_cmd(as_json: bool) -> None:
     if d.is_success:
         directives = d.json()
         opens = [x for x in directives if x.get("status") == "open"]
-        console.print(f"[bold]directives[/bold]  total={len(directives)} open={len(opens)}")
+        console.print(
+            f"[bold]directives[/bold]  total={len(directives)} open={len(opens)}"
+        )
         for x in opens[:10]:
             who = x.get("assignee_role") or "—"
             console.print(
-                f"  · [{x.get('kind')}] [{x['id'][:8]}] {x.get('title','')[:80]}"
+                f"  · [{x.get('kind')}] [{x['id'][:8]}] {x.get('title', '')[:80]}"
                 f"  → role={who}"
             )
 
@@ -127,7 +151,7 @@ async def pull_cmd(as_json: bool) -> None:
         events = e.json()
         console.print(f"[bold]events[/bold]  recent={len(events)}")
         for ev in events[-5:]:
-            console.print(f"  · {ev.get('kind'):24s}  actor={ev.get('actor','')[:8]}…")
+            console.print(f"  · {ev.get('kind'):24s}  actor={ev.get('actor', '')[:8]}…")
 
 
 # ── push ──────────────────────────────────────────────────────────────
@@ -135,8 +159,18 @@ async def pull_cmd(as_json: bool) -> None:
 
 @orchestra.command(name="push")
 @click.argument("text")
-@click.option("--tag", "tags", multiple=True, default=("progress",), help="Extra tag(s); 'orchestra' + ident always added")
-@click.option("--kind", default="note", help="Knowledge entry kind (note/finding/analysis/recommendation)")
+@click.option(
+    "--tag",
+    "tags",
+    multiple=True,
+    default=("progress",),
+    help="Extra tag(s); 'orchestra' + ident always added",
+)
+@click.option(
+    "--kind",
+    default="note",
+    help="Knowledge entry kind (note/finding/analysis/recommendation)",
+)
 async def push_cmd(text: str, tags: tuple[str, ...], kind: str) -> None:
     """Post a knowledge entry to your private space."""
     env = _need(*_PUSH_OPS)
@@ -148,7 +182,9 @@ async def push_cmd(text: str, tags: tuple[str, ...], kind: str) -> None:
         "tags": ["orchestra", env["OA_IDENT"], *tags],
     }
     async with httpx.AsyncClient(timeout=10.0, headers=_headers(env)) as client:
-        r = await client.post(f"{env['OA_ENDPOINT']}/org/{env['OA_ORG']}/knowledge", json=body)
+        r = await client.post(
+            f"{env['OA_ENDPOINT']}/org/{env['OA_ORG']}/knowledge", json=body
+        )
     if r.is_success:
         eid = r.json().get("id", "?")
         console.print(f"[bold green]pushed[/bold green]  entry={eid}")
@@ -165,7 +201,9 @@ async def beat_cmd() -> None:
     """Send a single heartbeat — call at least every 60s while active."""
     env = _need(*_PARTICIPANT_OPS)
     async with httpx.AsyncClient(timeout=5.0, headers=_headers(env)) as client:
-        r = await client.post(f"{_base_url(env)}/participants/{env['OA_PARTICIPANT']}/heartbeat", json={})
+        r = await client.post(
+            f"{_base_url(env)}/participants/{env['OA_PARTICIPANT']}/heartbeat", json={}
+        )
     if r.status_code in (200, 204):
         console.print("[green]♥[/green]")
     else:
@@ -192,9 +230,9 @@ async def status_cmd() -> None:
             p.get("status"), "[red]✗[/red]"
         )
         console.print(
-            f"  {glyph} {p.get('instance','?'):24s}  "
+            f"  {glyph} {p.get('instance', '?'):24s}  "
             f"role={p.get('role') or '—':10s}  "
-            f"kind={p.get('agent_kind','?')}"
+            f"kind={p.get('agent_kind', '?')}"
         )
 
 
@@ -216,11 +254,11 @@ async def tail_cmd(since: str, limit: int) -> None:
     for ev in rows:
         actor = (ev.get("actor") or "")[:8]
         console.print(
-            f"[dim]{ev.get('offset','')}[/dim]  {ev.get('kind'):24s}  "
-            f"actor={actor:9s}  payload={str(ev.get('payload',{}))[:80]}"
+            f"[dim]{ev.get('offset', '')}[/dim]  {ev.get('kind'):24s}  "
+            f"actor={actor:9s}  payload={str(ev.get('payload', {}))[:80]}"
         )
     if rows:
-        console.print(f"[dim]next-since: {rows[-1].get('offset','')}[/dim]")
+        console.print(f"[dim]next-since: {rows[-1].get('offset', '')}[/dim]")
 
 
 # ── directives ────────────────────────────────────────────────────────
@@ -242,10 +280,12 @@ async def directives_cmd(status: str | None) -> None:
     rows = r.json()
     console.print(f"[bold]directives[/bold]  total={len(rows)}")
     for d in rows:
-        glyph = "[green]✓[/green]" if d.get("status") == "done" else "[yellow]·[/yellow]"
+        glyph = (
+            "[green]✓[/green]" if d.get("status") == "done" else "[yellow]·[/yellow]"
+        )
         console.print(
-            f"  {glyph} [{d['id'][:8]}] [{d.get('kind','?')}] "
-            f"{d.get('title','')[:75]}  → role={d.get('assignee_role') or '—'}  status={d.get('status')}"
+            f"  {glyph} [{d['id'][:8]}] [{d.get('kind', '?')}] "
+            f"{d.get('title', '')[:75]}  → role={d.get('assignee_role') or '—'}  status={d.get('status')}"
         )
 
 
@@ -264,7 +304,7 @@ async def directive_done_cmd(directive_id: str) -> None:
         sys.exit(1)
     body = r.json()
     console.print(
-        f"[bold green]done[/bold green]  [{body['id'][:8]}] {body.get('title','')[:60]}"
+        f"[bold green]done[/bold green]  [{body['id'][:8]}] {body.get('title', '')[:60]}"
     )
 
 
@@ -273,13 +313,26 @@ async def directive_done_cmd(directive_id: str) -> None:
 
 _CACHE_DIRS = (
     "/tmp/forktex-creds/agents",
-    str(__import__("pathlib").Path.home() / ".config" / "forktex" / "orchestra" / "agents"),
-    str(__import__("pathlib").Path.home() / "Desktop" / "forktex" / "quick-start" / "agents"),
+    str(
+        __import__("pathlib").Path.home()
+        / ".config"
+        / "forktex"
+        / "orchestra"
+        / "agents"
+    ),
+    str(
+        __import__("pathlib").Path.home()
+        / "Desktop"
+        / "forktex"
+        / "quick-start"
+        / "agents"
+    ),
 )
 
 
 def _find_bootstrap(ident: str) -> str | None:
     import pathlib
+
     for d in _CACHE_DIRS:
         p = pathlib.Path(d) / f"{ident}.json"
         if p.exists():
@@ -325,8 +378,17 @@ def _stash_to_env(ident: str, d: dict, org_id: str | None) -> dict[str, str]:
 
 @orchestra.command(name="resume")
 @click.argument("ident")
-@click.option("--org-id", default=None, help="Org UUID (defaults to env or first matching bootstrap)")
-@click.option("--from", "from_path", default=None, help="Explicit path to a bootstrap JSON (overrides cache search)")
+@click.option(
+    "--org-id",
+    default=None,
+    help="Org UUID (defaults to env or first matching bootstrap)",
+)
+@click.option(
+    "--from",
+    "from_path",
+    default=None,
+    help="Explicit path to a bootstrap JSON (overrides cache search)",
+)
 async def resume_cmd(ident: str, org_id: str | None, from_path: str | None) -> None:
     """Print eval-ready ``export OA_*=...`` lines for a stashed agent.
 
@@ -415,12 +477,16 @@ async def claims_cmd(unit: str | None, mine: bool) -> None:
     rows = r.json()
     console.print(f"[bold]claims[/bold] total={len(rows)}")
     for c in rows:
-        glyph = {"active": "[green]●[/green]", "completed": "[blue]✓[/blue]",
-                 "blocked": "[yellow]⏸[/yellow]", "abandoned": "[red]✗[/red]"}.get(c["status"], "·")
+        glyph = {
+            "active": "[green]●[/green]",
+            "completed": "[blue]✓[/blue]",
+            "blocked": "[yellow]⏸[/yellow]",
+            "abandoned": "[red]✗[/red]",
+        }.get(c["status"], "·")
         excl = "x" if c.get("exclusive") else "s"
         console.print(
             f"  {glyph} [{c['id'][:8]}] ({excl}) unit={c['unit']:<24} "
-            f"agent={c['agent_id'][:8]}  intent={c.get('intent','')[:50]}"
+            f"agent={c['agent_id'][:8]}  intent={c.get('intent', '')[:50]}"
         )
 
 
@@ -442,9 +508,18 @@ async def release_cmd(claim_id: str) -> None:
 
 @orchestra.command(name="claim-update")
 @click.argument("claim_id")
-@click.option("--status", type=click.Choice(["active", "blocked", "completed", "abandoned"]), default=None)
+@click.option(
+    "--status",
+    type=click.Choice(["active", "blocked", "completed", "abandoned"]),
+    default=None,
+)
 @click.option("--intent", default=None, help="Replace intent string")
-@click.option("--extend-ttl-s", type=int, default=None, help="Bump TTL by this many seconds from now")
+@click.option(
+    "--extend-ttl-s",
+    type=int,
+    default=None,
+    help="Bump TTL by this many seconds from now",
+)
 async def claim_update_cmd(
     claim_id: str, status: str | None, intent: str | None, extend_ttl_s: int | None
 ) -> None:
@@ -475,7 +550,9 @@ async def claim_update_cmd(
 @orchestra.command(name="barrier-create")
 @click.argument("name")
 @click.argument("signals_required", type=int)
-@click.option("--ttl-s", type=int, default=3600, help="Barrier TTL in seconds (60-86400)")
+@click.option(
+    "--ttl-s", type=int, default=3600, help="Barrier TTL in seconds (60-86400)"
+)
 async def barrier_create_cmd(name: str, signals_required: int, ttl_s: int) -> None:
     """Create an N-of-N barrier. Returns the barrier id (use with barrier-signal)."""
     env = _need(*_REQUIRED)
@@ -568,7 +645,9 @@ async def lock_acquire_cmd(resource: str, ttl_s: int) -> None:
 
 @orchestra.command(name="lock-release")
 @click.argument("resource")
-@click.option("--token", default=None, help="Release token (defaults to $OA_LOCK_TOKEN)")
+@click.option(
+    "--token", default=None, help="Release token (defaults to $OA_LOCK_TOKEN)"
+)
 async def lock_release_cmd(resource: str, token: str | None) -> None:
     """Release a resource lock you hold."""
     env = _need(*_REQUIRED)
@@ -638,9 +717,14 @@ async def _patch_concerto_spaces(env: dict[str, str], space_ids: list[str]) -> N
 
 
 async def _create_shared_space(env: dict[str, str], name: str) -> str:
-    body = {"name": name, "description": "Auto-created shared space for concerto collaboration"}
+    body = {
+        "name": name,
+        "description": "Auto-created shared space for concerto collaboration",
+    }
     async with httpx.AsyncClient(timeout=10.0, headers=_headers(env)) as client:
-        r = await client.post(f"{env['OA_ENDPOINT']}/org/{env['OA_ORG']}/knowledge/spaces", json=body)
+        r = await client.post(
+            f"{env['OA_ENDPOINT']}/org/{env['OA_ORG']}/knowledge/spaces", json=body
+        )
         if not r.is_success:
             error(f"create space failed: HTTP {r.status_code} {r.text[:200]}")
             sys.exit(1)
@@ -655,10 +739,26 @@ def knowledge_group():
 
 @knowledge_group.command(name="add")
 @click.argument("text")
-@click.option("--tag", "tags", multiple=True, default=("shared",), help="Extra tag(s); 'orchestra'+ident always added")
-@click.option("--kind", default="note", help="Knowledge entry kind (note/finding/analysis/recommendation)")
-@click.option("--space-id", default=None, help="Target a specific shared space (defaults to first attached)")
-async def knowledge_add_cmd(text: str, tags: tuple[str, ...], kind: str, space_id: str | None) -> None:
+@click.option(
+    "--tag",
+    "tags",
+    multiple=True,
+    default=("shared",),
+    help="Extra tag(s); 'orchestra'+ident always added",
+)
+@click.option(
+    "--kind",
+    default="note",
+    help="Knowledge entry kind (note/finding/analysis/recommendation)",
+)
+@click.option(
+    "--space-id",
+    default=None,
+    help="Target a specific shared space (defaults to first attached)",
+)
+async def knowledge_add_cmd(
+    text: str, tags: tuple[str, ...], kind: str, space_id: str | None
+) -> None:
     """Push a knowledge entry to a shared concerto space (collaborative)."""
     env = _need(*_REQUIRED, "OA_IDENT")
     target = space_id
@@ -680,7 +780,9 @@ async def knowledge_add_cmd(text: str, tags: tuple[str, ...], kind: str, space_i
         "tags": ["orchestra", env["OA_IDENT"], *tags],
     }
     async with httpx.AsyncClient(timeout=10.0, headers=_headers(env)) as client:
-        r = await client.post(f"{env['OA_ENDPOINT']}/org/{env['OA_ORG']}/knowledge", json=body)
+        r = await client.post(
+            f"{env['OA_ENDPOINT']}/org/{env['OA_ORG']}/knowledge", json=body
+        )
     if not r.is_success:
         error(f"shared push failed: HTTP {r.status_code} {r.text[:200]}")
         sys.exit(1)
@@ -702,13 +804,17 @@ async def knowledge_spaces_cmd() -> None:
 
 
 @knowledge_group.command(name="init-shared")
-@click.option("--name", default=None, help="Space name (default: 'concerto-<sid8>-shared')")
+@click.option(
+    "--name", default=None, help="Space name (default: 'concerto-<sid8>-shared')"
+)
 async def knowledge_init_shared_cmd(name: str | None) -> None:
     """Ensure a shared space exists on this concerto (idempotent)."""
     env = _need(*_REQUIRED)
     shared = await _fetch_concerto_shared_spaces(env)
     if shared:
-        console.print(f"[bold]already attached[/bold] count={len(shared)} first={shared[0][:8]}…")
+        console.print(
+            f"[bold]already attached[/bold] count={len(shared)} first={shared[0][:8]}…"
+        )
         return
     sid_short = env["OA_SESSION"][:8]
     space_name = name or f"concerto-{sid_short}-shared"
@@ -797,9 +903,22 @@ async def do_attach(
 
 @orchestra.command(name="attach")
 @click.argument("ident")
-@click.option("--org-id", default=None, help="Org UUID (defaults to env or first matching bootstrap)")
-@click.option("--from", "from_path", default=None, help="Explicit path to a bootstrap JSON (overrides cache search)")
-@click.option("--no-hello", is_flag=True, help="Skip the one-shot hello push (heartbeat still sent)")
+@click.option(
+    "--org-id",
+    default=None,
+    help="Org UUID (defaults to env or first matching bootstrap)",
+)
+@click.option(
+    "--from",
+    "from_path",
+    default=None,
+    help="Explicit path to a bootstrap JSON (overrides cache search)",
+)
+@click.option(
+    "--no-hello",
+    is_flag=True,
+    help="Skip the one-shot hello push (heartbeat still sent)",
+)
 async def attach_cmd(
     ident: str, org_id: str | None, from_path: str | None, no_hello: bool
 ) -> None:
@@ -822,8 +941,17 @@ async def attach_cmd(
 
 @orchestra.command(name="propose")
 @click.argument("question")
-@click.option("--strategy", type=click.Choice(["majority", "unanimous", "first"]), default="majority")
-@click.option("--choice", "choices", multiple=True, help="Allowed choice (repeat); omit for free-form")
+@click.option(
+    "--strategy",
+    type=click.Choice(["majority", "unanimous", "first"]),
+    default="majority",
+)
+@click.option(
+    "--choice",
+    "choices",
+    multiple=True,
+    help="Allowed choice (repeat); omit for free-form",
+)
 async def propose_cmd(question: str, strategy: str, choices: tuple[str, ...]) -> None:
     """Propose a concerto decision (requires concerto:write)."""
     env = _need(*_REQUIRED)
@@ -841,7 +969,7 @@ async def propose_cmd(question: str, strategy: str, choices: tuple[str, ...]) ->
     d = r.json()
     console.print(
         f"[bold green]proposed[/bold green] {d['id']}\n  "
-        f"strategy={d.get('strategy')} status={d.get('status')}\n  Q: {d.get('question','')[:100]}"
+        f"strategy={d.get('strategy')} status={d.get('status')}\n  Q: {d.get('question', '')[:100]}"
     )
 
 
@@ -850,7 +978,9 @@ async def propose_cmd(question: str, strategy: str, choices: tuple[str, ...]) ->
 @click.argument("choice")
 @click.option("--weight", type=float, default=1.0)
 @click.option("--rationale", default=None, help="Optional vote rationale")
-async def vote_cmd(decision_id: str, choice: str, weight: float, rationale: str | None) -> None:
+async def vote_cmd(
+    decision_id: str, choice: str, weight: float, rationale: str | None
+) -> None:
     """Cast a vote on a concerto decision (requires concerto:vote:cast)."""
     env = _need(*_REQUIRED)
     body: dict[str, Any] = {"choice": choice, "weight": weight}
@@ -890,12 +1020,14 @@ async def decisions_cmd(status: str | None) -> None:
         rows = [d for d in rows if d.get("status") == status]
     console.print(f"[bold]decisions[/bold] total={len(rows)}")
     for d in rows:
-        glyph = "[blue]✓[/blue]" if d.get("status") == "resolved" else "[yellow]·[/yellow]"
+        glyph = (
+            "[blue]✓[/blue]" if d.get("status") == "resolved" else "[yellow]·[/yellow]"
+        )
         votes = d.get("votes") or []
         console.print(
             f"  {glyph} [{d['id'][:8]}] strategy={d.get('strategy'):<10} "
             f"status={d.get('status'):<10} votes={len(votes)}\n"
-            f"      Q: {d.get('question','')[:90]}"
+            f"      Q: {d.get('question', '')[:90]}"
             + (f"\n      → {d.get('resolution')}" if d.get("resolution") else "")
         )
 
@@ -903,6 +1035,7 @@ async def decisions_cmd(status: str | None) -> None:
 def _extract_org(d: dict) -> str | None:
     """Best-effort: parse org from any URL-like field."""
     import re
+
     for key in ("endpoint",):
         v = d.get(key, "")
         m = re.search(r"/org/([0-9a-f-]{36})/", v)

@@ -86,7 +86,9 @@ def project_axes(manifest: ForktexManifest | None) -> tuple[set[str], set[str]]:
     cloud = getattr(manifest, "cloud", None)
     if cloud is not None:
         for env in getattr(cloud, "environments", []) or []:
-            name = env.get("name") if isinstance(env, dict) else getattr(env, "name", None)
+            name = (
+                env.get("name") if isinstance(env, dict) else getattr(env, "name", None)
+            )
             if name:
                 envs.add(name)
 
@@ -154,7 +156,9 @@ def build_help_tree(
             parse_atom_key(invocation, services=services, envs=envs).make_target
             for invocation in invocations
         ]
-        if alias in seen_targets or not all(target in seen_targets for target in target_names):
+        if alias in seen_targets or not all(
+            target in seen_targets for target in target_names
+        ):
             continue
         seen_targets.add(alias)
         entries.append(
@@ -218,14 +222,20 @@ def render_help_rich(tree: HelpTree, *, atom_id: str | None = None) -> bool:
         return False
 
     entries = tree.for_atom(atom_id) if atom_id else tree.root_entries
-    title = f"{tree.project_name} help" if not atom_id else f"{tree.project_name}: {atom_id}"
+    title = (
+        f"{tree.project_name} help"
+        if not atom_id
+        else f"{tree.project_name}: {atom_id}"
+    )
     table = Table(title=title, show_lines=False)
     table.add_column("target", style="cyan", no_wrap=True)
     table.add_column("surface", style="green")
     table.add_column("kind", style="magenta", no_wrap=True)
     table.add_column("description")
     for entry in entries:
-        table.add_row(entry.target, _surface(entry), _kind_label(entry), entry.description)
+        table.add_row(
+            entry.target, _surface(entry), _kind_label(entry), entry.description
+        )
     Console().print(table)
     return True
 
@@ -243,9 +253,18 @@ def _applicable_atoms(standard: FSDStandard, manifest: ForktexManifest) -> list[
         explicitly_enabled = bool(
             override
             and not override.disabled
-            and (override.commands or override.targets or override.aliases or override.description)
+            and (
+                override.commands
+                or override.targets
+                or override.aliases
+                or override.description
+            )
         )
-        if applicable is not None and atom.id not in applicable and not explicitly_enabled:
+        if (
+            applicable is not None
+            and atom.id not in applicable
+            and not explicitly_enabled
+        ):
             continue
         if atom.id in disabled and not explicitly_enabled:
             continue
@@ -298,7 +317,9 @@ def _entry_for_atom(
     kind: HelpKind,
     cli_available: bool,
 ) -> HelpEntry:
-    description = override.description if override and override.description else atom.description
+    description = (
+        override.description if override and override.description else atom.description
+    )
     return HelpEntry(
         target=target,
         make_invocation=f"make {target}",
@@ -375,7 +396,9 @@ def _suggested_entries(
                 HelpEntry(
                     target=target,
                     make_invocation=f"make {target}",
-                    cli_invocation=_cli_variant(atom.id, parsed) if atom.id in cli_atoms else None,
+                    cli_invocation=_cli_variant(atom.id, parsed)
+                    if atom.id in cli_atoms
+                    else None,
                     description=atom.description,
                     base_id=atom.id,
                     kind="suggested",
@@ -420,10 +443,15 @@ def _plain_table(
         for idx in range(len(headers))
     ]
     lines = [title, ""]
-    lines.append("  " + "  ".join(header.ljust(widths[idx]) for idx, header in enumerate(headers)))
+    lines.append(
+        "  "
+        + "  ".join(header.ljust(widths[idx]) for idx, header in enumerate(headers))
+    )
     lines.append("  " + "  ".join("-" * width for width in widths))
     for row in rows:
-        lines.append("  " + "  ".join(value.ljust(widths[idx]) for idx, value in enumerate(row)))
+        lines.append(
+            "  " + "  ".join(value.ljust(widths[idx]) for idx, value in enumerate(row))
+        )
     return "\n".join(lines)
 
 

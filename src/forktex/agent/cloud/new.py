@@ -92,8 +92,8 @@ async def new(ctx, template_slug, name, domain, env, list_only):
         )
 
     project_id = getattr(resp, "projectId", None) or getattr(resp, "project_id", "")
-    environment_id = (
-        getattr(resp, "environmentId", None) or getattr(resp, "environment_id", "")
+    environment_id = getattr(resp, "environmentId", None) or getattr(
+        resp, "environment_id", ""
     )
     bundle_url = getattr(resp, "bundleUrl", None) or getattr(resp, "bundle_url", None)
 

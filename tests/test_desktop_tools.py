@@ -105,7 +105,9 @@ async def test_desktop_observe_omits_base64_from_content(project_root, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_desktop_screenshot_reports_unsupported_backend(project_root, monkeypatch):
+async def test_desktop_screenshot_reports_unsupported_backend(
+    project_root, monkeypatch
+):
     monkeypatch.setattr("forktex.agent.tools.desktop.shutil.which", lambda cmd: None)
 
     result = await _tool_by_name("desktop_screenshot", project_root).execute()

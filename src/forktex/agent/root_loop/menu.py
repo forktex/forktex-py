@@ -521,9 +521,11 @@ async def _maybe_offer_orchestra_attach(
     )
     try:
         answer = (
-            await session.prompt_async(f"  attach as {hit}? [Y/n] ", default="y")
-        ).strip().lower()
-    except (EOFError, KeyboardInterrupt):
+            (await session.prompt_async(f"  attach as {hit}? [Y/n] ", default="y"))
+            .strip()
+            .lower()
+        )
+    except EOFError, KeyboardInterrupt:
         return True
     if answer and answer not in ("y", "yes", ""):
         console.print(

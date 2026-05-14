@@ -80,9 +80,7 @@ _RW_TOOLS = _RO_TOOLS | frozenset(
 
 _BASH_TOOLS = frozenset({"bash_execute"})
 _WEB_TOOLS = frozenset({"web_search", "web_fetch"})
-_DESKTOP_TOOLS = frozenset(
-    {"desktop_info", "desktop_screenshot", "desktop_observe"}
-)
+_DESKTOP_TOOLS = frozenset({"desktop_info", "desktop_screenshot", "desktop_observe"})
 
 _SCRAPER_TOOLS = frozenset(
     {

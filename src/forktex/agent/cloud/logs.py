@@ -140,8 +140,16 @@ def _stream_run_events(client, run_id: str) -> None:
 
     try:
         for event in client.stream_flow_run(run_id):
-            step_name = event.get("stepName") if isinstance(event, dict) else getattr(event, "stepName", None)
-            status = (event.get("status") if isinstance(event, dict) else getattr(event, "status", "")) or ""
+            step_name = (
+                event.get("stepName")
+                if isinstance(event, dict)
+                else getattr(event, "stepName", None)
+            )
+            status = (
+                event.get("status")
+                if isinstance(event, dict)
+                else getattr(event, "status", "")
+            ) or ""
 
             if step_name:
                 color, icon = _COLORS.get(status, ("white", "?"))
@@ -205,7 +213,11 @@ def _render_finished_run(run: dict) -> None:
     click.echo()
     for step in run.get("steps") or run.get("nodes") or []:
         step_status = step.get("status", "") if isinstance(step, dict) else ""
-        step_name = step.get("stepName") or step.get("name") or step_status if isinstance(step, dict) else "?"
+        step_name = (
+            step.get("stepName") or step.get("name") or step_status
+            if isinstance(step, dict)
+            else "?"
+        )
         step_color = _COLORS.get(step_status, "white")
         icon = (
             "✓"
@@ -246,8 +258,16 @@ def _show_deployment_logs(client, deployment_id: str, ctx) -> None:
 
 
 def _render_deployment_logs(deployment, entries) -> None:
-    status = deployment.get("status", "?") if isinstance(deployment, dict) else getattr(deployment, "status", "?")
-    details = deployment.get("details", "") if isinstance(deployment, dict) else getattr(deployment, "details", "")
+    status = (
+        deployment.get("status", "?")
+        if isinstance(deployment, dict)
+        else getattr(deployment, "status", "?")
+    )
+    details = (
+        deployment.get("details", "")
+        if isinstance(deployment, dict)
+        else getattr(deployment, "details", "")
+    )
 
     color = "green" if status == "success" else "red" if status == "failed" else "white"
     click.echo(f"\n  Deployment: {click.style(status.upper(), fg=color, bold=True)}")
@@ -264,7 +284,9 @@ def _render_deployment_logs(deployment, entries) -> None:
         stage = getattr(entry, "stage", "?")
         output = getattr(entry, "output", "") or ""
         error = getattr(entry, "error", "") or ""
-        ts = str(getattr(entry, "createdAt", None) or getattr(entry, "created_at", ""))[:19]
+        ts = str(getattr(entry, "createdAt", None) or getattr(entry, "created_at", ""))[
+            :19
+        ]
 
         stage_color = "red" if error else "white"
         click.echo(click.style(f"  [{ts}] {stage}", fg=stage_color))

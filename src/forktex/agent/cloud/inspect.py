@@ -81,7 +81,9 @@ async def inspect_org(ctx):
         click.echo(click.style("  Usage (this month):", bold=True))
         hours = current.get("totalVpsHours", current.get("total_vps_hours", 0))
         cost = current.get("totalCost", current.get("total_cost", 0))
-        servers = current.get("activeServerCount", current.get("active_server_count", 0))
+        servers = current.get(
+            "activeServerCount", current.get("active_server_count", 0)
+        )
         click.echo(f"    VPS-hours: {hours:.1f}")
         click.echo(f"    Cost:      {cost:.2f}")
         click.echo(f"    Active:    {servers} server(s)")

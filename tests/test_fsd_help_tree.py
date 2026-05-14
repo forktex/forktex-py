@@ -75,12 +75,12 @@ def test_help_tree_contains_declared_targets_and_suggestions():
 
 def test_plain_renderer_is_deterministic_and_marks_surfaces():
     standard = load_standard()
-    tree = build_help_tree(standard, _manifest(), cli_atoms={"apply"})
+    tree = build_help_tree(standard, _manifest(), cli_atoms={"monitor"})
 
-    text = render_help_text(tree, atom_id="apply")
+    text = render_help_text(tree, atom_id="monitor")
 
-    assert "demo help: apply" in text
-    assert "apply-web-local" in text
-    assert "make apply" in text
-    assert "forktex apply" in text
+    assert "demo help: monitor" in text
+    assert "monitor-local-logs" in text
+    assert "make monitor" in text
+    assert "forktex monitor" in text
     assert "suggest:" in text
