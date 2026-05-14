@@ -2198,4 +2198,4 @@ web = ["fastapi", "uvicorn"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<4.0"
-content-hash = "6afe084fa996ec2f8e6bec2ce100cd973d072bcc117743b57ca3f88eeba58ffd"
+content-hash = "427af5ff79bbcf4f06db00c04bdf625371de38678261a55b66cab9ab1192d62a"
