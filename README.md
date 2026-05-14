@@ -12,13 +12,6 @@
 
 `forktex` ships as a single binary. By itself it gives you an agent that reads your repo, runs commands, writes patches, audits your delivery standard, and discovers your architecture — no account required. Plug in any of the three ForkTex platforms (cloud, intelligence, network) and the same CLI gains LLM reasoning, infra deploys, and identity / projects / channels.
 
-### What's new in v0.5
-
-- **`forktex intelligence orchestra`** — typed CLI verbs to participate in a multi-agent Orchestra session (`pull` / `push` / `beat` / `status` / `tail` / `directives` / `directive-done` + claim / barrier / lock / propose / vote / decisions / knowledge sync primitives). State source: `OA_*` env vars sourced from the bootstrap kit. Bring-your-own loop; same protocol whether the runtime is Claude Code, codex, or `forktex` REPL via `Intelligence()`.
-- **Canonical SDK names everywhere** — `Cloud`, `Intelligence`, `NetWork` are the only client classes. `forktex-cloud >= 0.5.0` removed the legacy `ForktexCloudClient` long-form; forktex-py's internal code is symmetric across all three platforms.
-- **Hardened project-paths layer** — every project-root and ecosystem-root walk lives in `forktex.core.paths` (`find_project_root`, `require_project_root`, `find_ecosystem_root`). A CI-blocking `tests/test_path_hygiene.py` sniff prevents the next contributor from reintroducing hardcoded `/home/<user>/…` or duplicated discovery walks.
-- **`urllib3 2.7.0`** — picks up CVE-2026-44431 / CVE-2026-44432 fixes.
-
 ---
 
 ## Install
