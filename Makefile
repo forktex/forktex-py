@@ -6,7 +6,8 @@ SUBPACKAGES :=
 PUBLISHABLE_PACKAGES := .
 
 help: ## Self-documenting target listing
-	@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@python3 -m forktex.agent.help make --project-dir . || \
+		grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 format: ## Source code conforms to a consistent, auto-enforced style
@@ -67,11 +68,11 @@ install: ## Project bootstraps to a runnable state on a fresh machine — auto-d
 
 build: ## Build sdist + wheel into dist/ and verify metadata with twine check
 	rm -rf dist/
-	python3 -m build
-	python3 -m twine check dist/*
+	poetry run python -m build
+	poetry run python -m twine check dist/*
 
 publish: ## Upload dist/ to production PyPI (irreversible per-version)
-	python3 -m twine upload dist/*
+	poetry run python -m twine upload dist/*
 
 clean: ## Build artifacts and caches removable from project tree
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
@@ -100,7 +101,7 @@ acceptance: ## Install the published wheel into a fresh venv and battle-test the
 	@echo '' && echo 'acceptance: forktex CLI installs + invokes correctly'
 
 publish-test: ## Upload dist/ to TestPyPI (https://test.pypi.org) for rehearsal. SDK deps must already be on TestPyPI.
-	python3 -m twine upload --repository testpypi dist/*
+	poetry run python -m twine upload --repository testpypi dist/*
 
 dev-link-sdks: ## pip install -e the three sibling SDK repos (cloud/intelligence/network) for local development against source trees
 	@bash -c 'for d in ../cloud/sdk-py ../intelligence/sdk-py ../network/sdk-py; do [ -d "$$d" ] || { echo "missing: $$d"; exit 1; }; done'

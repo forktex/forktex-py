@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-from forktex_intelligence.client.client import ForktexIntelligenceClient
+from forktex_intelligence import Intelligence
 from forktex.agent.types import AgentType, get_agent_type_registry
 from forktex.agent.process import AgentProcess
 from forktex.agent.session import Session
@@ -60,7 +60,7 @@ class AgentManager:
     def __init__(
         self,
         project_root: str,
-        client: ForktexIntelligenceClient,
+        client: Intelligence,
         *,
         on_tool_event: Optional[Callable] = None,
         browser: Optional[Any] = None,

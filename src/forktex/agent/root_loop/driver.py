@@ -23,7 +23,7 @@
 
 """Pluggable agent driver protocol — reserved for Intelligence SDK implementations.
 
-Today we only use the HTTP driver (backed by ``ForktexIntelligenceClient``).
+Today we only use the HTTP driver (backed by ``Intelligence``).
 The protocol is defined here so a later local-model driver, shipped inside
 ``forktex_intelligence``, can plug into the root loop without changes to
 ``forktex-py``. This mirrors how ``forktex_cloud`` contributes non-HTTP code

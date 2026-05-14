@@ -45,7 +45,7 @@ def _get_project_root() -> str:
 def _build_intelligence_client(project_root: Optional[str] = None):
     """Create Intelligence API client from settings."""
     from forktex.agent.intelligence.settings import get_intelligence_settings
-    from forktex_intelligence.client.client import ForktexIntelligenceClient
+    from forktex_intelligence import Intelligence
 
     settings = get_intelligence_settings(project_root=project_root)
 
@@ -56,7 +56,7 @@ def _build_intelligence_client(project_root: Optional[str] = None):
         )
         sys.exit(1)
 
-    return ForktexIntelligenceClient.from_settings(settings)
+    return Intelligence.from_settings(settings)
 
 
 def _build_tool_server(project_root: str, *, enable_desktop: bool = False):

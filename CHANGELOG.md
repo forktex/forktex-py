@@ -4,6 +4,10 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 
 ## [Unreleased]
 
+_(nothing yet)_
+
+## [0.5.0] — 2026-05-14
+
 ### Changed
 
 - **Cloud SDK 0.3.0 retires the `ForktexCloudClient` long-form name.**
@@ -258,6 +262,54 @@ publishes — see project memory `project_sdk_rename_migration_plan`.
   `forktex.fsd.models`. Importers of `forktex.agent.fsd.standard`
   must migrate to `forktex.fsd.models` (`ISORef`, `Atom`, `Facet`,
   `FSDStandard`, …).
+- **Orchestra filesystem-bootstrap subsystem retired.** `forktex
+  intelligence orchestra resume` and `attach` CLI commands, their
+  helpers (`_load_stash`, `_stash_to_env`, `do_attach`,
+  `known_idents`, `_CACHE_DIRS` covering `/tmp/forktex-creds/`,
+  `~/.config/forktex/`, `~/Desktop/forktex/quick-start/`), and the
+  bare-`forktex` REPL's auto-attach hint are all gone. Source the
+  bootstrap kit's `export OA_*=…` block directly in your shell; the
+  long-term flow is moving to remote MCP. `docs/orchestra-cli.md`
+  deleted in the same cut.
+
+### Added (paths + hygiene)
+
+- **Centralized project-path layer** (`forktex.core.paths`):
+  `find_project_root`, `require_project_root`, and the new
+  `find_ecosystem_root` — the latter consolidates a walk that was
+  previously duplicated byte-for-byte across three
+  `agent/commands/` modules (`root_agent.py`, `index_ecosystem.py`,
+  `ground.py`). Internal callers and the four affected tests now
+  use the shared helpers.
+- **CI-blocking `tests/test_path_hygiene.py` regression test.**
+  Sniffs `src/` and `tests/` for hardcoded `/home/<user>/…` or
+  `/Users/<user>/…` absolute paths, `/tmp/forktex-…` literals outside
+  `forktex.core.paths`, duplicated ecosystem-root walks, and tests
+  bypassing `require_project_root(__file__)` in favour of fragile
+  `Path(__file__).resolve().parents[N]` arithmetic. Caught the
+  hardcoded `/home/samanu/Desktop/forktex/forktex-py` PROJECT_ROOT
+  in two test files that passed locally on the author's workstation
+  but failed on GitHub Actions where the runner home differs.
+
+### Changed (canonical SDK names)
+
+- **Internal code uses only canonical SDK names** (`Cloud`,
+  `Intelligence`, `NetWork`). Nine modules under
+  `src/forktex/agent/` switched away from the legacy long-form
+  imports (`ForktexIntelligenceClient`, `NetworkClient`). The
+  `forktex.{cloud,intelligence,network}` shims still re-export the
+  legacy aliases for one back-compat cycle so existing downstream
+  import sites keep working.
+
+### Fixed (CI + security)
+
+- **`urllib3 2.7.0`** — picks up CVE-2026-44431 and CVE-2026-44432.
+- **`make build` works in fresh CI venvs.** The Makefile build /
+  publish / publish-test targets (sourced from `forktex.json`) now
+  invoke `poetry run python -m build` / `… twine check` instead of
+  bare `python3 -m build`, so the gate no longer depends on `build`
+  + `twine` being on the ambient `PATH`. Both modules are also in
+  the `[dependency-groups].dev` declaration.
 
 ### Migration — upgrading from `forktex 0.2.6` (latest PyPI)
 
@@ -300,7 +352,7 @@ catalog stops at `L4 Operational`. Update `forktex.json`:
 +  "targetLevel": "L4"
 ```
 
-**4. `logs` atom merged into `monitor` (hard break in [Unreleased]).**
+**4. `logs` atom merged into `monitor` (hard break in 0.5.0).**
 Catalog drops from 21 atoms to 20.
 
 ```diff
@@ -317,11 +369,11 @@ Make-target name, so existing `make logs` recipes continue to satisfy
 the merged atom — only the *atom declaration* in `forktex.json`
 changes.
 
-**5. `acceptance@smoke` variant removed (hard break in [Unreleased]).**
+**5. `acceptance@smoke` variant removed (hard break in 0.5.0).**
 Use `acceptance@battle` (preferred) or `acceptance@e2e`. `forktex fsd
 check` rejects `acceptance@smoke` declarations.
 
-**6. `ci` chord renamed to `gate` (hard break in [Unreleased]).**
+**6. `ci` chord renamed to `gate` (hard break in 0.5.0).**
 
 ```diff
 -make ci
@@ -344,7 +396,7 @@ CI scripts (GitHub Actions, GitLab CI, etc.) invoking `make ci` must
 update to `make gate`. The workflow file name (`.github/workflows/ci.yml`)
 can stay; only the `make` invocation changes.
 
-**7. New `manual` atom (additive in [Unreleased]).** No migration
+**7. New `manual` atom (additive in 0.5.0).** No migration
 required — projects can opt in by declaring a `manual` atom recipe in
 `forktex.json` (or use `forktex manual build` directly without
 declaring an FSD atom).
@@ -355,36 +407,7 @@ After applying any of the above, regenerate your `Makefile`:
 forktex fsd makefile sync
 ```
 
-then verify with `forktex fsd check && make ci`.
-
-## [0.5.0] — 2026-05-09
-
-Cut from the `## [Unreleased]` log above. This is the v0.5 release line —
-co-cut across the four ForkTex Python repos (`core-py`, `intelligence`,
-`network`, `cloud`, `forktex-py`). For the cross-repo release notes see
-the orchestra session entry tagged `release-notes`.
-
-The headline `forktex-py` items in this cut are:
-
-- `forktex.network` Python shim landed (mirrors `forktex.cloud` /
-  `forktex.intelligence`); `Cloud` / `Intelligence` / `NetWork`
-  imports are now symmetric across all three platforms.
-- Auth-contract symmetry test (`tests/test_auth_symmetry.py`) locks
-  the cross-facet contract: connect impls, `AuthState`,
-  `EntrySpec(secret)`, public shim with canonical class.
-- `auth/cli.py` migrated to canonical SDK names (`Cloud`, `NetWork`,
-  `Intelligence`); long-form classes can no longer leak in.
-- Chat REPL boots with project grounding from `AGENTS.md` +
-  cached `manual@agents` bundle.
-- `forktex intelligence orchestra` CLI group (`pull` / `push` / `beat`
-  / `status` / `tail` / `directives` / `directive-done` / `resume` /
-  `attach` + sync verbs) — replaces the old shell helpers; full
-  docs at `docs/orchestra-cli.md`.
-- Bare `forktex` REPL recognises "join orchestra <ident>" prompts and
-  hints / runs `attach` in-process.
-- `ask` cmd correctness fix (no more invalid `Intelligence(project_root=…)`
-  kwarg).
-- See the `## [Unreleased]` section above for the full per-PR delta.
+then verify with `forktex fsd check && make gate`.
 
 ## [0.4.0] — 2026-05-08
 

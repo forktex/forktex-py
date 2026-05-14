@@ -23,7 +23,7 @@
 
 [project]
 name = "forktex"
-version = "0.4.0"
+version = "0.5.0"
 description = "CLI, agent, architecture, audit, and SDK toolkit for the ForkTex self-managed software factory"
 authors = [
     {name = "FORKTEX",email = "info@forktex.com"}
@@ -89,6 +89,8 @@ dev = [
     "pyright (>=1.1.350)",
     "pip-audit (>=2.7.0)",
     "pygments (>=2.20.0)",
+    "build (>=1.2.0,<2.0.0)",
+    "twine (>=5.0.0,<7.0.0)",
 ]
 
 [tool.pytest.ini_options]

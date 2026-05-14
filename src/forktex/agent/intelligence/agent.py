@@ -40,7 +40,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Callable, Dict, Optional
 
-from forktex_intelligence.client.client import ForktexIntelligenceClient
+from forktex_intelligence import Intelligence
 from forktex_intelligence.streams import SSEEvent, SSEEventType, parse_sse_stream
 
 
@@ -115,7 +115,7 @@ class LocalAgentLoop:
 
     def __init__(
         self,
-        client: ForktexIntelligenceClient,
+        client: Intelligence,
         tool_server: Any,  # forktex.agent.intelligence.tool_server.ToolServer
         *,
         system: Optional[str] = None,

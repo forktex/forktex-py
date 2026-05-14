@@ -21,17 +21,16 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Construct a ``NetworkClient`` with credentials resolved from settings."""
+"""Construct a ``NetWork`` client with credentials resolved from settings."""
 
 from __future__ import annotations
 
-from forktex_network import NetworkClient
-
+from forktex.network import NetWork
 from forktex.agent.network.settings import NetworkSettings
 
 
-def build_network_client(settings: NetworkSettings) -> NetworkClient:
-    """Return a ready-to-use async ``NetworkClient``.
+def build_network_client(settings: NetworkSettings) -> NetWork:
+    """Return a ready-to-use async ``NetWork`` client.
 
     Callers own the lifecycle — remember to ``await client.close()`` or use
     the client as an async context manager.
@@ -41,4 +40,4 @@ def build_network_client(settings: NetworkSettings) -> NetworkClient:
             "network settings are not configured; run `forktex network connect` first."
         )
     assert settings.endpoint and settings.jwt_token  # for type-checkers
-    return NetworkClient(base_url=settings.endpoint, jwt_token=settings.jwt_token)
+    return NetWork(base_url=settings.endpoint, jwt_token=settings.jwt_token)

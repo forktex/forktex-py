@@ -14,10 +14,10 @@
 
 ### What's new in v0.5
 
-- **`forktex intelligence orchestra`** — 20+ verbs to participate in a multi-agent Orchestra session (push/pull/beat/status/tail/directives/claim/release/barrier/lock/propose/vote/decisions/knowledge). Bring-your-own loop; same protocol whether the runtime is Claude Code, codex, or `forktex` REPL via Intelligence().
-- **`attach` + bare-`forktex` REPL hint** — `forktex intelligence orchestra attach <ident>` mutates the current shell's `OA_*` env from a stashed bootstrap kit and sends hello + heartbeat. Bare `forktex` detects "orchestra <ident>" intent in the menu.
-- **PID-suffixed venv** in the Makefile (`$$PPID`) eliminates the dual-runtime acceptance race when two `make acceptance` runs overlap.
-- See [`docs/orchestra-cli.md`](./docs/orchestra-cli.md) for the auth contract, 4-step flow, and verb reference.
+- **`forktex intelligence orchestra`** — typed CLI verbs to participate in a multi-agent Orchestra session (`pull` / `push` / `beat` / `status` / `tail` / `directives` / `directive-done` + claim / barrier / lock / propose / vote / decisions / knowledge sync primitives). State source: `OA_*` env vars sourced from the bootstrap kit. Bring-your-own loop; same protocol whether the runtime is Claude Code, codex, or `forktex` REPL via `Intelligence()`.
+- **Canonical SDK names everywhere** — `Cloud`, `Intelligence`, `NetWork` are the only client classes. `forktex-cloud >= 0.5.0` removed the legacy `ForktexCloudClient` long-form; forktex-py's internal code is symmetric across all three platforms.
+- **Hardened project-paths layer** — every project-root and ecosystem-root walk lives in `forktex.core.paths` (`find_project_root`, `require_project_root`, `find_ecosystem_root`). A CI-blocking `tests/test_path_hygiene.py` sniff prevents the next contributor from reintroducing hardcoded `/home/<user>/…` or duplicated discovery walks.
+- **`urllib3 2.7.0`** — picks up CVE-2026-44431 / CVE-2026-44432 fixes.
 
 ---
 

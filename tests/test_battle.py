@@ -343,12 +343,12 @@ class TestCoreLibraryImports:
         assert Settings is not None
 
     def test_intelligence_library_imports(self):
+        from forktex_intelligence import Intelligence
         from forktex_intelligence.config import IntelligenceSettings
-        from forktex_intelligence.client.client import ForktexIntelligenceClient
         from forktex_intelligence.streams import SSEEvent
 
         assert IntelligenceSettings is not None
-        assert ForktexIntelligenceClient is not None
+        assert Intelligence is not None
         assert SSEEvent is not None
 
     def test_intelligence_high_level_api_imports(self):
@@ -374,12 +374,10 @@ class TestCoreLibraryImports:
             Intelligence,
             Response,
             IntelligenceSettings,
-            ForktexIntelligenceClient,
         )
 
         assert Intelligence is not None
         assert Response is not None
-        assert ForktexIntelligenceClient is not None
         assert IntelligenceSettings is not None
 
     def test_standalone_cloud_imports(self):

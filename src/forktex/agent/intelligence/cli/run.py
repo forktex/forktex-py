@@ -66,7 +66,7 @@ async def run(task, project, agent_type, desktop):
         forktex run --agent-type researcher "What testing patterns does this project use?"
     """
     from forktex.agent.intelligence.settings import get_intelligence_settings
-    from forktex_intelligence.client.client import ForktexIntelligenceClient
+    from forktex_intelligence import Intelligence
     from forktex_intelligence.streams import SSEEventType
     from forktex.agent.manager import AgentManager
 
@@ -78,7 +78,7 @@ async def run(task, project, agent_type, desktop):
         info("Run [bold]forktex intelligence connect[/bold] to set up.")
         sys.exit(1)
 
-    client = ForktexIntelligenceClient.from_settings(settings)
+    client = Intelligence.from_settings(settings)
     # Auto-resolve org from API key
     if not client.org_id:
         await client.whoami()

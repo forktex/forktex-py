@@ -70,7 +70,7 @@ async def status_cmd(project):
     from pathlib import Path
 
     from forktex.agent.intelligence.settings import get_intelligence_settings
-    from forktex_intelligence.client.client import ForktexIntelligenceClient
+    from forktex_intelligence import Intelligence
 
     root = str(Path(project).resolve() if project else Path.cwd())
     settings = get_intelligence_settings(project_root=root)
@@ -86,7 +86,7 @@ async def status_cmd(project):
         info("Not configured. Run: forktex intelligence connect")
         return
 
-    client = ForktexIntelligenceClient(settings.endpoint, settings.api_key)
+    client = Intelligence(settings.endpoint, settings.api_key)
     try:
         health = await client.health()
         whoami = await client.whoami()

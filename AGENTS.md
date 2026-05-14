@@ -198,6 +198,8 @@ them:
 forktex intelligence orchestra push "<finding>" --tag finding
 ```
 
-`docs/orchestra-cli.md` lists every verb (`pull` / `push` / `beat` /
-`status` / `tail` / `directives` / `directive-done` / `resume` /
-`attach` + sync verbs).
+Run `forktex intelligence orchestra --help` for the full verb list
+(`pull` / `push` / `beat` / `status` / `tail` / `directives` /
+`directive-done` + claim / barrier / lock / propose / vote / decisions /
+knowledge sync primitives). All commands consume the `OA_*` env vars
+exported by the bootstrap kit — source it in your shell before invoking.

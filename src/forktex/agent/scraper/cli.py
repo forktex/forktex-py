@@ -95,7 +95,7 @@ async def scrape(
             --client-pfx licitatii.p12 --client-passphrase "secret"
     """
     from forktex.agent.intelligence.settings import get_intelligence_settings
-    from forktex_intelligence.client.client import ForktexIntelligenceClient
+    from forktex_intelligence import Intelligence
     from forktex_intelligence.streams import SSEEventType
     from forktex.agent.manager import AgentManager
     from forktex.agent.tools.scraper import StatefulBrowser
@@ -109,7 +109,7 @@ async def scrape(
         info("Run [bold]forktex intelligence connect[/bold] to set up.")
         sys.exit(1)
 
-    client = ForktexIntelligenceClient.from_settings(settings)
+    client = Intelligence.from_settings(settings)
     if not client._org_id:
         await client.whoami()
 

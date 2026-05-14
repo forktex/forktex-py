@@ -40,8 +40,8 @@
         "description": "Build sdist + wheel into dist/ and verify metadata with twine check",
         "commands": [
           "rm -rf dist/",
-          "python3 -m build",
-          "python3 -m twine check dist/*"
+          "poetry run python -m build",
+          "poetry run python -m twine check dist/*"
         ]
       },
       "publish-test": {
@@ -50,7 +50,7 @@
         ],
         "description": "Upload dist/ to TestPyPI (https://test.pypi.org) for rehearsal. SDK deps must already be on TestPyPI.",
         "commands": [
-          "python3 -m twine upload --repository testpypi dist/*"
+          "poetry run python -m twine upload --repository testpypi dist/*"
         ]
       },
       "publish": {
@@ -59,7 +59,7 @@
         ],
         "description": "Upload dist/ to production PyPI (irreversible per-version)",
         "commands": [
-          "python3 -m twine upload dist/*"
+          "poetry run python -m twine upload dist/*"
         ]
       },
       "acceptance": {
