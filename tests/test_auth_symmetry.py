@@ -198,9 +198,9 @@ def test_auth_cli_imports_canonical_names_only():
     (Cloud / Intelligence / NetWork) via the forktex.* shims, not the
     long-form (`ForktexCloudClient`, `ForktexIntelligenceClient`,
     `NetworkClient`) directly. Drift would defeat the rename migration."""
-    from pathlib import Path
+    from forktex.core.paths import require_project_root
 
-    src = Path(__file__).resolve().parents[1]
+    src = require_project_root(__file__)
     auth_cli = (src / "src" / "forktex" / "agent" / "auth" / "cli.py").read_text()
 
     forbidden = [

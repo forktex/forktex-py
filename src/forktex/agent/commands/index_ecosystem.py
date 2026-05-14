@@ -42,6 +42,7 @@ from pathlib import Path
 import asyncclick as click
 
 from forktex.agent.ui.console import console, info, error
+from forktex.core.paths import find_ecosystem_root
 
 
 COLLECTION_NAME = "forktex-ecosystem"
@@ -66,18 +67,6 @@ KNOWLEDGE_FILES = [
     # FSD standard
     ("docs/compliance/fsd/README.md", "fsd-standard"),
 ]
-
-
-def _find_ecosystem_root(start: Path) -> Path | None:
-    """Walk up to find parent with multiple forktex repos."""
-    current = start
-    for _ in range(5):
-        parent = current.parent
-        repos = [d for d in parent.iterdir() if d.is_dir() and (d / ".git").is_dir()]
-        if len(repos) >= 3:
-            return parent
-        current = parent
-    return None
 
 
 def _discover_agents_md(root: Path) -> list[tuple[str, str]]:
@@ -109,7 +98,7 @@ async def index_ecosystem(root_dir: str | None, collection: str, dry_run: bool):
     if root_dir:
         root = Path(root_dir)
     else:
-        root = _find_ecosystem_root(Path.cwd())
+        root = find_ecosystem_root(Path.cwd())
 
     if not root or not root.is_dir():
         error("Could not find ecosystem root. Use --dir to specify.")

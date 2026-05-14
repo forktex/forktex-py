@@ -38,12 +38,13 @@ from __future__ import annotations
 
 import re
 import tomllib
-from pathlib import Path
 
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from forktex.core.paths import require_project_root
+
+REPO_ROOT = require_project_root(__file__)
 
 
 def _pyproject_versions() -> tuple[str, set[str]]:

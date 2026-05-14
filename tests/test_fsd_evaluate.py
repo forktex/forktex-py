@@ -37,14 +37,13 @@ This was the bug fixed in commit landing FSD v1.2.0 (`manual` atom,
 
 from __future__ import annotations
 
-from pathlib import Path
-
+from forktex.core.paths import require_project_root
 from forktex.fsd.evaluate import AtomStatus, evaluate
 from forktex.fsd.loader import load_standard
 from forktex.manifest.models import ForktexManifest
 
 
-PROJECT_ROOT = Path("/home/samanu/Desktop/forktex/forktex-py")
+PROJECT_ROOT = require_project_root(__file__)
 
 
 def _all_make_targets_for(standard) -> set[str]:

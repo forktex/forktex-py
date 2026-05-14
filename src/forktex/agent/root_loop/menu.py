@@ -273,12 +273,6 @@ async def run(project: Optional[str] = None) -> None:
             info(f"unrecognised slash command: {slash_head}. try /help")
             continue
 
-        # Free-form prompts that mention "orchestra" + a known stashed ident
-        # → offer to auto-attach. Lets users join an orchestra session by
-        # typing a sentence instead of remembering the verb path.
-        if await _maybe_offer_orchestra_attach(choice, session):
-            continue
-
         info(f"unrecognised: {choice!r}. try /help or press h/r/s/c/i/n/q")
 
 
@@ -485,69 +479,6 @@ async def _run_service_action(
         )
     except Exception as exc:
         info(f"{slash_head} failed: {exc}")
-
-
-def _detect_orchestra_ident(choice: str) -> Optional[str]:
-    """If *choice* mentions "orchestra" + a known stashed ident, return it."""
-    text = choice.strip()
-    if "orchestra" not in text.lower():
-        return None
-    try:
-        from forktex.agent.intelligence.cli.orchestra import known_idents
-    except Exception:
-        return None
-    idents = known_idents()
-    if not idents:
-        return None
-    tokens = {t.strip(".,;:!?'\"()[]<>") for t in text.split()}
-    return next((i for i in idents if i in tokens), None)
-
-
-async def _maybe_offer_orchestra_attach(
-    choice: str, session: PromptSession[str]
-) -> bool:
-    """If the prompt mentions an orchestra ident, offer to attach inline.
-
-    Returns True if the prompt was handled (attached, declined, or simply
-    the suggestion was printed). False means the menu should fall through
-    to its "unrecognised" handler.
-    """
-    hit = _detect_orchestra_ident(choice)
-    if hit is None:
-        return False
-    console.print(
-        f"[dim]→ orchestra hint:[/dim] detected mention of "
-        f"[cyan]{hit}[/cyan] — bootstrap stash on disk."
-    )
-    try:
-        answer = (
-            (await session.prompt_async(f"  attach as {hit}? [Y/n] ", default="y"))
-            .strip()
-            .lower()
-        )
-    except EOFError, KeyboardInterrupt:
-        return True
-    if answer and answer not in ("y", "yes", ""):
-        console.print(
-            f"[dim]  dismissed — run [cyan]forktex intelligence orchestra "
-            f"attach {hit}[/cyan] later if you change your mind.[/dim]"
-        )
-        return True
-    try:
-        from forktex.agent.intelligence.cli.orchestra import do_attach
-
-        await do_attach(hit)
-    except SystemExit:
-        # do_attach already printed the diagnostic via error()
-        return True
-    except Exception as exc:
-        info(f"attach failed: {exc}")
-        return True
-    console.print(
-        "[dim]  next: run [cyan]forktex intelligence orchestra pull[/cyan] "
-        "to see the concerto, or [cyan]push <text>[/cyan] to post.[/dim]"
-    )
-    return True
 
 
 def _parse_forktex_shorthand(lc: str) -> Optional[tuple[str, list[str]]]:

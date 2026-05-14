@@ -40,19 +40,7 @@ from pathlib import Path
 import asyncclick as click
 
 from forktex.agent.ui.console import console, error
-from forktex.core.paths import FORKTEX_MANIFEST
-
-
-def _find_ecosystem_root(start: Path) -> Path | None:
-    """Walk up to find the parent directory containing multiple forktex repos."""
-    current = start
-    for _ in range(5):
-        parent = current.parent
-        repos = [d for d in parent.iterdir() if d.is_dir() and (d / ".git").is_dir()]
-        if len(repos) >= 3:
-            return parent
-        current = parent
-    return None
+from forktex.core.paths import FORKTEX_MANIFEST, find_ecosystem_root
 
 
 def _discover_repos(root: Path) -> list[dict]:
@@ -134,7 +122,7 @@ async def ground_status(root_dir: str | None):
     if root_dir:
         root = Path(root_dir)
     else:
-        root = _find_ecosystem_root(Path.cwd())
+        root = find_ecosystem_root(Path.cwd())
 
     if not root or not root.is_dir():
         error("Could not find your workspace root. Use --dir to specify.")
@@ -181,7 +169,7 @@ async def ground_repos(root_dir: str | None, json_out: bool):
     if root_dir:
         root = Path(root_dir)
     else:
-        root = _find_ecosystem_root(Path.cwd())
+        root = find_ecosystem_root(Path.cwd())
 
     if not root or not root.is_dir():
         error("Could not find your workspace root. Use --dir to specify.")
@@ -341,7 +329,7 @@ async def ground_refresh(root_dir: str | None, dry_run: bool, force: bool):
     if root_dir:
         root = Path(root_dir)
     else:
-        root = _find_ecosystem_root(Path.cwd())
+        root = find_ecosystem_root(Path.cwd())
 
     if not root or not root.is_dir():
         error("Could not find your workspace root. Use --dir to specify.")

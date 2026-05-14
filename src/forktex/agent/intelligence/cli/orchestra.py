@@ -38,10 +38,10 @@ State source for every command: env vars set by the bootstrap kit ::
     OA_KSPACE       UUID (private knowledge space for this agent)
     OA_IDENT        identifier string (for tagging)
 
-Use ``forktex intelligence orchestra resume <ident>`` to print eval-ready
-``export OA_*=...`` lines from a stashed bootstrap JSON — handy after a
-window crash so you can ``eval "$(forktex … resume <ident>)"`` and pick
-up exactly where you were without re-pasting credentials.
+Filesystem-cached bootstrap stashing (the former ``resume``/``attach``
+commands) has been retired — participant bootstrap is moving to a remote
+MCP-backed flow. Until then, source the bootstrap kit's ``export OA_*=…``
+block directly in your shell before invoking any orchestra command.
 """
 
 from __future__ import annotations
@@ -69,8 +69,8 @@ def _need(*keys: str) -> dict[str, str]:
     if missing:
         error(
             f"missing env: {', '.join(missing)}. "
-            "Set the orchestra bootstrap kit (see /tmp/forktex-creds/agents/<ident>.prompt) "
-            "or run `forktex intelligence orchestra attach <ident>` to bind a stashed bootstrap."
+            "Source the orchestra bootstrap kit's `export OA_*=…` block "
+            "in your shell before invoking orchestra commands."
         )
         sys.exit(2)
     return {k: os.environ[k] for k in keys}
@@ -306,106 +306,6 @@ async def directive_done_cmd(directive_id: str) -> None:
     console.print(
         f"[bold green]done[/bold green]  [{body['id'][:8]}] {body.get('title', '')[:60]}"
     )
-
-
-# ── resume ────────────────────────────────────────────────────────────
-
-
-_CACHE_DIRS = (
-    "/tmp/forktex-creds/agents",
-    str(
-        __import__("pathlib").Path.home()
-        / ".config"
-        / "forktex"
-        / "orchestra"
-        / "agents"
-    ),
-    str(
-        __import__("pathlib").Path.home()
-        / "Desktop"
-        / "forktex"
-        / "quick-start"
-        / "agents"
-    ),
-)
-
-
-def _find_bootstrap(ident: str) -> str | None:
-    import pathlib
-
-    for d in _CACHE_DIRS:
-        p = pathlib.Path(d) / f"{ident}.json"
-        if p.exists():
-            return str(p)
-    return None
-
-
-def _load_stash(ident: str, from_path: str | None) -> tuple[str, dict]:
-    """Locate + parse the bootstrap JSON for *ident*. Exits 2 on failure."""
-    import json as _json
-
-    path = from_path or _find_bootstrap(ident)
-    if not path:
-        error(
-            f"no bootstrap stash found for {ident!r}. "
-            f"Searched: {', '.join(_CACHE_DIRS)}. "
-            f"Pass --from <path> to a bootstrap JSON."
-        )
-        sys.exit(2)
-    with open(path) as f:
-        return path, _json.load(f)
-
-
-def _stash_to_env(ident: str, d: dict, org_id: str | None) -> dict[str, str]:
-    """Assemble the OA_* env mapping from a parsed stash. Exits 2 if no org."""
-    import os as _os
-
-    org = org_id or _os.environ.get("OA_ORG") or _extract_org(d)
-    if not org:
-        error("could not derive OA_ORG from the stash; pass --org-id explicitly")
-        sys.exit(2)
-    return {
-        "OA_ENDPOINT": d["endpoint"],
-        "OA_KEY": d["api_key"],
-        "OA_ORG": org,
-        "OA_SESSION": d["session_id"],
-        "OA_AGENT": d["agent_id"],
-        "OA_PARTICIPANT": d["participant_id"],
-        "OA_KSPACE": d.get("knowledge_space_id") or "",
-        "OA_IDENT": ident,
-    }
-
-
-@orchestra.command(name="resume")
-@click.argument("ident")
-@click.option(
-    "--org-id",
-    default=None,
-    help="Org UUID (defaults to env or first matching bootstrap)",
-)
-@click.option(
-    "--from",
-    "from_path",
-    default=None,
-    help="Explicit path to a bootstrap JSON (overrides cache search)",
-)
-async def resume_cmd(ident: str, org_id: str | None, from_path: str | None) -> None:
-    """Print eval-ready ``export OA_*=...`` lines for a stashed agent.
-
-    Usage::
-
-        eval "$(forktex intelligence orchestra resume forktex-py-dev)"
-
-    The bootstrap JSON is found in (in order):
-      1. /tmp/forktex-creds/agents/<ident>.json
-      2. ~/.config/forktex/orchestra/agents/<ident>.json
-      3. ~/Desktop/forktex/quick-start/agents/<ident>.json
-
-    If none are present, an explicit ``--from <path>`` is required.
-    """
-    _, d = _load_stash(ident, from_path)
-    env = _stash_to_env(ident, d, org_id)
-    click.echo("\n".join(f"export {k}='{v}'" for k, v in env.items()))
 
 
 # ── sync primitives: claims / barriers / locks ────────────────────────
@@ -839,103 +739,6 @@ async def knowledge_attach_cmd(space_id: str) -> None:
     console.print(f"[bold green]attached[/bold green] {space_id}  total={len(shared)}")
 
 
-# ── attach ────────────────────────────────────────────────────────────
-
-
-async def do_attach(
-    ident: str,
-    *,
-    org_id: str | None = None,
-    from_path: str | None = None,
-    no_hello: bool = False,
-) -> dict[str, str]:
-    """Bind OA_* into this process, send hello + heartbeat. Return the env dict.
-
-    Public helper so callers (the bare ``forktex`` REPL, programmatic
-    bootstraps) can attach without going through Click. ``attach_cmd`` is
-    a thin wrapper.
-    """
-    path, d = _load_stash(ident, from_path)
-    env = _stash_to_env(ident, d, org_id)
-    os.environ.update(env)
-
-    base = _base_url(env)
-    headers = _headers(env)
-
-    pushed_id: str | None = None
-    if not no_hello:
-        hello_body = {
-            "kind": "note",
-            "content_text": f"hello from {ident}, attached via forktex CLI",
-            "space_id": env["OA_KSPACE"],
-            "session_id": env["OA_SESSION"],
-            "tags": ["orchestra", ident, "hello"],
-        }
-        async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
-            r = await client.post(
-                f"{env['OA_ENDPOINT']}/org/{env['OA_ORG']}/knowledge",
-                json=hello_body,
-            )
-        if r.is_success:
-            pushed_id = r.json().get("id")
-        else:
-            error(f"hello push failed: HTTP {r.status_code} {r.text[:200]}")
-            sys.exit(1)
-
-    async with httpx.AsyncClient(timeout=5.0, headers=headers) as client:
-        rb = await client.post(
-            f"{base}/participants/{env['OA_PARTICIPANT']}/heartbeat", json={}
-        )
-    if rb.status_code not in (200, 204):
-        error(f"heartbeat failed: HTTP {rb.status_code}")
-        sys.exit(1)
-
-    console.print(
-        f"[bold green]attached[/bold green]  ident={ident}  "
-        f"session={env['OA_SESSION'][:8]}…  stash={path}"
-    )
-    if pushed_id:
-        console.print(f"  hello entry={pushed_id}  ♥")
-    else:
-        console.print("  ♥")
-    return env
-
-
-@orchestra.command(name="attach")
-@click.argument("ident")
-@click.option(
-    "--org-id",
-    default=None,
-    help="Org UUID (defaults to env or first matching bootstrap)",
-)
-@click.option(
-    "--from",
-    "from_path",
-    default=None,
-    help="Explicit path to a bootstrap JSON (overrides cache search)",
-)
-@click.option(
-    "--no-hello",
-    is_flag=True,
-    help="Skip the one-shot hello push (heartbeat still sent)",
-)
-async def attach_cmd(
-    ident: str, org_id: str | None, from_path: str | None, no_hello: bool
-) -> None:
-    """Bind OA_* into this process, send hello + heartbeat, return.
-
-    Unlike ``resume`` (which prints eval-ready exports for a parent shell),
-    ``attach`` mutates ``os.environ`` of the *current* Python process. Inside
-    the bare ``forktex`` REPL this means subsequent ``orchestra`` commands
-    in the same session can run with no further setup.
-
-    Usage::
-
-        forktex intelligence orchestra attach forktex-py-dev
-    """
-    await do_attach(ident, org_id=org_id, from_path=from_path, no_hello=no_hello)
-
-
 # ── consensus: decisions + votes ──────────────────────────────────────
 
 
@@ -1032,36 +835,4 @@ async def decisions_cmd(status: str | None) -> None:
         )
 
 
-def _extract_org(d: dict) -> str | None:
-    """Best-effort: parse org from any URL-like field."""
-    import re
-
-    for key in ("endpoint",):
-        v = d.get(key, "")
-        m = re.search(r"/org/([0-9a-f-]{36})/", v)
-        if m:
-            return m.group(1)
-    return None
-
-
-def known_idents() -> list[str]:
-    """List idents with a stashed bootstrap JSON across cached dirs.
-
-    Used by the bare-``forktex`` REPL to detect when a user's free-form
-    prompt mentions an orchestra ident — so it can suggest ``attach``.
-    """
-    import pathlib
-
-    seen: list[str] = []
-    for d in _CACHE_DIRS:
-        try:
-            for p in pathlib.Path(d).glob("*.json"):
-                stem = p.stem
-                if stem not in seen:
-                    seen.append(stem)
-        except OSError:
-            continue
-    return seen
-
-
-__all__ = ["orchestra", "known_idents", "do_attach"]
+__all__ = ["orchestra"]

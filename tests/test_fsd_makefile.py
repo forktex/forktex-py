@@ -21,8 +21,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from pathlib import Path
-
+from forktex.core.paths import require_project_root
 from forktex.fsd.loader import load_standard
 from forktex.fsd.makefile import (
     generate_makefiles,
@@ -33,7 +32,7 @@ from forktex.fsd.profiles import resolve_applicable_atoms
 from forktex.manifest.models import ForktexManifest
 
 
-PROJECT_ROOT = Path("/home/samanu/Desktop/forktex/forktex-py")
+PROJECT_ROOT = require_project_root(__file__)
 
 
 def test_workspace_profile_limits_applicable_atoms():

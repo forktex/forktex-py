@@ -103,6 +103,39 @@ def find_projects(
     return sorted(d for d in base.iterdir() if d.is_dir() and has_manifest(d))
 
 
+def find_ecosystem_root(
+    start: Optional[str | Path] = None,
+    *,
+    min_repos: int = 3,
+    max_depth: int = 5,
+) -> Path | None:
+    """Walk upward from ``start`` to find the ecosystem parent directory.
+
+    The "ecosystem root" is the parent directory containing at least
+    ``min_repos`` sibling git checkouts — by convention, the directory
+    holding forktex-py + cloud + intelligence + network (+ documents/core).
+
+    Returns ``None`` if no such ancestor is found within ``max_depth`` levels.
+    """
+    current = resolve_path(start)
+    if current.is_file():
+        current = current.parent
+    for _ in range(max_depth):
+        parent = current.parent
+        if parent == current:
+            break
+        try:
+            repos = [
+                d for d in parent.iterdir() if d.is_dir() and (d / ".git").is_dir()
+            ]
+        except OSError:
+            return None
+        if len(repos) >= min_repos:
+            return parent
+        current = parent
+    return None
+
+
 # ── Thin wrappers around forktex_cloud.paths (V1 spec) ──
 
 
