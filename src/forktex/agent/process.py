@@ -37,7 +37,7 @@ from typing import Any, AsyncIterator, Dict, Optional
 from forktex.core.utils import generate_id
 from forktex.agent.types import AgentType
 from forktex.agent.intelligence.agent import LocalAgentLoop, AgentResponse
-from forktex_intelligence.streams import SSEEvent
+from forktex_intelligence import SSEEvent
 
 
 class AgentStatus(str, Enum):

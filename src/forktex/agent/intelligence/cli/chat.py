@@ -43,20 +43,22 @@ def _get_project_root() -> str:
 
 
 def _build_intelligence_client(project_root: Optional[str] = None):
-    """Create Intelligence API client from settings."""
+    """Create an Intelligence client from persisted settings.
+
+    forktex-py owns FS persistence (resolves env + project + global
+    config files); the SDK is consumed via its constructor only.
+    """
     from forktex.agent.intelligence.settings import get_intelligence_settings
     from forktex_intelligence import Intelligence
 
     settings = get_intelligence_settings(project_root=project_root)
-
     if not settings.is_configured:
         error("Intelligence API not configured.")
         info(
             "Run [bold]forktex intelligence connect[/bold] to set up your API endpoint and key."
         )
         sys.exit(1)
-
-    return Intelligence.from_settings(settings)
+    return Intelligence(endpoint=settings.endpoint, api_key=settings.api_key)
 
 
 def _build_tool_server(project_root: str, *, enable_desktop: bool = False):
@@ -91,6 +93,23 @@ async def chat(project, desktop):
     Layout is driven by `prompt_toolkit`: input pinned at the bottom, slash
     commands autocomplete on Tab, service cards toggle with `Ctrl+K`.
     See `forktex/agent/root_loop/chat_app.py` for the layout code.
+    """
+    await start_chat_session(project=project, desktop=desktop)
+
+
+async def start_chat_session(
+    *,
+    project: Optional[str] = None,
+    desktop: bool = False,
+    initial_message: Optional[str] = None,
+) -> None:
+    """Build the chat app and run it.
+
+    Shared entry point for the ``forktex chat`` Click command and the
+    bare-``forktex`` menu's free-form-text route. The ``initial_message``
+    arg (when set) is auto-submitted as the first user turn — that's
+    how typing free-form text at the menu becomes the opening turn of
+    a chat session.
     """
     project_root = project or _get_project_root()
 
@@ -130,7 +149,13 @@ async def chat(project, desktop):
     )
 
     try:
-        await run_chat(agent_loop, tool_server, project_root, seed_welcome=seed)
+        await run_chat(
+            agent_loop,
+            tool_server,
+            project_root,
+            seed_welcome=seed,
+            initial_message=initial_message,
+        )
     finally:
         try:
             await client.close()

@@ -175,8 +175,15 @@ def build_app(
     agent_loop: Any,
     tool_server: Any,
     project_root: str,
+    *,
+    initial_message: Optional[str] = None,
 ) -> Application[str]:
-    """Construct the prompt_toolkit Application for the chat REPL."""
+    """Construct the prompt_toolkit Application for the chat REPL.
+
+    ``initial_message`` (optional): if set, fires automatically as the
+    first user turn once the app starts. Lets the menu route free-form
+    text directly into chat without an extra Enter.
+    """
 
     conversation_buffer = Buffer(read_only=Condition(lambda: True))
     state.buffer = conversation_buffer
@@ -238,7 +245,7 @@ def build_app(
             return False
 
         # Regular chat turn — stream through the agent loop.
-        from forktex_intelligence.streams import SSEEventType
+        from forktex_intelligence import SSEEventType
 
         emit_markup("[bold green]assistant:[/bold green] ")
         try:
@@ -331,6 +338,15 @@ def build_app(
         mouse_support=True,
         style=_STYLE,
     )
+
+    # Auto-fire the first turn when caller passed an initial message.
+    # Pre-populate the input buffer + schedule the same handler the user
+    # would trigger by pressing Enter — keeps a single code path for
+    # input submission.
+    if initial_message:
+        input_buffer.text = initial_message
+        app.create_background_task(handle_submit(input_buffer))
+
     return app
 
 
@@ -343,8 +359,14 @@ async def run_chat(
     project_root: str,
     *,
     seed_welcome: Optional[str] = None,
+    initial_message: Optional[str] = None,
 ) -> str:
-    """Run the chat application until the user exits. Returns the exit reason."""
+    """Run the chat application until the user exits. Returns the exit reason.
+
+    ``initial_message`` (optional): submitted as the first user turn
+    automatically. Used when the menu routes free-form text directly
+    into chat.
+    """
     state = ChatAppState()
     # Preload auth state for the (hidden) cards; the flash after a /login will
     # re-populate this with fresh probes.
@@ -353,7 +375,9 @@ async def run_chat(
     except Exception:
         state.cards = {}
 
-    app = build_app(state, agent_loop, tool_server, project_root)
+    app = build_app(
+        state, agent_loop, tool_server, project_root, initial_message=initial_message
+    )
 
     if seed_welcome:
         app_buffer: Buffer = app.layout.container.children[0].content.buffer  # type: ignore[attr-defined]

@@ -86,7 +86,7 @@ async def status_cmd(project):
         info("Not configured. Run: forktex intelligence connect")
         return
 
-    client = Intelligence(settings.endpoint, settings.api_key)
+    client = Intelligence(endpoint=settings.endpoint, api_key=settings.api_key)
     try:
         health = await client.health()
         whoami = await client.whoami()

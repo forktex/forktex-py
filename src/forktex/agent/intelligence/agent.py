@@ -41,7 +41,11 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Callable, Dict, Optional
 
 from forktex_intelligence import Intelligence
-from forktex_intelligence.streams import SSEEvent, SSEEventType, parse_sse_stream
+from forktex_intelligence import SSEEvent, SSEEventType
+
+# parse_sse_stream is not on the SDK's top-level surface; it's the one
+# documented internal touchpoint until the SDK lifts it.
+from forktex_intelligence.streams import parse_sse_stream
 
 
 @dataclass

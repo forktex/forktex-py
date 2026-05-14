@@ -95,8 +95,7 @@ async def scrape(
             --client-pfx licitatii.p12 --client-passphrase "secret"
     """
     from forktex.agent.intelligence.settings import get_intelligence_settings
-    from forktex_intelligence import Intelligence
-    from forktex_intelligence.streams import SSEEventType
+    from forktex_intelligence import Intelligence, SSEEventType
     from forktex.agent.manager import AgentManager
     from forktex.agent.tools.scraper import StatefulBrowser
     from forktex.agent.scraper.truths import TruthsStore
