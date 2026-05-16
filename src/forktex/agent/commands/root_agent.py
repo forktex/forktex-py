@@ -49,7 +49,7 @@ from forktex.agent.ui.console import console, info, error
 from forktex.core.paths import find_ecosystem_root, get_architecture_dir
 
 
-ECOSYSTEM_COLLECTION = "forktex-ecosystem"
+ECOSYSTEM_SPACE = "forktex-ecosystem"
 
 
 def _load_grounding(root: Path) -> str:
@@ -189,13 +189,11 @@ async def root_agent(root_dir: str | None, task: str | None, agent_type: str):
         from forktex.intelligence import Intelligence
 
         async with Intelligence() as ai:
-            collections = await ai.list_collections()
-            for c in collections.get("data", []):
-                if c.get("name") == ECOSYSTEM_COLLECTION:
-                    rag_available = True
-                    doc_count = c.get("document_count", 0)
-                    info(f"Codebase index ready ({doc_count:,} documents)")
-                    break
+            space = await ai.knowledge.find_space(name=ECOSYSTEM_SPACE)
+            if space is not None:
+                rag_available = True
+                entries = await space.list_entries(limit=200)
+                info(f"Codebase index ready ({len(entries):,} entries)")
 
         if not rag_available:
             info("Codebase not yet indexed. Run: forktex intelligence index-ecosystem")

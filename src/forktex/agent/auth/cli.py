@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import sys
+import uuid
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
@@ -397,19 +398,22 @@ async def connect_intelligence(
                     await intel.login(email, password)
                 except Exception:
                     await intel.register(email, password)
-            # Org discovery: `Intelligence.me()` returns user + orgs in
-            # one round-trip. The list-orgs / create-api-key verbs live
-            # on the underlying client (exposed via `intel.client`) — we
-            # access them through the facade so the only `forktex_*`
-            # symbol forktex-py imports is `Intelligence` itself.
+            # Org discovery: `list_orgs()` returns the user's OrgResponse rows
+            # (Pydantic models, not dicts). Pick the first; for V1.5 multi-org
+            # users will need an explicit `--org-id` (TODO).
+            from forktex_intelligence.client.generated import APIKeyCreateRequest
+
             orgs = await intel.client.list_orgs()
             if not orgs:
                 error("no orgs for this account.")
                 sys.exit(1)
-            org_id = orgs[0]["id"]
+            org_id = str(orgs[0].id)
             intel.set_org(org_id)
-            key_resp = await intel.client.create_api_key("forktex-cli")
-            key = key_resp.get("raw_key", "")
+            key_resp = await intel.client.create_key(
+                uuid.UUID(org_id),
+                body=APIKeyCreateRequest(label="forktex-cli"),
+            )
+            key = key_resp.raw_key
         except Exception as exc:
             await intel.close()
             _render_connect_error("intelligence", url, exc)

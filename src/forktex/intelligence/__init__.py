@@ -32,53 +32,29 @@ Within the forktex CLI, both import paths work:
     from forktex_intelligence import Intelligence
 """
 
-from forktex_intelligence.api import (
-    AvailableModel,
+# Re-export only the SDK symbols this CLI's public surface depends on.
+# Keeping the re-export list tight means a SDK version that drops a
+# rarely-used type from its top-level can't break `from forktex.intelligence
+# import …` — there's just less to break. Callers needing a less-common
+# type should import it directly: ``from forktex_intelligence import X``.
+from forktex_intelligence import (
     Intelligence,
-    Response,
-    StructuredResponse,
-    StreamChunks,
+    IntelligenceSettings,
+    SSEEvent,
+    SSEEventType,
 )
-from forktex_intelligence.config import IntelligenceSettings
 from forktex.agent.intelligence.settings import (
     get_intelligence_settings,
     reset_intelligence_settings,
 )
-from forktex_intelligence.client.client import (
-    ForktexIntelligenceClient,
-    IntelligenceAPIError,
-)
-from forktex_intelligence.client.generated import (
-    ChatMessage,
-    ChatResponse,
-    HealthResponse,
-    StructuredChatResponse,
-    ToolCallInfo,
-    UsageInfo,
-)
-from forktex_intelligence.streams import SSEEvent, SSEEventType
 
 __all__ = [
-    # High-level API
-    "AvailableModel",
+    # High-level API (SDK facade)
     "Intelligence",
-    "Response",
-    "StructuredResponse",
-    "StreamChunks",
     # Configuration
     "IntelligenceSettings",
     "get_intelligence_settings",
     "reset_intelligence_settings",
-    # Low-level client (advanced)
-    "ForktexIntelligenceClient",
-    "IntelligenceAPIError",
-    # Wire-level models (advanced — prefer high-level API)
-    "ChatMessage",
-    "ChatResponse",
-    "HealthResponse",
-    "StructuredChatResponse",
-    "ToolCallInfo",
-    "UsageInfo",
     # Streaming
     "SSEEvent",
     "SSEEventType",

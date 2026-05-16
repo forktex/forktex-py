@@ -352,32 +352,36 @@ class TestCoreLibraryImports:
         assert SSEEvent is not None
 
     def test_intelligence_high_level_api_imports(self):
+        """forktex.intelligence keeps a tight, load-bearing re-export set.
+
+        Callers needing less-common SDK types import them directly from
+        ``forktex_intelligence`` — that keeps this shim resilient against
+        SDK trim-downs of its public surface.
+        """
         from forktex.intelligence import (
             Intelligence,
-            Response,
-            StructuredResponse,
-            StreamChunks,
-            ChatMessage,
-            ToolCallInfo,
+            IntelligenceSettings,
+            SSEEvent,
+            SSEEventType,
         )
 
         assert Intelligence is not None
-        assert Response is not None
-        assert StructuredResponse is not None
-        assert StreamChunks is not None
-        assert ChatMessage is not None
-        assert ToolCallInfo is not None
+        assert IntelligenceSettings is not None
+        assert SSEEvent is not None
+        assert SSEEventType is not None
 
     def test_standalone_intelligence_imports(self):
         """Verify that forktex_intelligence standalone package imports work."""
         from forktex_intelligence import (
             Intelligence,
-            Response,
+            Inputs,
+            Outputs,
             IntelligenceSettings,
         )
 
         assert Intelligence is not None
-        assert Response is not None
+        assert Inputs is not None
+        assert Outputs is not None
         assert IntelligenceSettings is not None
 
     def test_standalone_cloud_imports(self):

@@ -132,6 +132,39 @@ class _MenuCompleter(Completer):
 _session: Optional[PromptSession[str]] = None
 
 
+class _TrackedFileHistory(FileHistory):
+    """``FileHistory`` whose appends route through ``tracked_write``.
+
+    prompt_toolkit's default ``FileHistory`` writes new entries via a
+    bare ``open(path, 'ab')`` — which the ``forktex.graph.io_proxy``
+    audit hook flags as an untracked ``.forktex/`` write on every
+    keystroke that lands in history. This subclass replaces the append
+    with ``tracked_append`` so the write is registered cleanly.
+    """
+
+    def store_string(self, string: str) -> None:  # type: ignore[override]
+        from datetime import datetime
+
+        from forktex.graph.io_proxy import tracked_append
+
+        # Mirror upstream FileHistory's on-disk format so existing
+        # history files keep loading correctly.
+        lines = [f"\n# {datetime.now()}"]
+        lines.extend(f"+{line}" for line in string.split("\n"))
+        try:
+            tracked_append(
+                self.filename,
+                "\n".join(lines),
+                kind="repl_history",
+                writer="forktex.agent.root_loop.menu",
+            )
+        except Exception:
+            # Never let history persistence break the REPL — fall back
+            # to upstream behaviour on any failure (the audit hook will
+            # still warn, but the user keeps typing).
+            super().store_string(string)
+
+
 def _repl_history() -> History:
     """Return a per-user persistent history backing for the REPL.
 
@@ -147,7 +180,7 @@ def _repl_history() -> History:
 
         ensure_global_config_dir()
         history_path = get_global_config_dir() / "repl_history"
-        return FileHistory(str(history_path))
+        return _TrackedFileHistory(str(history_path))
     except OSError:  # read-only home, sandboxed env, etc.
         return InMemoryHistory()
 
@@ -273,7 +306,26 @@ async def run(project: Optional[str] = None) -> None:
             info(f"unrecognised slash command: {slash_head}. try /help")
             continue
 
-        info(f"unrecognised: {choice!r}. try /help or press h/r/s/c/i/n/q")
+        # Free-form text → first turn of a chat session. The menu is a
+        # credentials dashboard; the agent is the actual workflow surface.
+        # Anything that isn't a slash command, a hotkey, or a service
+        # name is the user trying to talk to the agent.
+        if intel_ready:
+            result = await _run_chat(str(root), initial_message=choice)
+            if result == _MENU_RETURN_SIGNAL:
+                needs_render = True
+                continue
+            return
+        if intel.configured:
+            info(
+                "intelligence is configured but unreachable — start the service or "
+                "run [bold]/connect intelligence[/bold]"
+            )
+            continue
+        info(
+            "intelligence is not connected — run "
+            "[bold]forktex intelligence connect[/bold] to start chatting"
+        )
 
 
 # ── rendering ────────────────────────────────────────────────────────────────
@@ -536,15 +588,18 @@ async def _show_service_help(
     return True
 
 
-async def _run_chat(project_root: str) -> Optional[str]:
-    """Hand off to the existing intelligence chat REPL."""
-    from forktex.agent.intelligence.cli.chat import chat as chat_cmd
+async def _run_chat(
+    project_root: str, *, initial_message: Optional[str] = None
+) -> Optional[str]:
+    """Hand off to the chat REPL via the shared session helper.
 
-    ctx = click.get_current_context(silent=True)
-    if ctx is None:
-        return None
+    ``initial_message`` (optional) becomes the first user turn — used
+    when the menu routes free-form text directly into chat.
+    """
+    from forktex.agent.intelligence.cli.chat import start_chat_session
+
     try:
-        await ctx.invoke(chat_cmd, project=project_root)
+        await start_chat_session(project=project_root, initial_message=initial_message)
     except SystemExit:
         return None
     return None

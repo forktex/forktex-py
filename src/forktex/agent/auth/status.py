@@ -92,7 +92,7 @@ async def _probe_intelligence(state: AuthState) -> None:
     from forktex.agent.intelligence.settings import load_intelligence_settings
 
     settings = load_intelligence_settings()
-    client = Intelligence(settings.endpoint, settings.api_key)
+    client = Intelligence(endpoint=settings.endpoint, api_key=settings.api_key)
     try:
         health = await asyncio.wait_for(client.health(), timeout=_PROBE_TIMEOUT_S)
         state.reachable = True

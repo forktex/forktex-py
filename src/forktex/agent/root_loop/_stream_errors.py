@@ -129,7 +129,7 @@ def _as_api_error(exc: BaseException) -> dict | None:
     contexts that don't have the SDK fully wired.
     """
     try:
-        from forktex_intelligence.client.client import IntelligenceAPIError
+        from forktex_intelligence import IntelligenceAPIError
     except Exception:  # pragma: no cover — SDK not available
         return None
 

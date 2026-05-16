@@ -623,14 +623,14 @@ pyyaml = ">=6.0"
 
 [[package]]
 name = "forktex-intelligence"
-version = "0.2.3"
-description = "Standalone Python SDK for the ForkTex Intelligence API — chat, agent runs, embeddings, retrieval, ecosystem indexing"
+version = "1.5.0"
+description = "Unified SDK for the ForkTex Intelligence API — one common interface for chat, vision, embeddings, extract, audio, video and any future modality"
 optional = false
-python-versions = ">=3.12"
+python-versions = "<4.0,>=3.12"
 groups = ["main"]
 files = [
-    {file = "forktex_intelligence-0.2.3-py3-none-any.whl", hash = "sha256:d6e650b445d0502a9e60e913d16b8d517c78c348d7b270dc4191450ad0e903d2"},
-    {file = "forktex_intelligence-0.2.3.tar.gz", hash = "sha256:4bd9500535ce9f12ff1aba03c66767f4238ad75ecdac60464d80dbb25d5447f3"},
+    {file = "forktex_intelligence-1.5.0-py3-none-any.whl", hash = "sha256:70f832316a3b2e53613ed5bf7a5abc22aa858ad6ee6dad5f865ea0fdc8e54578"},
+    {file = "forktex_intelligence-1.5.0.tar.gz", hash = "sha256:60a8c909f5f61ddbb7f58639cb26156646c623e2b8cb88bbbae0c3d165fbd1fb"},
 ]
 
 [package.dependencies]
@@ -2532,4 +2532,4 @@ web = ["fastapi", "uvicorn"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<4.0"
-content-hash = "38e3491880c080e2b4932d493f65ed3ab19c2c1f59a3cf79f8490c71e90bd7ba"
+content-hash = "b8d998dc82152ae97ac230d54410e0a5113fb0e45ae23ca027fb66df4bd8c426"

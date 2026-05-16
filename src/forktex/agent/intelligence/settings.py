@@ -36,7 +36,7 @@ import os
 from typing import Any, Optional
 
 from forktex_cloud import paths as _cloud_paths
-from forktex_intelligence.config import IntelligenceSettings
+from forktex_intelligence import IntelligenceSettings
 
 # Cached settings
 _settings: Optional[IntelligenceSettings] = None

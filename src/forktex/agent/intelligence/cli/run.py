@@ -66,8 +66,7 @@ async def run(task, project, agent_type, desktop):
         forktex run --agent-type researcher "What testing patterns does this project use?"
     """
     from forktex.agent.intelligence.settings import get_intelligence_settings
-    from forktex_intelligence import Intelligence
-    from forktex_intelligence.streams import SSEEventType
+    from forktex_intelligence import Intelligence, SSEEventType
     from forktex.agent.manager import AgentManager
 
     project_root = project or _get_project_root()
@@ -144,7 +143,7 @@ async def run(task, project, agent_type, desktop):
         info(f"Task completed. Agent: {process.id[:8]}...")
 
     except Exception as e:
-        from forktex_intelligence.client.client import IntelligenceAPIError
+        from forktex_intelligence import IntelligenceAPIError
 
         if isinstance(e, IntelligenceAPIError):
             error(f"API error ({e.status_code}): {e.detail}")

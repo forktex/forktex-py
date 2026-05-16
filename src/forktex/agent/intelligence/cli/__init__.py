@@ -47,7 +47,6 @@ from forktex.agent.auth import (
 )
 from forktex.agent.commands.index_ecosystem import index_ecosystem
 from forktex.agent.intelligence.cli.chat import ask
-from forktex.agent.intelligence.cli.orchestra import orchestra
 from forktex.agent.intelligence.cli.run import run
 from forktex.agent.scraper.cli import scrape
 from forktex.agent.ui.console import console, error, info
@@ -86,7 +85,7 @@ async def status_cmd(project):
         info("Not configured. Run: forktex intelligence connect")
         return
 
-    client = Intelligence(settings.endpoint, settings.api_key)
+    client = Intelligence(endpoint=settings.endpoint, api_key=settings.api_key)
     try:
         health = await client.health()
         whoami = await client.whoami()
@@ -113,7 +112,6 @@ intelligence.add_command(ask)
 intelligence.add_command(run)
 intelligence.add_command(scrape)
 intelligence.add_command(index_ecosystem)
-intelligence.add_command(orchestra)
 intelligence.add_command(_intel_connect)
 intelligence.add_command(_intel_disconnect)
 
