@@ -34,7 +34,6 @@ from forktex.agent.intelligence.settings import (
     reset_intelligence_settings,
 )
 from forktex_intelligence.streams import SSEEvent, SSEEventType, parse_sse_stream
-from forktex_intelligence.api import Response, StructuredResponse
 
 
 # ============================================================================
@@ -283,49 +282,6 @@ class TestSSEParsing:
         events = [e async for e in parse_sse_stream(lines)]
         assert len(events) == 1
         assert events[0].data == {"text": "plain text data"}
-
-
-# ============================================================================
-# Response / StructuredResponse models
-# ============================================================================
-
-
-class TestResponseModel:
-    def test_basic(self):
-        r = Response(text="hello")
-        assert r.text == "hello"
-        assert r.total_tokens == 0
-        assert str(r) == "hello"
-
-    def test_with_tokens(self):
-        r = Response(text="hi", input_tokens=10, output_tokens=5)
-        assert r.total_tokens == 15
-
-    def test_serialisation(self):
-        r = Response(text="test", model="gpt-4", input_tokens=1, output_tokens=2)
-        d = r.model_dump()
-        assert d["text"] == "test"
-        assert d["model"] == "gpt-4"
-        r2 = Response.model_validate(d)
-        assert r2.text == "test"
-
-
-class TestStructuredResponseModel:
-    def test_basic(self):
-        r = StructuredResponse(data={"name": "John", "age": 30})
-        assert r["name"] == "John"
-        assert r.get("age") == 30
-        assert r.get("missing", "default") == "default"
-
-    def test_total_tokens(self):
-        r = StructuredResponse(data={}, input_tokens=5, output_tokens=10)
-        assert r.total_tokens == 15
-
-    def test_serialisation(self):
-        r = StructuredResponse(data={"key": "val"}, model="m")
-        d = r.model_dump()
-        r2 = StructuredResponse.model_validate(d)
-        assert r2.data == {"key": "val"}
 
 
 # ============================================================================

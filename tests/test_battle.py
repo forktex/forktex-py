@@ -374,12 +374,14 @@ class TestCoreLibraryImports:
         """Verify that forktex_intelligence standalone package imports work."""
         from forktex_intelligence import (
             Intelligence,
-            Response,
+            Inputs,
+            Outputs,
             IntelligenceSettings,
         )
 
         assert Intelligence is not None
-        assert Response is not None
+        assert Inputs is not None
+        assert Outputs is not None
         assert IntelligenceSettings is not None
 
     def test_standalone_cloud_imports(self):

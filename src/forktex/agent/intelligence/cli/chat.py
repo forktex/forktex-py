@@ -173,6 +173,7 @@ async def ask(prompt, project):
         forktex ask "What files are in this project?"
     """
     from forktex.intelligence import Intelligence
+    from forktex_intelligence import Inputs
 
     project_root = project or _get_project_root()
 
@@ -189,19 +190,22 @@ async def ask(prompt, project):
             endpoint=settings.endpoint, api_key=settings.api_key
         ) as ai:
             with spinner("Thinking..."):
-                response = await ai.chat(prompt)
+                model = await ai.find_model(destination="chat")
+                if model is None:
+                    error("No chat-capable model available in the catalog.")
+                    sys.exit(1)
+                out = await ai.invoke(model, Inputs.user(prompt))
 
-            if response.text:
+            if out.text:
                 console.print()
                 console.print("[bold green]Assistant:[/bold green]")
-                render_markdown(response.text)
+                render_markdown(out.text)
             else:
                 error("Empty response from Intelligence API")
 
-            if response.total_tokens:
-                info(
-                    f"Tokens: {response.input_tokens} in / {response.output_tokens} out"
-                )
+            usage = out.usage
+            if usage is not None and getattr(usage, "totalTokens", 0):
+                info(f"Tokens: {usage.inputTokens} in / {usage.outputTokens} out")
 
     except RuntimeError as e:
         error(str(e))

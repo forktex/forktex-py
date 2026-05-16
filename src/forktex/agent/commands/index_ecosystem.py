@@ -24,14 +24,14 @@
 """forktex intelligence index-ecosystem — Index ecosystem knowledge for RAG.
 
 Indexes AGENTS.md files, ecosystem.json, architecture data, and library
-definitions into an Intelligence API collection for semantic search by agents.
+definitions into a knowledge Space for semantic search by agents.
 
 This creates the "ecosystem brain" — agents can query it to understand
 the full FORKTEX factory before taking action.
 
 Usage:
     forktex intelligence index-ecosystem
-    forktex intelligence index-ecosystem --collection forktex-ecosystem
+    forktex intelligence index-ecosystem --space forktex-ecosystem
     forktex intelligence index-ecosystem --dir ~/Desktop/forktex
 """
 
@@ -84,11 +84,13 @@ def _discover_agents_md(root: Path) -> list[tuple[str, str]]:
 
 @click.command(name="index-ecosystem")
 @click.option("--dir", "-d", "root_dir", default=None, help="Ecosystem root directory")
-@click.option("--collection", "-c", default=COLLECTION_NAME, help="Collection name")
+@click.option(
+    "--space", "-c", "space_name", default=COLLECTION_NAME, help="Knowledge space name"
+)
 @click.option(
     "--dry-run", is_flag=True, help="Show what would be indexed without uploading"
 )
-async def index_ecosystem(root_dir: str | None, collection: str, dry_run: bool):
+async def index_ecosystem(root_dir: str | None, space_name: str, dry_run: bool):
     """Index ecosystem knowledge into Intelligence API for RAG queries.
 
     Creates a vector collection containing all AGENTS.md files, ecosystem
@@ -151,58 +153,44 @@ async def index_ecosystem(root_dir: str | None, collection: str, dry_run: bool):
         async with Intelligence() as ai:
             info("Connected to Intelligence API")
 
-            # Create or find collection
-            collections_resp = await ai.list_collections()
-            coll_list = collections_resp.get(
-                "collections", collections_resp.get("data", [])
-            )
-            existing_coll = None
-            for c in coll_list:
-                if c.get("name") == collection:
-                    existing_coll = c
-                    break
-
-            if existing_coll:
-                coll_id = existing_coll["id"]
-                info(f"Using existing collection: {collection} ({coll_id})")
-                # Delete existing documents to refresh
-                docs_resp = await ai.list_documents(coll_id)
-                doc_list = docs_resp.get("documents", docs_resp.get("data", []))
-                for doc in doc_list:
-                    await ai.delete_document(coll_id, doc["id"])
-                info(f"Cleared {len(doc_list)} old documents")
+            # Find or create the knowledge space
+            space = await ai.knowledge.find_space(name=space_name)
+            if space is None:
+                space = await ai.knowledge.create_space(space_name, template="text-kb")
+                info(f"Created knowledge space: {space_name} ({space.id})")
             else:
-                result = await ai.create_collection(collection)
-                coll_id = result["id"]
-                info(f"Created collection: {collection} ({coll_id})")
+                info(f"Using existing knowledge space: {space_name} ({space.id})")
 
-            # Upload each file
+            # Idempotent upload: each file's relative path is the external_id,
+            # so re-running the command updates entries in place rather than
+            # creating duplicates.
             uploaded = 0
             for rel_path, label in existing:
                 full = root / rel_path
-                content = full.read_bytes()
+                content_bytes = full.read_bytes()
                 filename = f"{label}--{Path(rel_path).name}"
 
-                content_type = (
-                    "application/json"
-                    if rel_path.endswith(".json")
-                    else "text/markdown"
-                )
+                try:
+                    text = content_bytes.decode("utf-8")
+                except UnicodeDecodeError:
+                    console.print(f"  [yellow]Skip[/yellow] {filename}: binary file")
+                    continue
 
                 try:
-                    await ai.upload_document(
-                        coll_id,
-                        content,
-                        filename,
-                        content_type=content_type,
+                    await space.upsert(
+                        kind="document",
+                        external_id=rel_path,
+                        content=text,
+                        tags=[label],
+                        origin="sync:ecosystem",
                     )
                     uploaded += 1
-                    console.print(f"  [green]Uploaded[/green] {filename}")
+                    console.print(f"  [green]Upserted[/green] {filename}")
                 except Exception as e:
                     console.print(f"  [red]Failed[/red] {filename}: {e}")
 
             console.print(
-                f"\n[bold green]Indexed {uploaded}/{len(existing)} files into '{collection}'[/bold green]"
+                f"\n[bold green]Indexed {uploaded}/{len(existing)} files into '{space_name}'[/bold green]"
             )
             console.print("\nAgents can now search this knowledge:")
             console.print(

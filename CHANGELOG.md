@@ -10,6 +10,27 @@ _(nothing yet)_
 
 ### Changed
 
+- **Upgraded `forktex-intelligence` constraint from `^0.2.3` to `^1.5.0`.**
+  Intelligence shipped a hard-break V1.5 release: `intel.ai.*` removed
+  (stateless AI surfaces lifted onto `Intelligence` root); flat
+  `intel.knowledge.add(text, space_id=...)` methods replaced by
+  `Space` / `KnowledgeEntry` entity wrappers returned from
+  `intel.knowledge.create_space(...)`; legacy `Response` /
+  `StructuredResponse` types dropped; wire format is camelCase
+  end-to-end. forktex-py migrations applied:
+  `intelligence/cli/chat.py` (`ai.chat(prompt)` →
+  `ai.invoke(model, Inputs.user(prompt))`),
+  `intelligence/cli/__init__.py` + deletion of
+  `intelligence/cli/orchestra.py` (backend pillar removed),
+  `agent/commands/index_ecosystem.py` (Space-based pattern with
+  idempotent `external_id` upsert), `agent/commands/root_agent.py`
+  (`list_collections()` → `knowledge.find_space()` + `list_entries()`),
+  `agent/auth/cli.py` (low-level `intel.client.create_key(...)` with
+  `APIKeyCreateRequest` instead of dropped `create_api_key` shortcut;
+  `key_resp.raw_key` attribute access). Test fixtures pruned of legacy
+  `Response`/`StructuredResponse` types. See
+  intelligence/CHANGELOG.md for the full V1.5 surface delta.
+
 - **Cloud SDK 0.3.0 retires the `ForktexCloudClient` long-form name.**
   `Cloud` is now the only exported client class — the `Cloud =
   ForktexCloudClient` alias has been removed from the SDK and from
