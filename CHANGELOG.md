@@ -6,6 +6,10 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 
 _(nothing yet)_
 
+## [0.5.2] — 2026-05-17
+
+- `forktex --version` now reads from package metadata (was hardcoded; reported `0.5.0` on the 0.5.1 wheel).
+
 ## [0.5.1] — 2026-05-17
 
 - Bumped `forktex-intelligence` to `^1.5.0`; migrated to the V1.5 SDK shape.

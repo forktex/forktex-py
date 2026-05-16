@@ -41,7 +41,13 @@ CLI:
     forktex chat
 """
 
-__version__ = "0.5.0"
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+try:
+    __version__ = _pkg_version("forktex")
+except PackageNotFoundError:
+    __version__ = "0.0.0+unknown"
+
 __author__ = "Forktex Team"
 
 # Core library exports — always available, no optional deps
