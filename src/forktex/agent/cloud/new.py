@@ -81,7 +81,13 @@ async def new(ctx, template_slug, name, domain, env, list_only):
     overrides: dict | None = None
     if domain:
         overrides = {
-            "cloud": {"gateway": {"domains": [{"host": domain, "primary": True}]}}
+            "cloud": {
+                "infrastructure": {
+                    "servers": [
+                        {"id": "primary", "gateway": {"domain": domain}}
+                    ]
+                }
+            }
         }
 
     with Cloud.from_context(cloud_ctx) as client:
@@ -191,7 +197,13 @@ async def new(ctx, template_slug, name, domain, env, list_only):
         overrides: dict = {}
         if domain:
             overrides = {
-                "cloud": {"gateway": {"domains": [{"host": domain, "primary": True}]}}
+                "cloud": {
+                    "infrastructure": {
+                        "servers": [
+                            {"id": "primary", "gateway": {"domain": domain}}
+                        ]
+                    }
+                }
             }
 
         resp = client.create_from_template(

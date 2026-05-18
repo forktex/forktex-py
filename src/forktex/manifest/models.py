@@ -99,7 +99,12 @@ class ServiceDef(ForkTexModel):
 
 
 class InfrastructureDef(ForkTexModel):
-    """Target infrastructure for deployment."""
+    """Per-server infrastructure spec — provider sizing + region + OS image.
+
+    V1 multi-server: this is the base for each entry in
+    :class:`InfrastructureBundle.servers`. Single-server manifests have one
+    entry; multi-server manifests have N entries discriminated by ``id``.
+    """
 
     provider: str = ""
     flavour: str = ""
@@ -120,7 +125,13 @@ class DeploymentDef(ForkTexModel):
 
 
 class GatewayDomain(ForkTexModel):
-    """A domain entry."""
+    """Legacy pre-V1 domain entry.
+
+    Kept for backward-compat of consumers that imported ``GatewayDomain``
+    directly from forktex-py before the V1 multi-server reshape. V1
+    manifests use ``gateway.domain: str`` + ``gateway.sans: list[str]`` —
+    see :class:`GatewayDef`.
+    """
 
     host: str
     primary: bool = False
@@ -130,19 +141,39 @@ class SSLConfig(ForkTexModel):
     """SSL/TLS configuration for the gateway."""
 
     enabled: bool = True
-    provider: Literal["letsencrypt", "custom", "none"] = "letsencrypt"
+    provider: Literal["letsencrypt", "zerossl", "custom", "none"] = "letsencrypt"
     challenge: str = "dns-01"
     dns_provider: str | None = Field(None, alias="dnsProvider")
     email: str = ""
     cert_path: str | None = Field(None, alias="certPath")
     key_path: str | None = Field(None, alias="keyPath")
+    acme_server: str | None = Field(None, alias="acmeServer")
+    eab_kid: str | None = Field(None, alias="eabKid")
+    eab_key: str | None = Field(None, alias="eabKey")
 
 
 class GatewayDef(ForkTexModel):
-    """Gateway configuration."""
+    """Per-server public-edge configuration (V1 multi-server)."""
 
-    domains: list[GatewayDomain | str] = []
+    domain: str = ""
+    sans: list[str] = []
     ssl: SSLConfig | None = None
+
+
+class ServerSpec(InfrastructureDef):
+    """Multi-server infrastructure entry — extends :class:`InfrastructureDef`
+    with ``id``, ``primary``, and per-server ``gateway``.
+    """
+
+    id: str = "primary"
+    primary: bool = False
+    gateway: GatewayDef | None = None
+
+
+class InfrastructureBundle(ForkTexModel):
+    """Container for ``infrastructure.servers[]``."""
+
+    servers: list[ServerSpec] = []
 
 
 class ObservabilityDef(ForkTexModel):
@@ -166,14 +197,17 @@ class PackageDef(ForkTexModel):
 
 
 class CloudManifestDef(ForkTexModel):
-    """Cloud-specific deployment data under ``forktex.json.cloud``."""
+    """Cloud-specific deployment data under ``forktex.json.cloud``.
+
+    V1 multi-server: ``infrastructure`` wraps a list of servers, each with
+    its own per-server ``gateway``. No top-level ``gateway`` field.
+    """
 
     api_version: str | None = Field(None, alias="apiVersion")
     kind: str | None = None
     metadata: MetadataDef | None = None
-    infrastructure: InfrastructureDef | None = None
+    infrastructure: InfrastructureBundle | None = None
     deployment: DeploymentDef | None = None
-    gateway: GatewayDef | None = None
     services: list[ServiceDef] = []
     observability: ObservabilityDef | None = None
 
@@ -228,11 +262,16 @@ class ForktexManifest(ForkTexModel):
     @computed_field
     @property
     def primary_domain(self) -> str | None:
-        gateway = self.cloud.gateway if self.cloud else self.gateway
-        if not gateway or not gateway.domains:
-            return None
-        d = gateway.domains[0]
-        return d.host if isinstance(d, GatewayDomain) else d
+        if self.cloud and self.cloud.infrastructure:
+            for srv in self.cloud.infrastructure.servers:
+                if srv.primary and srv.gateway:
+                    return srv.gateway.domain or None
+            if self.cloud.infrastructure.servers:
+                gw = self.cloud.infrastructure.servers[0].gateway
+                return gw.domain if gw else None
+        if self.gateway and self.gateway.domain:
+            return self.gateway.domain
+        return None
 
     @classmethod
     def load(cls, path: Path, *, env: str | None = None) -> ForktexManifest:
@@ -269,11 +308,6 @@ class ForktexManifest(ForkTexModel):
             if any(key in raw for key in cloud_keys):
                 cloud_raw = {key: raw.pop(key) for key in cloud_keys if key in raw}
                 raw["cloud"] = cloud_raw
-        if cloud_raw and "gateway" in cloud_raw and "domains" in cloud_raw["gateway"]:
-            cloud_raw["gateway"]["domains"] = [
-                {"host": d, "primary": False} if isinstance(d, str) else d
-                for d in cloud_raw["gateway"]["domains"]
-            ]
         return cls.model_validate(raw)
 
     def to_dict(self) -> dict[str, Any]:

@@ -30,11 +30,13 @@ from forktex.manifest.models import (
     ForktexManifest,
     GatewayDef,
     GatewayDomain,
+    InfrastructureBundle,
     InfrastructureDef,
     MetadataDef,
     ObservabilityDef,
     PackageDef,
     SSLConfig,
+    ServerSpec,
     ServiceDef,
 )
 
@@ -44,6 +46,8 @@ __all__ = [
     "MetadataDef",
     "ServiceDef",
     "InfrastructureDef",
+    "InfrastructureBundle",
+    "ServerSpec",
     "DeploymentDef",
     "GatewayDomain",
     "SSLConfig",

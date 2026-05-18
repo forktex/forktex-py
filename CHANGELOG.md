@@ -6,6 +6,17 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 
 _(nothing yet)_
 
+## [0.6.0] — 2026-05-17
+
+- **Breaking**: forktex-cloud SDK upgrade to 1.0.0 — V1 multi-server manifest schema.
+  - `cloud.gateway` removed at manifest top level; per-server gateways under `infrastructure.servers[].gateway`.
+  - `gateway.domains: [{host, primary}]` collapsed to `gateway.domain: str` + `gateway.sans: list[str]`.
+  - `infrastructure.{provider,flavour,region,image}` moved into `infrastructure.servers[].*` (wrapped in `InfrastructureBundle`).
+  - New typedefs exposed: `InfrastructureBundle`, `ServerSpec`. Legacy `GatewayDomain` retained for back-compat (re-exported, unused internally).
+  - `SSLConfig` gained `zerossl` provider literal + `acme_server`/`eab_kid`/`eab_key` fields.
+  - `ForktexManifest.primary_domain` now reads `infrastructure.servers[primary].gateway.domain`.
+  - `forktex cloud new --domain <D>` builds V1-shaped overrides under `infrastructure.servers[primary].gateway`.
+
 ## [0.5.2] — 2026-05-17
 
 - `forktex --version` now reads from package metadata (was hardcoded; reported `0.5.0` on the 0.5.1 wheel).
