@@ -21,11 +21,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Tests for forktex.agent.session and forktex.agent.process."""
+"""Tests for forktex.agent.engine session + process."""
 
-from forktex.agent.types import DEVELOPER, RESEARCHER
-from forktex.agent.session import Session
-from forktex.agent.process import AgentProcess, AgentStatus
+from forktex.agent.engine.types import DEVELOPER, RESEARCHER
+from forktex.agent.engine import Session
+from forktex.agent.engine import AgentProcess, AgentStatus
 
 
 class TestSession:

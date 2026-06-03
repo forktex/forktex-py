@@ -48,7 +48,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, Literal
 
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
 
 
 _log = logging.getLogger("forktex.runtime.instance")
@@ -103,11 +103,11 @@ def new_run_id() -> str:
 
 
 def global_instances_dir() -> Path:
-    return _cloud_paths.global_dir() / INSTANCE_DIRNAME
+    return _cloud_paths.global_instances_dir()
 
 
 def project_instances_dir(project_root: Path) -> Path:
-    return _cloud_paths.project_dir(project_root) / INSTANCE_DIRNAME
+    return _cloud_paths.instances_dir(project_root)
 
 
 def _record_filename(run_id: str) -> str:

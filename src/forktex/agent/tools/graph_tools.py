@@ -42,7 +42,7 @@ from typing import Any, Awaitable, Callable
 from forktex.agent.tools.base import Tool, ToolResult
 from forktex.graph.models import Graph
 from forktex.graph.query import (
-    ecosystem_fsd_matrix,
+    workspace_fsd_matrix,
     files_touched_recently,
     find_modules,
     find_package_by_path,
@@ -273,12 +273,12 @@ def _validate_path_body(_project_root: Path) -> ToolBody:
     return _h
 
 
-def _ecosystem_matrix_body(project_root: Path) -> ToolBody:
+def _workspace_matrix_body(project_root: Path) -> ToolBody:
     async def _h(
         base_dir: str | None = None, include_nested: bool = False
     ) -> ToolResult:
         base = Path(base_dir).resolve() if base_dir else project_root.parent
-        rows = ecosystem_fsd_matrix(base, include_nested=include_nested)
+        rows = workspace_fsd_matrix(base, include_nested=include_nested)
         lines = [
             f"- {r.project_name:20s} fsd={r.fsd_level}  "
             f"pkgs={r.package_count} domains={r.domain_count} "
@@ -451,7 +451,7 @@ _TOOL_SPECS: tuple[_ToolSpec, ...] = (
         body_factory=_validate_path_body,
     ),
     _ToolSpec(
-        name="ecosystem_matrix",
+        name="workspace_matrix",
         description=(
             "FSD level + package counts for every forktex.json project "
             "under a base directory. Defaults to the parent of the current "
@@ -466,7 +466,7 @@ _TOOL_SPECS: tuple[_ToolSpec, ...] = (
                 "include_nested": {"type": "boolean", "default": False},
             }
         ),
-        body_factory=_ecosystem_matrix_body,
+        body_factory=_workspace_matrix_body,
     ),
 )
 

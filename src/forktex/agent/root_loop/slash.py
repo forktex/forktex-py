@@ -71,7 +71,7 @@ class SlashContext:
     """Shared state the slash handlers act on."""
 
     app_state: Any  # ChatAppState — avoid circular import via Any
-    agent_loop: Any  # LocalAgentLoop
+    agent_loop: Any  # forktex.agent.engine.AgentLoop
     tool_server: Any  # ToolServer
     project_root: str
     emit: Callable[[str], None]  # push a pre-formatted string into the scroll buffer

@@ -14,10 +14,8 @@ htmlcov/
 # local Claude Code state (per-user)
 .claude/
 
-# generated forktex state (per V1 spec)
+# forktex — only .forktex/knowledge and .version are committed
 .forktex/**
 !.forktex/.version
-
-# forktex — generated + secrets (keep .forktex/.version committed)
-.forktex/**
-!.forktex/.version
+!.forktex/knowledge/
+!.forktex/knowledge/**

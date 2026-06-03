@@ -26,7 +26,7 @@
 Every write that targets a ``.forktex/`` directory (project-local or the
 global ``~/.forktex/``) routes through :func:`tracked_write`. The proxy:
 
-1. Validates the destination against :mod:`forktex.graph.structure` —
+1. Validates the destination against :mod:`forktex.substrate.spec` —
    unknown paths are rejected (legal/integrity), unless the caller opts
    into lenient mode or the ``FORKTEX_STRUCTURE_LENIENT=1`` env var is set.
 2. Performs an atomic write (tempfile + ``os.replace``) so partial writes
@@ -48,10 +48,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
 
 from forktex.graph import registry as _registry
-from forktex.graph.structure import EntrySpec, Scope, validate_path
+from forktex.substrate.spec import EntrySpec, Scope, validate_path
 
 
 _log = logging.getLogger("forktex.graph.io_proxy")
@@ -161,7 +161,7 @@ def _record_classified(
             kind=kind,
             writer=writer,
         )
-    elif rel_path != _registry.REGISTRY_FILENAME:
+    elif rel_path != _registry.REGISTRY_REL_PATH:
         # Skip recursive recording when writing the registry itself.
         _registry.record_touch(
             project_root=None,

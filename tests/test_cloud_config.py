@@ -83,17 +83,17 @@ class TestCloudContext:
 
 class TestCloudSettings:
     def test_load_empty(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("forktex_cloud.paths.global_dir", lambda: tmp_path)
+        monkeypatch.setattr("forktex.substrate.paths.global_dir", lambda: tmp_path)
         monkeypatch.setattr(
-            "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
+            "forktex.substrate.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
         )
         ctx = load_cloud_context()
         assert ctx.controller is None
 
     def test_load_global(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("forktex_cloud.paths.global_dir", lambda: tmp_path)
+        monkeypatch.setattr("forktex.substrate.paths.global_dir", lambda: tmp_path)
         monkeypatch.setattr(
-            "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
+            "forktex.substrate.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
         )
         (tmp_path / "cloud.json").write_text(
             json.dumps(
@@ -110,9 +110,9 @@ class TestCloudSettings:
         assert ctx.org_id == "org-1"
 
     def test_load_project_overrides_global(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("forktex_cloud.paths.global_dir", lambda: tmp_path)
+        monkeypatch.setattr("forktex.substrate.paths.global_dir", lambda: tmp_path)
         monkeypatch.setattr(
-            "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
+            "forktex.substrate.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
         )
         # Global config
         (tmp_path / "cloud.json").write_text(
@@ -127,9 +127,9 @@ class TestCloudSettings:
         # Project config
         project_root = tmp_path / "myproject"
         project_root.mkdir()
-        proj_config = project_root / ".forktex"
-        proj_config.mkdir()
-        (proj_config / "cloud.json").write_text(
+        proj_config = project_root / ".forktex" / "secrets" / "cloud"
+        proj_config.mkdir(parents=True)
+        (proj_config / "config.json").write_text(
             json.dumps(
                 {
                     "current_project": "local-proj",
@@ -143,9 +143,10 @@ class TestCloudSettings:
         assert ctx.current_server == "srv-1"
 
     def test_save_global(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("forktex_cloud.paths.global_dir", lambda: tmp_path)
+        monkeypatch.setattr("forktex.substrate.paths.global_dir", lambda: tmp_path)
         monkeypatch.setattr(
-            "forktex_cloud.paths.global_cloud_file", lambda: tmp_path / "cloud.json"
+            "forktex.substrate.paths.global_cloud_file",
+            lambda: tmp_path / "secrets" / "cloud.json",
         )
         ctx = CloudContext(
             controller="http://saved",
@@ -153,7 +154,7 @@ class TestCloudSettings:
             org_id="org-x",
         )
         save_cloud_context_global(ctx)
-        saved = json.loads((tmp_path / "cloud.json").read_text())
+        saved = json.loads((tmp_path / "secrets" / "cloud.json").read_text())
         assert saved["controller"] == "http://saved"
         assert saved["access_token"] == "token-abc"
 
@@ -164,7 +165,9 @@ class TestCloudSettings:
             current_environment="staging",
         )
         save_cloud_context_project(ctx, tmp_path)
-        saved = json.loads((tmp_path / ".forktex" / "cloud.json").read_text())
+        saved = json.loads(
+            (tmp_path / ".forktex" / "secrets" / "cloud" / "config.json").read_text()
+        )
         assert saved["current_project"] == "proj-1"
         assert saved["current_server"] == "srv-2"
         assert saved["current_environment"] == "staging"

@@ -41,7 +41,7 @@ import httpx
 
 import forktex.fsd  # noqa: F401  warm-up; see test_manifest_overlay rationale
 
-from forktex.agent.root_loop._stream_errors import classify
+from forktex.agent.engine.stream_errors import classify
 from forktex.agent.root_loop.menu import _repl_history
 from forktex.agent.root_loop.slash import SLASH_COMMANDS
 

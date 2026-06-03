@@ -44,10 +44,10 @@ sync: ## Not applicable: forktex-py has no schema-derived artifacts (pure Python
 	@echo 'sync: not applicable for forktex-py (no codegen artifacts to keep current)'
 
 docs: ## Project documentation exists and is current — architecture diagrams, API reference, runbooks, ADRs
-	@echo "$(PROJECT_NAME): docs — declare fsd.atoms.\"docs@<kind>\" overrides (e.g. docs@arch via 'forktex graph c4')."
+	@echo "$(PROJECT_NAME): docs — declare fsd.atoms.\"docs@<kind>\" overrides (e.g. docs@arch via 'forktex arch c4')."
 
 manual: ## Build the system-wide architecture + AI context manual from the project graph (humans + agents).
-	poetry run forktex manual build
+	poetry run forktex arch build
 
 install: ## Project bootstraps to a runnable state on a fresh machine — auto-detects the OS, missing tools (poetry/uv/.venv/node_modules/pyright), and resolves them
 	@if command -v poetry >/dev/null 2>&1; then \
@@ -85,7 +85,7 @@ clean: ## Build artifacts and caches removable from project tree
 	find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null; true
 	find . -type f -name .coverage -delete 2>/dev/null; true
 
-acceptance: ## Install the published wheel into a fresh venv and battle-test the CLI end-to-end (forktex --version, every subcommand --help, fsd check + graph build against forktex-py itself)
+acceptance: ## Install the published wheel into a fresh venv and battle-test the CLI end-to-end (forktex --version, every subcommand --help, fsd check + arch build against forktex-py itself)
 	@if ! ls dist/forktex-*.whl >/dev/null 2>&1; then echo '  building wheel first...'; $(MAKE) build; fi
 	@command -v python3.14 >/dev/null 2>&1 || { echo '  ✗ no python3.14 on PATH (the published wheel pins Python ≥ 3.14)' >&2; exit 1; }
 	@rm -rf /tmp/forktex-accept-venv && python3.14 -m venv /tmp/forktex-accept-venv
@@ -93,10 +93,10 @@ acceptance: ## Install the published wheel into a fresh venv and battle-test the
 	@WHEEL=$$(ls -t dist/forktex-*.whl | head -1) && /tmp/forktex-accept-venv/bin/pip install --quiet $$WHEEL && echo "  installed: $$WHEEL"
 	@/tmp/forktex-accept-venv/bin/forktex --version
 	@/tmp/forktex-accept-venv/bin/forktex --help > /dev/null && echo '  ✓ forktex --help'
-	@for sub in agents clean cloud fsd graph intelligence manual network serve status; do /tmp/forktex-accept-venv/bin/forktex $$sub --help > /dev/null && echo "  ✓ forktex $$sub --help"; done
+	@for sub in chat run knowledge arch cloud fsd auth clean; do /tmp/forktex-accept-venv/bin/forktex $$sub --help > /dev/null && echo "  ✓ forktex $$sub --help"; done
 	@echo '' && echo '── battle: forktex on forktex-py ──'
 	@/tmp/forktex-accept-venv/bin/forktex fsd check 2>&1 | tail -3
-	@/tmp/forktex-accept-venv/bin/forktex graph build 2>&1 | tail -2
+	@/tmp/forktex-accept-venv/bin/forktex arch build 2>&1 | tail -2
 	@rm -rf /tmp/forktex-accept-venv
 	@echo '' && echo 'acceptance: forktex CLI installs + invokes correctly'
 

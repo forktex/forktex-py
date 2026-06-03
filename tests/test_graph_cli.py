@@ -21,15 +21,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""CLI-level tests for the new ``forktex graph`` subcommands:
-diff, importers, modules, package, recent."""
+"""CLI-level tests for the ``forktex arch`` subcommands:
+diff, importers, modules, package, recent (merged graph + manual)."""
 
 import json
 
 import pytest
 from asyncclick.testing import CliRunner
 
-from forktex.agent.graph.cli import graph as graph_group
+from forktex.agent.graph.cli import arch as graph_group
 
 
 pytestmark = [pytest.mark.usefixtures("isolated_home"), pytest.mark.asyncio]

@@ -23,13 +23,15 @@
 
 [project]
 name = "forktex"
-version = "0.6.0"
-description = "CLI, agent, architecture, audit, and SDK toolkit for the ForkTex self-managed software factory"
+version = "0.8.0"
+description = "Agentic software-delivery CLI + builtin knowledge base for any software project — chat, ground, recycle, deploy."
 authors = [
     {name = "FORKTEX",email = "info@forktex.com"}
 ]
 readme = "README.md"
-license = "AGPL-3.0-only"
+# Dual-licensed: AGPL-3.0-or-later for OSS use; a proprietary commercial
+# license is also available (see LICENSE + NOTICE; info@forktex.com).
+license = "AGPL-3.0-or-later"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14,<4.0"
 classifiers = [
@@ -49,7 +51,7 @@ classifiers = [
 ]
 dependencies = [
     "forktex-intelligence (>=1.5.0,<2.0.0)",
-    "forktex-cloud (>=1.0.0,<2.0.0)",
+    "forktex-cloud (>=2.1.0,<3.0.0)",
     "forktex-network (>=0.2.3,<0.3.0)",
     "pydantic (>=2.11.10,<3.0.0)",
     "httpx (>=0.27.0,<1.0.0)",
@@ -63,10 +65,15 @@ dependencies = [
     "prompt_toolkit (>=3.0,<4.0)",
     "playwright (>=1.40.0,<2.0.0)",
     "jinja2 (>=3.1.0,<4.0.0)",
+    "forktex-core[fractal] (>=2.3.0,<3.0.0)",
 ]
 
 [project.optional-dependencies]
 web = ["fastapi>=0.115.0", "uvicorn[standard]>=0.30.0"]
+# MCP is an adapter on the knowledge API, not core. One extra: fastapi-mcp
+# mounts MCP-over-HTTP on the FastAPI app AND pulls the `mcp` protocol lib
+# transitively (so the stdio `forktex knowledge mcp` entry works too).
+mcp = ["fastapi-mcp>=0.3.0,<1.0.0", "fastapi>=0.115.0", "uvicorn[standard]>=0.30.0"]
 
 [project.scripts]
 forktex = "forktex.agent.cli:main"

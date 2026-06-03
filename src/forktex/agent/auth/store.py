@@ -32,7 +32,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
 
 from forktex.agent.auth.types import AuthState, Facet
 

@@ -212,6 +212,63 @@ class CloudManifestDef(ForkTexModel):
     observability: ObservabilityDef | None = None
 
 
+class KnowledgeLayerDef(ForkTexModel):
+    """One layer in the project's knowledge composition (``forktex.json.knowledge.layers``).
+
+    Each layer declares **where** to read knowledge from + **which adapter**
+    parses it. The composed view (later layers overlay earlier) is what
+    ``forktex knowledge ask`` / ``build_system_prompt`` ground on. When the
+    enclosing ``KnowledgeConfig.layers`` is unset, the runtime falls back to
+    today's default: the global ``$FORKTEX_DOCS`` (or ``<workspace>/docs``)
+    using the ``docs_corpus`` adapter, then the project's ``.forktex/knowledge``
+    using the ``workspace`` adapter. Set ``layers`` to compose against an
+    arbitrary directory structure — the substrate is workspace-agnostic; the
+    adapter does the format-specific parsing.
+    """
+
+    name: str
+    path: str
+    #: Which adapter loads this layer. ``docs_corpus`` expects the ForkTex docs
+    #: shape (``engineering/manifest.json`` + license-header-prefixed markdown);
+    #: ``workspace`` expects a plain ``nodes/``+``patches/`` fractal workspace
+    #: (the recycle write-target shape).
+    adapter: str = "workspace"
+
+
+class KnowledgeConfig(ForkTexModel):
+    """Project-level knowledge mechanism configuration (``forktex.json.knowledge``).
+
+    All fields are optional with sensible defaults; an absent ``knowledge``
+    block on ``ForktexManifest`` is equivalent to ``KnowledgeConfig()``. The
+    defaults preserve today's behaviour (global docs + ``.forktex/knowledge``
+    overlay, ``pinned`` tag always-inject, 4000-char budget, 40-node index).
+    """
+
+    #: Tag that marks a node as always-inject in grounding. The forktex
+    #: convention is ``"pinned"``; rename per project if needed.
+    pinned_tag: str = Field("pinned", alias="pinnedTag")
+    #: Char budget for the whole knowledge section in the grounded system prompt.
+    grounding_char_budget: int = Field(4_000, alias="groundingCharBudget")
+    #: How many index-tier (non-pinned) nodes to list before truncation.
+    knowledge_limit: int = Field(40, alias="knowledgeLimit")
+    #: Minimum token length for keyword search — 2 keeps high-signal tech
+    #: tokens (``uv``, ``ci``, ``db``); the stopword set carries noise filtering.
+    min_token_len: int = Field(2, alias="minTokenLen")
+    #: Search stopwords. When None, the runtime default applies.
+    stopwords: list[str] | None = None
+    #: Node statuses filtered from grounding + default ranked-search. Rolled-up
+    #: nodes are folded; retired ones are superseded. Both remain
+    #: ``knowledge show``-able by id.
+    retired_statuses: list[str] = Field(
+        default_factory=lambda: ["retired", "rolled-up"],
+        alias="retiredStatuses",
+    )
+    #: Layer composition. When None, default layers apply (global docs + project
+    #: ``.forktex/knowledge``). Set to any sequence for target-agnostic mode —
+    #: each layer points at any directory with a declared adapter.
+    layers: list[KnowledgeLayerDef] | None = None
+
+
 class ForktexManifest(ForkTexModel):
     """Universal project manifest — the typed definition of forktex.json."""
 
@@ -232,6 +289,7 @@ class ForktexManifest(ForkTexModel):
     packages: list[PackageDef] = []
     fsd: FSDConfig | None = None
     cloud: CloudManifestDef | None = None
+    knowledge: KnowledgeConfig | None = None
 
     @computed_field
     @property

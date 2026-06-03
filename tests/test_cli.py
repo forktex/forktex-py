@@ -37,15 +37,19 @@ def test_cli_import():
 
 
 def test_package_import():
-    """Test that main package imports work."""
-    from forktex import (
-        StateManager,
-        Settings,
-        get_settings,
-        generate_id,
-        current_timestamp,
-    )
+    """Test that the canonical submodule imports work.
 
+    Top-level re-exports were dropped (CP1+CP2) — they were dead weight that
+    blew cold start by ≈1 s for ``forktex --help`` with zero callers benefiting.
+    The supported API is the direct-submodule form below.
+    """
+    from forktex import __version__
+
+    from forktex.core.state import StateManager
+    from forktex.config import Settings, get_settings
+    from forktex.core.utils import generate_id, current_timestamp
+
+    assert __version__ is not None
     assert StateManager is not None
     assert Settings is not None
     assert get_settings is not None

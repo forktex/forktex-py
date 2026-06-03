@@ -117,7 +117,7 @@ def test_lifecycle_busts_query_cache_on_install(project_root, monkeypatch):
 def test_install_writes_match_structure_spec(project_root):
     """Every file the lifecycle writes should validate against the spec."""
     lifecycle.install_project(project_root)
-    from forktex.graph.structure import audit
+    from forktex.substrate.spec import audit
 
     results = audit("project", project_root)
     unknown = [r for r in results if r.status == "unknown"]

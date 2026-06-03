@@ -24,7 +24,7 @@
 """Authoritative index of project roots that ForkTex has touched.
 
 Lives at ``~/.forktex/registry.json`` (cross-platform via
-:func:`forktex_cloud.paths.global_dir`). Every write that
+:func:`forktex.substrate.paths.global_dir`). Every write that
 :mod:`forktex.graph.io_proxy` performs into a ``.forktex/`` directory is
 appended here as a :class:`Touch`. The registry is the answer to
 "what would ``forktex graph purge --scope all`` actually delete?".
@@ -46,10 +46,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
 
 
 REGISTRY_FILENAME = "registry.json"
+#: Path of the registry relative to the global ``.forktex/`` root (state bucket).
+REGISTRY_REL_PATH = "state/registry.json"
 REGISTRY_SCHEMA_VERSION = 1
 
 _lock = threading.Lock()
@@ -85,7 +87,7 @@ class Registry:
 
 
 def registry_path() -> Path:
-    return _cloud_paths.global_dir() / REGISTRY_FILENAME
+    return _cloud_paths.global_registry_file()
 
 
 # ── Serialisation ─────────────────────────────────────────────────────────

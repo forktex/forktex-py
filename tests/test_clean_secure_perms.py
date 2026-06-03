@@ -43,10 +43,11 @@ def _mode(path):
 
 def test_secure_perms_tightens_project_secrets(project_root):
     fdir = project_root / ".forktex"
-    intel = fdir / "intelligence.json"
+    (fdir / "secrets").mkdir(parents=True, exist_ok=True)
+    intel = fdir / "secrets" / "intelligence.json"
     intel.write_text('{"endpoint":"x","api_key":"y"}')
     intel.chmod(0o644)
-    network = fdir / "network.json"
+    network = fdir / "secrets" / "network.json"
     network.write_text('{"endpoint":"x","jwt":"y"}')
     network.chmod(0o644)
     safe = fdir / "config.json"  # config-tagged, not secret
@@ -66,7 +67,7 @@ def test_secure_perms_tightens_project_secrets(project_root):
 
 def test_secure_perms_handles_glob_patterns(project_root):
     fdir = project_root / ".forktex"
-    keys_dir = fdir / "state" / "keys"
+    keys_dir = fdir / "secrets" / "keys"
     keys_dir.mkdir(parents=True)
     k1 = keys_dir / "server-a.key"
     k1.write_text("PRIVATE")
@@ -85,8 +86,8 @@ def test_secure_perms_handles_glob_patterns(project_root):
 
 def test_secure_perms_handles_global_secrets(isolated_home, project_root):
     gdir = isolated_home / ".forktex"
-    gdir.mkdir(exist_ok=True)
-    cloud = gdir / "cloud.json"
+    (gdir / "secrets").mkdir(parents=True, exist_ok=True)
+    cloud = gdir / "secrets" / "cloud.json"
     cloud.write_text('{"controller":"x","access_token":"y"}')
     cloud.chmod(0o644)
 
@@ -98,7 +99,8 @@ def test_secure_perms_handles_global_secrets(isolated_home, project_root):
 
 def test_secure_perms_idempotent(project_root):
     fdir = project_root / ".forktex"
-    intel = fdir / "intelligence.json"
+    (fdir / "secrets").mkdir(parents=True, exist_ok=True)
+    intel = fdir / "secrets" / "intelligence.json"
     intel.write_text("{}")
     intel.chmod(0o600)
 

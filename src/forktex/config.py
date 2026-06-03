@@ -43,7 +43,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel
 
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
 
 
 def _load_toml_config() -> Dict[str, Any]:

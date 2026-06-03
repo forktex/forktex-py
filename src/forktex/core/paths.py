@@ -24,16 +24,21 @@
 """Shared path discovery and resolution helpers.
 
 Canonical ``.forktex/`` and ``~/.forktex/`` paths live in
-``forktex_cloud.paths`` (V1 spec). This module re-exports the most common
+``forktex.substrate.paths`` (V1 spec). This module re-exports the most common
 helpers and adds forktex-py-specific project-root discovery utilities.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional
 
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
+
+#: Explicit override for workspace-root detection — set to a directory to skip
+#: the sibling-repo heuristic entirely (the user-controlled "fingerprint").
+WORKSPACE_ENV = "FORKTEX_WORKSPACE"
 
 
 FORKTEX_MANIFEST = "forktex.json"
@@ -103,20 +108,26 @@ def find_projects(
     return sorted(d for d in base.iterdir() if d.is_dir() and has_manifest(d))
 
 
-def find_ecosystem_root(
+def find_workspace_root(
     start: Optional[str | Path] = None,
     *,
     min_repos: int = 3,
     max_depth: int = 5,
 ) -> Path | None:
-    """Walk upward from ``start`` to find the ecosystem parent directory.
+    """Walk upward from ``start`` to find the workspace parent directory.
 
-    The "ecosystem root" is the parent directory containing at least
-    ``min_repos`` sibling git checkouts — by convention, the directory
-    holding forktex-py + cloud + intelligence + network (+ documents/core).
+    ``$FORKTEX_WORKSPACE`` overrides the search entirely (explicit control). Else
+    the "workspace root" is the parent directory containing at least ``min_repos``
+    sibling git checkouts — by convention, the directory holding forktex-py +
+    cloud + intelligence + network (+ documents/core).
 
     Returns ``None`` if no such ancestor is found within ``max_depth`` levels.
     """
+    override = os.environ.get(WORKSPACE_ENV)
+    if override:
+        path = Path(override).expanduser()
+        return path if path.is_dir() else None
+
     current = resolve_path(start)
     if current.is_file():
         current = current.parent
@@ -136,7 +147,7 @@ def find_ecosystem_root(
     return None
 
 
-# ── Thin wrappers around forktex_cloud.paths (V1 spec) ──
+# ── Thin wrappers around forktex.substrate.paths (V1 spec) ──
 
 
 def get_global_config_dir() -> Path:
@@ -167,12 +178,6 @@ def get_fsd_evidence_dir(project_root: Optional[str | Path] = None) -> Path:
     """Return the project FSD evidence directory."""
     root = Path(project_root) if project_root else Path.cwd()
     return _cloud_paths.fsd_evidence_dir(root)
-
-
-def get_architecture_dir(project_root: Optional[str | Path] = None) -> Path:
-    """Return the project architecture output directory."""
-    root = Path(project_root) if project_root else Path.cwd()
-    return _cloud_paths.architecture_dir(root)
 
 
 def ensure_global_config_dir() -> Path:

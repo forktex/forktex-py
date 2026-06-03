@@ -25,13 +25,38 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 import asyncclick as click
 
-from forktex_cloud import paths as cloud_paths
+from forktex.substrate import paths as cloud_paths
 from forktex.agent.cloud.errors import translate_cloud_errors
+
+
+def _compose_base(project_name: str, compose_file: str, env_file: str | None) -> list[str]:
+    """``docker compose`` invocation, optionally pinning the env file used for
+    ``${VAR}`` interpolation.
+
+    The interpolation source is declared in the manifest (``metadata.local.envFile``)
+    rather than left to the caller's shell — so ``make start`` resolves provider
+    keys from the project's own env file and the bring-up is reproducible.
+    """
+    cmd = ["docker", "compose"]
+    if env_file:
+        cmd += ["--env-file", env_file]
+    return cmd + ["-p", project_name, "-f", compose_file]
+
+
+def _resolve_env_file(manifest, project_root) -> str | None:
+    """Resolve ``metadata.local.envFile`` to an existing path, or ``None``."""
+    rel = (manifest.metadata.get("local") or {}).get("envFile")
+    if not rel:
+        return None
+    path = Path(project_root) / rel
+    return str(path) if path.exists() else None
 
 
 @click.command()
@@ -236,28 +261,21 @@ def _run_local(
     if tear_down:
         # Resolve project name for compose isolation
         project_name = "forktex"
+        env_file = None
         try:
             from forktex.agent.cloud._manifest_cache import load_manifest
 
             manifest = load_manifest(project_root, env=env_name)
             project_name = manifest.name or "forktex"
+            env_file = _resolve_env_file(manifest, project_root)
         except (FileNotFoundError, ValueError, KeyError):  # fmt: skip
             click.echo(
                 f"Warning: could not load manifest, using project name '{project_name}'",
                 err=True,
             )
         _exec(
-            [
-                "docker",
-                "compose",
-                "-p",
-                project_name,
-                "-f",
-                compose_file,
-                "down",
-                "-v",
-                "--remove-orphans",
-            ]
+            _compose_base(project_name, compose_file, env_file)
+            + ["down", "-v", "--remove-orphans"]
         )
         return
 
@@ -265,25 +283,33 @@ def _run_local(
         if raw or no_observability:
             # Resolve project name for compose isolation
             pname = "forktex"
+            env_file = None
             try:
                 from forktex.agent.cloud._manifest_cache import load_manifest
 
                 m = load_manifest(project_root, env=env_name)
                 pname = m.name or "forktex"
+                env_file = _resolve_env_file(m, project_root)
             except (FileNotFoundError, ValueError, KeyError):  # fmt: skip
                 click.echo(
                     f"Warning: could not load manifest, using project name '{pname}'",
                     err=True,
                 )
-            _exec(["docker", "compose", "-p", pname, "-f", compose_file, "logs", "-f"])
+            _exec(_compose_base(pname, compose_file, env_file) + ["logs", "-f"])
             return
         _tail_loki(project_root, service=service, since=since, env_name=env_name)
         return
 
-    from forktex_cloud.bridge.local_compose import write_local_compose
+    import yaml
+
+    from forktex_cloud.bridge.local_compose import (
+        local_compose_from_manifest,
+        render_observability_configs,
+    )
     from forktex_cloud.manifest.loader import ManifestError
 
     from forktex.agent.cloud._manifest_cache import load_manifest
+    from forktex.graph.io_proxy import tracked_write
 
     try:
         manifest = load_manifest(project_root, env=env_name)
@@ -294,7 +320,9 @@ def _run_local(
     try:
         from forktex_cloud.secrets.factory import get_secrets_provider
 
-        secrets_provider = get_secrets_provider(project_root=project_root)
+        secrets_provider = get_secrets_provider(
+            vault_root=cloud_paths.secrets_dir(project_root) / "vault"
+        )
     except (ValueError, ImportError):  # fmt: skip
         pass
 
@@ -304,37 +332,55 @@ def _run_local(
         obs_enabled = False
 
     from forktex.agent.ui.console import console
-    from forktex.runtime.decorators import sdk_boundary
 
-    # Wrap the SDK write so any unspec'd file it produces inside .forktex/
-    # surfaces as a structure violation rather than a silent compose error.
-    _wrapped_write = sdk_boundary(
-        scope="project",
-        project_root_arg="project_root",
-        strict=False,
-    )(write_local_compose)
+    # The SDK renders pure data; forktex-py owns every .forktex/ write.
+    # The build contexts the SDK emits are relative to the compose file's
+    # directory; derive that hop from the real paths instead of assuming a
+    # fixed depth, so a future relocation of the cache bucket can't desync it.
+    compose_target = cloud_paths.compose_path(project_root, "local")
+    root_prefix = os.path.relpath(project_root, compose_target.parent)
 
     with console.status(
         f"[cyan]rendering compose for[/cyan] [bold]{env_name}[/bold]…",
         spinner="dots",
     ):
-        compose_path = _wrapped_write(
+        compose = local_compose_from_manifest(
             manifest,
             project_root,
             secrets_provider=secrets_provider,
             observability=obs_enabled,
+            root_prefix=root_prefix,
         )
-    compose_file = str(compose_path)
+        tracked_write(
+            compose_target,
+            yaml.dump(compose, default_flow_style=False, sort_keys=False),
+            kind="compose",
+            writer="forktex.agent.cloud.up",
+        )
+        if obs_enabled:
+            obs_dir = cloud_paths.observability_dir(project_root)
+            for name, content in render_observability_configs().items():
+                written = tracked_write(
+                    obs_dir / name,
+                    content,
+                    kind="observability",
+                    writer="forktex.agent.cloud.up",
+                )
+                # Bind-mounted into containers (loki/promtail run as non-root):
+                # tracked_write produces 0600, so widen to world-readable.
+                written.chmod(0o644)
+    compose_file = str(compose_target)
 
     project_name = manifest.name or "forktex"
-    base_cmd = ["docker", "compose", "-p", project_name, "-f", compose_file]
+    env_file = _resolve_env_file(manifest, project_root)
+    base_cmd = _compose_base(project_name, compose_file, env_file)
     up_cmd = base_cmd + ["up"]
     if build:
         up_cmd.append("--build")
     if detach:
         up_cmd.append("-d")
 
-    click.echo(f"compose file: {compose_path}")
+    click.echo(f"compose file: {compose_file}")
     _print_port_table(manifest, observability=obs_enabled, env_name=env_name)
     if obs_enabled:
         click.echo("  Observability:")

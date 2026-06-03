@@ -21,13 +21,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Tests for forktex.agent.types — Agent type definitions and registry."""
+"""Tests for forktex.agent.engine.types — Agent type definitions and registry."""
 
 import json
 import pytest
 from pathlib import Path
 
-from forktex.agent.types import (
+from forktex.agent.engine.types import (
     AgentType,
     AgentTypeRegistry,
     DEVELOPER,
@@ -62,6 +62,20 @@ class TestAgentType:
         assert DEPLOYER.allows_tool("read_file")
         assert not DEPLOYER.allows_tool("bash_execute")
         assert not DEPLOYER.allows_tool("write_file")
+
+    def test_agents_can_use_knowledge_and_memory(self):
+        # The active side of the knowledge loop: investigators search the KB and
+        # note findings to working memory (passive grounding is separate).
+        for agent in (RESEARCHER, REVIEWER, DEVELOPER):
+            assert agent.allows_tool("knowledge_search")
+            assert agent.allows_tool("knowledge_show")
+            assert agent.allows_tool("remember")
+        # Recycling a durable lesson is reserved for agents that change code.
+        assert DEVELOPER.allows_tool("knowledge_recycle")
+        assert not RESEARCHER.allows_tool("knowledge_recycle")
+        # Knowledge access must not smuggle in write/exec capability.
+        assert not RESEARCHER.allows_tool("write_file")
+        assert not RESEARCHER.allows_tool("bash_execute")
 
     def test_assistant_allows_everything(self):
         assert ASSISTANT.allows_tool("anything")
@@ -120,7 +134,7 @@ class TestAgentTypeRegistry:
         assert registry.get("custom") is custom
 
     def test_load_custom_from_file(self, temp_dir):
-        agents_dir = Path(temp_dir) / ".forktex" / "agents"
+        agents_dir = Path(temp_dir) / ".forktex" / "state" / "agents"
         agents_dir.mkdir(parents=True)
         (agents_dir / "types.json").write_text(
             json.dumps(
@@ -152,7 +166,7 @@ class TestAgentTypeRegistry:
         assert len(registry) == 6  # Only built-in types
 
     def test_load_custom_invalid_json(self, temp_dir):
-        agents_dir = Path(temp_dir) / ".forktex" / "agents"
+        agents_dir = Path(temp_dir) / ".forktex" / "state" / "agents"
         agents_dir.mkdir(parents=True)
         (agents_dir / "types.json").write_text("invalid json")
 

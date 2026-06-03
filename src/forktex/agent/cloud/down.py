@@ -43,7 +43,7 @@ from forktex.agent.cloud.errors import translate_cloud_errors
 async def down(ctx, yes, keep_dns, environment):
     """Tear down: destroy server + DNS (remote) or stop containers (local)."""
     if environment == "local":
-        from forktex_cloud import paths as cloud_paths
+        from forktex.substrate import paths as cloud_paths
 
         project_root = ctx.obj["project_root"]
         compose_file = str(cloud_paths.compose_path(project_root, "local"))

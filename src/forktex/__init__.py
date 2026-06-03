@@ -50,28 +50,18 @@ except PackageNotFoundError:
 
 __author__ = "Forktex Team"
 
-# Core library exports — always available, no optional deps
-from forktex.core.state import StateManager
-from forktex.core.utils import generate_id, current_timestamp
-from forktex.core.paths import (
-    get_global_config_dir,
-    get_project_config_dir,
-    ensure_global_config_dir,
-    ensure_project_config_dir,
-)
-from forktex.config import Settings, get_settings
+# Public re-exports are deliberately minimal — only ``__version__`` belongs at
+# the top level. The historical re-exports (``StateManager``, ``Settings``,
+# ``get_settings``, the ``forktex.core.paths`` helpers, the ``forktex.core.utils``
+# helpers) were dead weight: a codebase-wide grep shows zero callers, yet they
+# each transitively pulled ``forktex_cloud`` / ``pydantic_settings`` / etc.,
+# adding ~700 ms to every ``import forktex`` — including ``forktex --help``.
+#
+# Callers import from the canonical submodule:
+#
+#     from forktex.core.state import StateManager
+#     from forktex.config import Settings, get_settings
+#     from forktex.core.paths import find_project_root, get_global_config_dir, ...
+#     from forktex.core.utils import generate_id, current_timestamp
 
-__all__ = [
-    "__version__",
-    # Core
-    "StateManager",
-    "generate_id",
-    "current_timestamp",
-    "get_global_config_dir",
-    "get_project_config_dir",
-    "ensure_global_config_dir",
-    "ensure_project_config_dir",
-    # Config
-    "Settings",
-    "get_settings",
-]
+__all__ = ["__version__"]

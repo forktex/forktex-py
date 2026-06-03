@@ -21,10 +21,18 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""forktex.core - Core utilities, state management, and path resolution."""
+"""forktex.core - Core utilities, state management, and path resolution.
+
+``StateManager`` lives in :mod:`forktex.core.state` and is intentionally NOT
+re-exported here. It transitively imports ``forktex.substrate.paths`` (≈1.9 s
+cost on a cold interpreter), so re-exporting it would force every
+``import forktex.core`` (and every ``import forktex``, since this package
+is imported by the top level) to pay that. Callers that need it write:
+
+    from forktex.core.state import StateManager
+"""
 
 from forktex.core.utils import generate_id, current_timestamp
-from forktex.core.state import StateManager
 from forktex.core.paths import (
     get_global_config_dir,
     get_project_config_dir,
@@ -37,7 +45,6 @@ from forktex.core.paths import (
 __all__ = [
     "generate_id",
     "current_timestamp",
-    "StateManager",
     "get_global_config_dir",
     "get_project_config_dir",
     "ensure_global_config_dir",

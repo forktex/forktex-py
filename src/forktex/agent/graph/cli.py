@@ -21,19 +21,31 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""``forktex graph`` — build, show, serve, purge the source-of-truth graph."""
+"""``forktex arch`` — the structural authority over your codebase.
+
+One graph build, two faces: the **diagrams** humans read (`graph.json`,
+`c4.html`, the live viewer) and the **grounding bundle** agents read
+(`manual_bundle.json`). ``arch build`` derives both from a single graph
+build — no double work. The rest of the surface (``show`` / ``c4`` /
+``serve`` / ``importers`` / …) queries that same graph; ``search`` is the
+ranked keyword index over it.
+
+Merged ``graph`` + ``manual`` (0.8.0): ``manual build`` used to rebuild
+the graph just to project the bundle — ``arch build`` does it once.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import asyncclick as click
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
 from rich.tree import Tree
 
+from forktex.agent.lazy_group import AsyncLazyGroup
 from forktex.agent.ui.console import console
 from forktex.core.paths import find_project_root
-from forktex.graph import structure
+from forktex.substrate import spec as structure
 from forktex.graph.build import build_graph
 from forktex.graph.export import export_graph
 from forktex.graph.export.c4_html_writer import render_c4_html
@@ -42,6 +54,7 @@ from forktex.graph.export.json_writer import render_json
 from forktex.graph.io_proxy import tracked_write
 from forktex.graph.models import Graph
 from forktex.graph.scopes import OSScope, ProjectScope
+from forktex.manual import ManualBundle, ManualScope, SearchIndex, generate_manual
 
 
 SCOPE_CHOICES = click.Choice(["project", "os", "all"], case_sensitive=False)
@@ -49,7 +62,7 @@ FORMAT_CHOICES = click.Choice(["tree", "dsl", "json"], case_sensitive=False)
 SCOPE_SHOW_CHOICES = click.Choice(["project", "os"], case_sensitive=False)
 
 
-__all__ = ["graph"]
+__all__ = ["arch"]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -119,11 +132,51 @@ def _build_for_scope(
 
 
 def _project_out_dir(project_root: Path) -> Path:
-    return _cloud_paths.project_dir(project_root)
+    return _cloud_paths.cache_dir(project_root)
 
 
 def _os_out_dir() -> Path:
-    return _cloud_paths.global_dir()
+    return _cloud_paths.global_cache_dir()
+
+
+def _write_manual_bundle(bundle: ManualBundle, out_dir: Path) -> dict[str, Path]:
+    """Write a manual bundle's projections (arch/graph html, agents, bundle)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: dict[str, Path] = {}
+    if bundle.arch_html:
+        path = out_dir / "manual_arch.html"
+        tracked_write(path, bundle.arch_html, kind="manual_arch")
+        written["arch"] = path
+    if bundle.graph_html:
+        path = out_dir / "manual_graph.html"
+        tracked_write(path, bundle.graph_html, kind="manual_graph")
+        written["graph"] = path
+    if bundle.rules or bundle.concepts or bundle.few_shots:
+        path = out_dir / "manual_agents.json"
+        tracked_write(path, bundle.model_dump_json(indent=2), kind="manual_agents")
+        written["agents"] = path
+    bundle_path = out_dir / "manual_bundle.json"
+    tracked_write(bundle_path, bundle.model_dump_json(indent=2), kind="manual_bundle")
+    written["bundle"] = bundle_path
+    return written
+
+
+def _project_manual_bundle(graph_obj: Graph, project_root: Path) -> None:
+    """Project + write the agent-grounding manual bundle from an existing graph.
+
+    Reuses the graph already built by ``arch build`` — the merge of
+    ``manual`` into ``arch`` exists precisely to avoid rebuilding it.
+    """
+    bundle = generate_manual(
+        graph_obj, scope=ManualScope.DEFAULT, project_root=project_root
+    )
+    with console.status("[cyan]projecting grounding bundle[/cyan]…"):
+        written = _write_manual_bundle(bundle, _cloud_paths.manual_dir(project_root))
+    console.print(
+        f"[green]✓[/green] grounding bundle: "
+        f"{bundle.node_count} nodes, {bundle.edge_count} edges → "
+        f"[cyan]{written['bundle']}[/cyan]"
+    )
 
 
 def _resolve_and_graph(
@@ -158,23 +211,35 @@ def _resolve_and_graph(
 # ── graph ─────────────────────────────────────────────────────────────────
 
 
-@click.group()
-def graph():
-    """Inspect your project's structure as a queryable graph.
+@click.group(cls=AsyncLazyGroup)
+def arch():
+    """Inspect your project's architecture — the structural authority.
 
     Builds a typed map of your packages, domains, modules, libraries,
-    and their import + dependency relationships. Use ``build`` to
-    refresh, ``show`` to render a tree, ``c4`` for an architecture
-    drill-down, ``importers`` / ``modules`` / ``package`` / ``recent``
-    for ad-hoc questions, ``ecosystem`` to walk every project under a
-    parent directory, and ``diff`` to compare two snapshots.
+    and their import + dependency relationships, and projects it for
+    both humans and agents. Use ``build`` to refresh the graph exports
+    *and* the agent-grounding manual bundle in one pass, ``show`` to
+    render a tree, ``c4`` for an architecture drill-down, ``search`` for
+    a ranked keyword query, ``importers`` / ``modules`` / ``package`` /
+    ``recent`` for ad-hoc questions, ``workspace`` to walk every project
+    under a parent directory, ``diff`` to compare two snapshots, and
+    ``serve`` to launch the FastAPI viewer at ``http://localhost:4444``.
     """
+
+
+# Nested ``forktex arch serve`` — the FastAPI viewer browses this very graph;
+# lazy so the FastAPI / Uvicorn stack stays out of every ``forktex graph`` call.
+arch.add_lazy_command(
+    "serve",
+    "forktex.agent.serve:serve_cmd",
+    short_help="Serve a live, browsable view of your project graph as a web app.",
+)
 
 
 # ── build ─────────────────────────────────────────────────────────────────
 
 
-@graph.command("build")
+@arch.command("build")
 @click.option("--scope", type=SCOPE_CHOICES, default="project", show_default=True)
 @click.option("--project", "-d", default=None, help="Project root (default: cwd)")
 @click.option(
@@ -183,8 +248,21 @@ def graph():
     show_default=True,
     help="Run the AST imports pass (off speeds large monorepos significantly).",
 )
-async def build_cmd(scope: str, project: str | None, imports: bool) -> None:
-    """Build and write ``graph.{json,dsl,html}`` for the chosen scope."""
+@click.option(
+    "--bundle/--no-bundle",
+    default=True,
+    show_default=True,
+    help="Also project the agent-grounding manual bundle from the same graph.",
+)
+async def build_cmd(
+    scope: str, project: str | None, imports: bool, bundle: bool
+) -> None:
+    """Build the graph once, then write its diagrams + grounding bundle.
+
+    Project scope emits ``graph.{json,dsl,html}`` (human diagrams) and,
+    unless ``--no-bundle``, ``manual_bundle.json`` (agent grounding) —
+    both derived from a single graph build.
+    """
     scope = scope.lower()
     project_root: Path | None = None
     if scope in {"project", "all"}:
@@ -203,6 +281,8 @@ async def build_cmd(scope: str, project: str | None, imports: bool) -> None:
             f"{len(graphs['project'].edges)} edges → "
             f"[cyan]{paths.json_path}[/cyan]"
         )
+        if bundle:
+            _project_manual_bundle(graphs["project"], project_root)
     if "os" in graphs:
         out_dir = _os_out_dir()
         with console.status("[cyan]writing OS graph exports[/cyan]…"):
@@ -239,7 +319,7 @@ def _render_tree(graph_obj: Graph) -> Tree:
     return root
 
 
-@graph.command("show")
+@arch.command("show")
 @click.option("--format", "fmt", type=FORMAT_CHOICES, default="tree", show_default=True)
 @click.option("--scope", type=SCOPE_SHOW_CHOICES, default="project", show_default=True)
 @click.option("--project", "-d", default=None, help="Project root (default: cwd)")
@@ -260,10 +340,10 @@ async def show_cmd(fmt: str, scope: str, project: str | None) -> None:
         click.echo(render_dsl(graph_obj))
 
 
-# ── ecosystem ─────────────────────────────────────────────────────────────
+# ── workspace ─────────────────────────────────────────────────────────────
 
 
-@graph.command("ecosystem")
+@arch.command("workspace")
 @click.option(
     "--base-dir",
     "-b",
@@ -276,7 +356,7 @@ async def show_cmd(fmt: str, scope: str, project: str | None) -> None:
     type=click.Choice(["tree", "c4", "json", "all"], case_sensitive=False),
     default="tree",
     show_default=True,
-    help="What to emit after the ecosystem walk.",
+    help="What to emit after the workspace walk.",
 )
 @click.option(
     "--include-nested/--top-level-only",
@@ -292,7 +372,7 @@ async def show_cmd(fmt: str, scope: str, project: str | None) -> None:
     help="With --render c4: also emit one c4.html per project into "
     "each <project>/.forktex/, in addition to the unified host c4.html.",
 )
-async def ecosystem_cmd(
+async def workspace_cmd(
     base_dir: str | None,
     render: str,
     include_nested: bool,
@@ -304,7 +384,7 @@ async def ecosystem_cmd(
     .forktex/ + writes a registry entry), then builds the unified host
     graph. Default render is a `rich` tree of registered_project nodes;
     use ``--render c4`` for a drill-down HTML report at
-    ``~/.forktex/c4.html`` covering the whole ecosystem.
+    ``~/.forktex/c4.html`` covering the whole workspace.
     """
     from forktex.core.paths import find_projects, find_project_root
 
@@ -317,7 +397,7 @@ async def ecosystem_cmd(
     if not base.is_dir():
         raise click.ClickException(f"base directory not found: {base}")
 
-    console.print(f"[dim]ecosystem base:[/dim] [cyan]{base}[/cyan]")
+    console.print(f"[dim]workspace base:[/dim] [cyan]{base}[/cyan]")
 
     candidates = find_projects(base)
     if include_nested:
@@ -362,7 +442,7 @@ async def ecosystem_cmd(
             kind="c4_export",
             writer="forktex.agent.graph.cli",
         )
-        console.print(f"[green]✓[/green] ecosystem C4 → [cyan]{target}[/cyan]")
+        console.print(f"[green]✓[/green] workspace C4 → [cyan]{target}[/cyan]")
         # Optionally emit per-project C4 into each project's .forktex/.
         if per_project:
             for project_root, g in project_graphs.items():
@@ -387,7 +467,7 @@ async def ecosystem_cmd(
 # ── c4 ────────────────────────────────────────────────────────────────────
 
 
-@graph.command("c4")
+@arch.command("c4")
 @click.option("--scope", type=SCOPE_SHOW_CHOICES, default="project", show_default=True)
 @click.option(
     "--format",
@@ -447,7 +527,7 @@ async def c4_cmd(scope: str, fmt: str, project: str | None, out: str | None) -> 
 # ── audit ─────────────────────────────────────────────────────────────────
 
 
-@graph.command("audit")
+@arch.command("audit")
 @click.option("--scope", type=SCOPE_SHOW_CHOICES, default="project", show_default=True)
 @click.option("--project", "-d", default=None, help="Project root (default: cwd)")
 @click.option(
@@ -548,7 +628,7 @@ def _diff_collections(before: list[dict], after: list[dict], key: str) -> dict:
     }
 
 
-@graph.command("diff")
+@arch.command("diff")
 @click.argument(
     "before",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
@@ -652,7 +732,7 @@ async def diff_cmd(before: Path, after: Path | None, fmt: str) -> None:
 # ── ad-hoc query shortcuts ────────────────────────────────────────────────
 
 
-@graph.command("importers")
+@arch.command("importers")
 @click.argument("target")
 @click.option("--project", "-d", default=None, help="Project root (default: cwd)")
 async def importers_cmd(target: str, project: str | None) -> None:
@@ -672,7 +752,7 @@ async def importers_cmd(target: str, project: str | None) -> None:
         console.print(f"  · {edge.src_module}")
 
 
-@graph.command("package")
+@arch.command("package")
 @click.argument("rel_path", required=False, default=".")
 @click.option("--project", "-d", default=None, help="Project root (default: cwd)")
 async def package_cmd(rel_path: str, project: str | None) -> None:
@@ -693,7 +773,7 @@ async def package_cmd(rel_path: str, project: str | None) -> None:
     )
 
 
-@graph.command("modules")
+@arch.command("modules")
 @click.argument("name_pattern")
 @click.option("--project", "-d", default=None, help="Project root (default: cwd)")
 async def modules_cmd(name_pattern: str, project: str | None) -> None:
@@ -712,7 +792,7 @@ async def modules_cmd(name_pattern: str, project: str | None) -> None:
         console.print(f"  [dim]… +{len(matches) - 50} more[/dim]")
 
 
-@graph.command("recent")
+@arch.command("recent")
 @click.option(
     "--hours", default=24, show_default=True, type=int, help="Time window in hours"
 )
@@ -747,3 +827,40 @@ async def recent_cmd(hours: int, project: str | None) -> None:
         )
     if len(touches) > 60:
         console.print(f"  [dim]… +{len(touches) - 60} more[/dim]")
+
+
+# ── search ──────────────────────────────────────────────────────────────────
+
+
+@arch.command("search")
+@click.argument("keyword")
+@click.option(
+    "--prefix",
+    default=None,
+    help="Filter by node id prefix (e.g. `file::src/forktex/manual`).",
+)
+@click.option("--limit", "-n", type=int, default=20, show_default=True)
+@click.option("--project", "-d", default=None, help="Project root (default: cwd)")
+async def search_cmd(
+    keyword: str, prefix: str | None, limit: int, project: str | None
+) -> None:
+    """Ranked keyword search over the project graph (fast, case-insensitive).
+
+    Multi-keyword AND; splits the query on whitespace.
+    """
+    _, graph_obj = _resolve_and_graph(project, cached=True)
+    index = SearchIndex(graph_obj)
+    hits = index.query(keyword, path_prefix=prefix, limit=limit)
+    if not hits:
+        console.print("[yellow]no matches.[/yellow]")
+        return
+    console.print(
+        f"[green]✓[/green] {len(hits)} hit{'s' if len(hits) != 1 else ''} for "
+        f"[bold]{keyword!r}[/bold]:\n"
+    )
+    for hit in hits:
+        console.print(
+            f"  [cyan]{hit.score:6.2f}[/cyan]  "
+            f"[bold]{hit.name}[/bold] [dim]({hit.kind})[/dim]"
+        )
+        console.print(f"          [dim]{hit.snippet}[/dim]")

@@ -52,7 +52,7 @@ from forktex.agent.auth import (
 )
 from forktex.agent.auth.store import load_state
 from forktex.agent.auth.types import FACETS, AuthState
-from forktex.graph.structure import GLOBAL_SPEC
+from forktex.substrate.spec import GLOBAL_SPEC
 
 CONNECT_IMPLS = {
     "cloud": connect_cloud,
@@ -127,9 +127,9 @@ def test_each_facet_has_a_secret_credential_entry_in_global_spec():
     ``GLOBAL_SPEC`` with ``sensitivity="secret"``. This binds the audit
     hook (no untracked writes) to the auth flow."""
     expected_patterns = {
-        "cloud": "cloud.json",
-        "intelligence": "intelligence.json",
-        "network": "network.json",
+        "cloud": "secrets/cloud.json",
+        "intelligence": "secrets/intelligence.json",
+        "network": "secrets/network.json",
     }
     by_pattern = {entry.pattern: entry for entry in GLOBAL_SPEC}
     for facet, pattern in expected_patterns.items():

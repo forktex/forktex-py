@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 
 from forktex.graph import io_proxy
-from forktex.graph.structure import GLOBAL_SPEC, PROJECT_SPEC
+from forktex.substrate.spec import GLOBAL_SPEC, PROJECT_SPEC
 from forktex.runtime import decorators
 
 

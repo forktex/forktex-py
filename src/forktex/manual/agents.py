@@ -176,12 +176,12 @@ def _extract_few_shots(project_root: Path | None) -> list[dict[str, Any]]:
         },
         {
             "task": "Build the architecture graph",
-            "command": "forktex graph build",
-            "expected": "graph.json + graph.dsl + graph.html under .forktex/",
+            "command": "forktex arch build",
+            "expected": "graph.json + graph.dsl + graph.html + manual_bundle.json under .forktex/",
         },
         {
             "task": "Search the project graph",
-            "command": "forktex manual search <keyword>",
+            "command": "forktex arch search <keyword>",
             "expected": "ranked node hits matching the keyword",
         },
     ]

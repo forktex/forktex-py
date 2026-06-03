@@ -28,7 +28,7 @@ string. This module composes a richer system prompt by injecting:
 
 - the project's ``AGENTS.md`` (root or ``docs/AGENTS.md``) — verbatim
 - the cached ``manual@agents`` bundle from
-  ``<project>/.forktex/manual/manual_bundle.json`` (if `forktex manual
+  ``<project>/.forktex/cache/manual/manual_bundle.json`` (if `forktex arch
   build` has been run): rules, top concepts, a small set of few-shots.
 
 The output is a single string, length-capped, that callers append to
@@ -61,6 +61,36 @@ _AGENTS_MD_CAP = 8_000
 _RULES_LIMIT = 30
 _CONCEPTS_LIMIT = 20
 _FEW_SHOTS_LIMIT = 8
+_KNOWLEDGE_LIMIT = 40
+
+
+def _workspace_section(root: Path) -> str | None:
+    """State the working root + its top-level entries.
+
+    Without this, agents guess at paths — e.g. calling ``list_directory("docs")``
+    when the root *is* the docs project, then failing and never recovering. Tool
+    paths are relative to the root, so naming the layout up front anchors them.
+    """
+    try:
+        entries = sorted(
+            p.name + ("/" if p.is_dir() else "")
+            for p in root.iterdir()
+            if not p.name.startswith(".")
+        )
+    except OSError:
+        return None
+    if not entries:
+        return None
+    listing = ", ".join(entries[:50])
+    if len(entries) > 50:
+        listing += ", …"
+    return (
+        "\n\n## Workspace\n"
+        f"You are operating in the project rooted at `{root.name}/`. "
+        "All tool file paths are relative to this root — use `.` for the root "
+        "itself (there is no nested directory named after the project).\n"
+        f"Top-level entries: {listing}"
+    )
 
 
 def build_system_prompt(
@@ -80,6 +110,10 @@ def build_system_prompt(
     """
     root = Path(project_root)
     parts: list[str] = [base_prompt or DEFAULT_BASE]
+
+    workspace = _workspace_section(root)
+    if workspace:
+        parts.append(workspace)
 
     agents_md = _load_agents_md(root)
     if agents_md:
@@ -120,15 +154,129 @@ def build_system_prompt(
         # Hint without forcing a heavy build at boot — let the user
         # opt-in to the richer grounding when ready.
         parts.append(
-            "\n\n[hint] Run `forktex manual build` to enrich this "
+            "\n\n[hint] Run `forktex arch build` to enrich this "
             "context with rules + concepts derived from the project graph."
         )
+
+    knowledge = _knowledge_section(root)
+    if knowledge:
+        parts.append(knowledge)
 
     composed = "\n".join(parts)
     return _truncate(composed, max_chars)
 
 
 # ── private helpers ───────────────────────────────────────────────────────
+
+
+#: Tag convention: nodes carrying this tag are *always* injected (the must-obey
+#: standards), with their summary, ahead of the pull-on-demand index. No core
+#: ``Node`` field — pinning is runtime policy expressed as a tag.
+PINNED_TAG = "pinned"
+
+#: Char budget for the whole knowledge section, so pinned + index stay bounded
+#: (mirrors the prompt-level ``max_chars`` discipline at the section level).
+_KNOWLEDGE_CHAR_BUDGET = 4_000
+
+#: Statuses filtered from the grounded view at the read seam. Rolled-up nodes
+#: are folded into their parent's summary; retired nodes are superseded but
+#: kept on disk for audit. Both remain resolvable by ``knowledge show <id>``.
+_HIDDEN_STATUSES: frozenset[str] = frozenset({"rolled-up", "retired"})
+
+
+def _overlay_node_ids(query: Any, layer_names: list[str]) -> set[str]:
+    """Node ids from the overlay layers — everything composed on top of the base
+    layer (the first; ``docs`` by default). The grounding index ranks these
+    ahead of the base corpus so a growing global catalog can't starve the
+    agent's own project knowledge out of a bounded prompt.
+    """
+    ids: set[str] = set()
+    for namespace in layer_names[1:]:
+        try:
+            ids.update(node.id for node in query.list_nodes(namespace).nodes)
+        except Exception:
+            continue
+    return ids
+
+
+def _knowledge_section(root: Path) -> str | None:
+    """The always-inject pinned standards + a bounded index of the live graph.
+
+    Best-effort: returns ``None`` if ``forktex-core[fractal]`` isn't installed or
+    no knowledge source resolves — never crashes the chat boot. Two tiers, mirroring
+    how context is actually managed: **pinned** nodes (tag convention) are injected
+    in full-summary with freshness — the always-loaded layer — while everything else
+    is a cheap id/title *index* the agent pulls from on demand via the knowledge
+    tools / ``forktex knowledge``. Bounded by :data:`_KNOWLEDGE_CHAR_BUDGET`.
+    """
+    try:
+        from forktex_core.fractal import FractalQuery
+
+        from forktex.agent.knowledge.config import load_knowledge_config
+        from forktex.agent.knowledge.sources import (
+            COMPOSED_NAMESPACE,
+            build_knowledge_resolver,
+            project_doc_space,
+        )
+    except Exception:
+        return None
+    try:
+        cfg = load_knowledge_config(root)
+        # Honour project-declared layers (target-agnostic mode) when present;
+        # otherwise fall back to the default global-docs + project-overlay.
+        if cfg.layers:
+            resolver = build_knowledge_resolver(config=cfg)
+        else:
+            resolver = build_knowledge_resolver(project_path=project_doc_space(root))
+        if COMPOSED_NAMESPACE not in resolver.namespaces():
+            return None
+        query = FractalQuery(resolver)
+        nodes = query.list_nodes(COMPOSED_NAMESPACE).nodes
+    except Exception:
+        return None
+    if not nodes:
+        return None
+
+    layer_names = [ns for ns in resolver.namespaces() if ns != COMPOSED_NAMESPACE]
+    overlay_ids = _overlay_node_ids(query, layer_names)
+
+    # All runtime policy reads from KnowledgeConfig — see manifest/models.py.
+    # Defaults preserve the module-level constants below (PINNED_TAG, …).
+    pinned_tag = cfg.pinned_tag
+    hidden = frozenset(cfg.retired_statuses)
+    char_budget = cfg.grounding_char_budget
+    index_limit = cfg.knowledge_limit
+
+    visible = [n for n in nodes if n.status not in hidden]
+    pinned = [n for n in visible if pinned_tag in n.tags]
+    others = [n for n in visible if pinned_tag not in n.tags]
+
+    lines = [
+        "\n\n## Knowledge graph (forktex)\n",
+        "A live knowledge graph of engineering principles + project knowledge is "
+        "available. **Before implementing, search it** for the relevant standard / "
+        "archetype / blueprint and follow it. Query via the `knowledge_search` / "
+        '`knowledge_show` tools, or `forktex knowledge search "<query>"`. When you reach '
+        "a non-obvious decision, `knowledge_recycle` it so it compounds across sessions.\n",
+    ]
+
+    if pinned:
+        lines.append("**Always follow these (pinned):**")
+        for node in sorted(pinned, key=lambda s: s.id):
+            fresh = f" _(updated {node.updated_at})_" if node.updated_at else ""
+            detail = f" — {node.summary}" if node.summary else f" — {node.title}"
+            lines.append(f"- `{node.id}` [{node.kind}]{detail}{fresh}")
+        lines.append("")
+
+    lines.append("Indexed nodes (pull bodies on demand):")
+    overlay_first = sorted(others, key=lambda s: (s.id not in overlay_ids, s.id))
+    for node in overlay_first[:index_limit]:
+        lines.append(f"- `{node.id}` [{node.kind}] — {node.title}")
+
+    section = "\n".join(lines)
+    if len(section) > char_budget:
+        section = section[:char_budget].rstrip() + "\n- … _(truncated; search for more)_"
+    return section
 
 
 def _load_agents_md(root: Path) -> str | None:
@@ -143,8 +291,10 @@ def _load_agents_md(root: Path) -> str | None:
 
 
 def _load_cached_manual_bundle(root: Path) -> dict[str, Any] | None:
-    """Load ``<root>/.forktex/manual/manual_bundle.json`` if present."""
-    bundle_path = root / ".forktex" / "manual" / "manual_bundle.json"
+    """Load ``<root>/.forktex/cache/manual/manual_bundle.json`` if present."""
+    from forktex.substrate import paths as _sub
+
+    bundle_path = _sub.manual_dir(root) / "manual_bundle.json"
     if not bundle_path.is_file():
         return None
     try:

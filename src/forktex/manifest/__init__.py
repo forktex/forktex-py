@@ -32,6 +32,8 @@ from forktex.manifest.models import (
     GatewayDomain,
     InfrastructureBundle,
     InfrastructureDef,
+    KnowledgeConfig,
+    KnowledgeLayerDef,
     MetadataDef,
     ObservabilityDef,
     PackageDef,
@@ -55,4 +57,6 @@ __all__ = [
     "ObservabilityDef",
     "PackageDef",
     "ForktexManifest",
+    "KnowledgeConfig",
+    "KnowledgeLayerDef",
 ]

@@ -63,8 +63,8 @@ class TestIntelligenceSettings:
         assert s.api_key == "key-123"
 
     def test_load_from_project_config(self, temp_dir):
-        config_dir = Path(temp_dir) / ".forktex"
-        config_dir.mkdir()
+        config_dir = Path(temp_dir) / ".forktex" / "secrets"
+        config_dir.mkdir(parents=True)
         (config_dir / "intelligence.json").write_text(
             json.dumps(
                 {
@@ -79,7 +79,7 @@ class TestIntelligenceSettings:
 
     def test_load_from_global_config(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "forktex_cloud.paths.global_intelligence_file",
+            "forktex.substrate.paths.global_intelligence_file",
             lambda: tmp_path / "intelligence.json",
         )
         (tmp_path / "intelligence.json").write_text(
@@ -95,8 +95,8 @@ class TestIntelligenceSettings:
         assert s.api_key == "global-key"
 
     def test_env_overrides_project_config(self, temp_dir, monkeypatch):
-        config_dir = Path(temp_dir) / ".forktex"
-        config_dir.mkdir()
+        config_dir = Path(temp_dir) / ".forktex" / "secrets"
+        config_dir.mkdir(parents=True)
         (config_dir / "intelligence.json").write_text(
             json.dumps(
                 {
@@ -125,7 +125,7 @@ class TestIntelligenceSettings:
         from forktex.agent.intelligence.settings import save_intelligence_global
 
         monkeypatch.setattr(
-            "forktex_cloud.paths.global_intelligence_file",
+            "forktex.substrate.paths.global_intelligence_file",
             lambda: tmp_path / "intelligence.json",
         )
         s = IntelligenceSettings(endpoint="http://test", api_key="abc")
@@ -140,7 +140,7 @@ class TestIntelligenceSettings:
         s = IntelligenceSettings(endpoint="http://proj", api_key="xyz")
         save_intelligence_project(s, temp_dir)
         saved = json.loads(
-            (Path(temp_dir) / ".forktex" / "intelligence.json").read_text()
+            (Path(temp_dir) / ".forktex" / "secrets" / "intelligence.json").read_text()
         )
         assert saved["endpoint"] == "http://proj"
         assert saved["api_key"] == "xyz"

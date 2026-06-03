@@ -33,7 +33,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import asyncclick as click
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
 
 from forktex.agent.ui.console import console
 
@@ -51,7 +51,7 @@ def _apply_secure_perms(scope: str, project_root: Path) -> list[Path]:
     import os
     import sys
 
-    from forktex.graph.structure import secret_entries
+    from forktex.substrate.spec import secret_entries
 
     if sys.platform == "win32":
         return []

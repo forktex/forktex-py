@@ -26,11 +26,23 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from forktex.core.paths import get_manifest_path
 from forktex.data.fsd import STANDARD_PATH
 from forktex.fsd.models import FSDStandard
-from forktex.manifest.models import FSDConfig, ForktexManifest, MANIFEST_VERSION
+
+# ``forktex.manifest.models`` would be a clean module-level import — except
+# ``manifest.models`` already imports ``forktex.fsd.models`` (for the
+# ``ResolveRule`` reference in ``AtomOverride``), and ``forktex.fsd/__init__``
+# imports this loader. The cycle: loading manifest.models triggers fsd/__init__
+# → triggers this loader → re-triggers manifest.models (still mid-load) and
+# fails to find ``FSDConfig``. We break the cycle by deferring the manifest
+# imports to function bodies — by call time, manifest.models is fully loaded.
+# Type-only imports remain visible to static checkers via the TYPE_CHECKING
+# block; runtime resolution happens inside each function below.
+if TYPE_CHECKING:  # pragma: no cover
+    from forktex.manifest.models import FSDConfig, ForktexManifest
 
 
 def _major(version: str | None) -> str | None:
@@ -41,6 +53,8 @@ def _major(version: str | None) -> str | None:
 
 def ensure_manifest_supported(manifest: ForktexManifest) -> None:
     """Validate the loaded forktex.json schema version."""
+    from forktex.manifest.models import MANIFEST_VERSION
+
     expected_major = _major(MANIFEST_VERSION)
     actual_major = _major(manifest.manifest_version)
     if actual_major and actual_major != expected_major:
@@ -79,6 +93,8 @@ def load_project_config(project_root: Path) -> FSDConfig | None:
 
     Returns None if forktex.json doesn't exist or has no ``fsd`` section.
     """
+    from forktex.manifest.models import ForktexManifest
+
     manifest_path = get_manifest_path(project_root)
     if not manifest_path.is_file():
         return None

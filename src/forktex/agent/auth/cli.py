@@ -187,7 +187,7 @@ async def status_cmd(project, no_probe, as_json):
     )
     console.print()
 
-    table = Table(title="forktex status", show_lines=False)
+    table = Table(title="forktex auth", show_lines=False)
     table.add_column("Facet", style="bold")
     table.add_column("State")
     table.add_column("Endpoint", overflow="fold")
@@ -413,7 +413,9 @@ async def connect_intelligence(
                 uuid.UUID(org_id),
                 body=APIKeyCreateRequest(label="forktex-cli"),
             )
-            key = key_resp.raw_key
+            key = getattr(key_resp, "rawKey", None) or getattr(
+                key_resp, "raw_key", None
+            )
         except Exception as exc:
             await intel.close()
             _render_connect_error("intelligence", url, exc)

@@ -47,15 +47,15 @@ Everything in this section runs without connecting to any platform. The CLI ship
 
 ### 🎛  Chat REPL with agents
 
-Bare `forktex` opens the menu. The two heavyweight agents live under `forktex agents`:
+Bare `forktex` opens the menu / chat. The agent grounds itself on your repo's
+`AGENTS.md`, the architecture bundle, and the live knowledge graph:
 
 ```bash
 forktex                  # menu (auto-upgrades to chat when intelligence is connected)
-forktex agents root      # persistent ecosystem-aware agent — reads AGENTS.md,
-                         # the C4 snapshot, and your full project context as system prompt
-forktex agents ground    # regenerate AGENTS.md across sibling repos
-forktex agents list      # history of agent runs
-forktex agents show <id> # inspect one run
+forktex chat             # interactive chat, grounded on the current project
+forktex chat --ecosystem # ground on the whole workspace (parent dir's docs/AGENTS.md
+                         # + the cross-project knowledge graph) for cross-cutting questions
+forktex run "<task>"     # one orchestrated, tool-using agentic run (scriptable)
 ```
 
 The REPL persists line history between sessions at `~/.forktex/repl_history` — up-arrow recalls the previous prompt the next time you open `forktex`. Slash commands include `/help`, `/status`, `/cards`, `/connect <svc>`, `/disconnect <svc>`, `/clear`, `/history`, `/tools`, `/menu`, `/quit` (alias: `/exit`).
@@ -75,19 +75,23 @@ The agent calls into a single tool registry — the same shape an MCP server wou
 
 > **About MCP:** the CLI itself is *MCP-style* (one registry, structured calls) but does not run an MCP server. The MCP endpoint lives on the platform side — see [`cloud`](#three-platforms--one-cli) and its `/api/mcp`.
 
-### 🗺  Project graph + C4 architecture
+### 🗺  Project architecture — `arch` (graph + C4 + manual, one build)
 
 ```bash
-forktex graph build            # writes graph.{json,dsl,html} into .forktex/
-forktex graph c4 --format html # drill-down C4 view (Workspace → System → Container → Component)
-forktex graph show             # rich tree view in your terminal
-forktex graph diff             # impact analysis vs an older snapshot
-forktex graph importers httpx  # who imports this library/module?
-forktex graph ecosystem -b ../ # walk every forktex.json under a parent dir
-forktex serve                  # live web dashboard at http://localhost:4444
+forktex arch build             # graph.{json,dsl,html} + agent-grounding manual_bundle.json
+forktex arch c4 --format html  # drill-down C4 view (Workspace → System → Container → Component)
+forktex arch show              # rich tree view in your terminal
+forktex arch search "<kw>"     # ranked keyword search over the graph
+forktex arch diff              # impact analysis vs an older snapshot
+forktex arch importers httpx   # who imports this library/module?
+forktex arch ecosystem -b ../  # walk every forktex.json under a parent dir
+forktex arch serve             # live web dashboard at http://localhost:4444
 ```
 
-Builds a typed multi-edge graph of your packages, domains, modules, libraries, and AST-extracted imports. The same data feeds the Structurizr DSL, the standalone HTML page, and the agent's tool layer — no duplicate filesystem walks.
+`arch` is the **structural authority**: one graph build projects both the human
+diagrams (`graph.json` / `c4.html`, Structurizr DSL) and the agent-grounding
+bundle (`manual_bundle.json`) — no duplicate filesystem walks, no double build.
+(`graph` + `manual` merged into `arch` in 0.8.0.)
 
 ### ✅  ForkTex Standard for Delivery
 
@@ -166,7 +170,7 @@ Anything else is **free-form** — `acceptance@battle`, `test@is-interesting`, `
 ### 🧹  Lifecycle helpers
 
 ```bash
-forktex status             # signed in? + project + Python + platform
+forktex auth               # signed in? + project + Python + platform (aggregate state)
 forktex clean              # remove generated artifacts; forget projects that no longer exist
 forktex clean --legacy-evidence   # also sweep historical timestamped FSD/arch outputs
 ```
@@ -266,9 +270,9 @@ Identity, projects, tasks, worklogs.
 
 ```bash
 # Built-in (no platform needed)
-forktex agents root                            # ecosystem-aware local agent
-forktex graph build                            # source-of-truth graph as JSON / DSL / HTML
-forktex graph c4 --format html                 # drill-down C4 architecture view
+forktex chat --ecosystem                       # ecosystem-grounded local agent
+forktex arch build                             # graph (JSON / DSL / HTML) + grounding bundle
+forktex arch c4 --format html                  # drill-down C4 architecture view
 forktex fsd check                              # delivery-standard audit
 
 # Connect a platform (idempotent — login or register)
@@ -280,34 +284,18 @@ forktex network connect --endpoint http://localhost:9000 --email you@example.com
 forktex                                        # bare → chat REPL (intelligence)
 forktex intelligence ask "What does this project do?"
 forktex cloud up --env local --build           # bring infra up from forktex.json
-forktex serve                                  # live dashboard with the project graph
-forktex status --json | jq '.intelligence.configured'
+forktex arch serve                             # live dashboard with the project graph
+forktex auth status --json | jq '.intelligence.configured'
 ```
 
-### Atoms (1:1 with the catalog)
+### Lifecycle atoms live in `make`, not the CLI
 
-Every FSD atom is also a top-level command, so any atom in your
-project's `forktex.json` is one keyword away. Variants surface as
-flags (`--service`, `--env`, repeatable `--scope`); execution shells
-out to `make <target>`:
-
-```bash
-forktex test                                  # ⇒ make test
-forktex apply --env local                     # ⇒ make apply-local
-forktex acceptance --scope battle             # ⇒ make acceptance-battle
-forktex publish --env prod                    # ⇒ make publish-prod
-forktex sync --scope migration                # ⇒ make sync-migration
-```
-
-Bare `forktex` (no subcommand) still launches the interactive agent
-REPL. Atom-name collisions resolve as follows:
-
-- **`forktex manual`** (no subverb) → `manual` atom recipe (which
-  itself calls `forktex manual build`); `forktex manual build` and
-  `forktex manual search …` keep their existing surface.
-- **`forktex clean`** keeps its current behaviour (purges
-  `.forktex/`); the `clean` *atom* (build-artifact cleanup) is run
-  via `make clean`.
+FSD lifecycle verbs (`test`, `build`, `apply`, `publish`, `sync`, …) are **not**
+top-level `forktex` commands — `make` owns lifecycle (the Makefile is generated
+from `forktex.json` via `forktex fsd makefile sync`). Run `make test`,
+`make apply-local`, `make acceptance-battle`. `forktex fsd check` audits which
+atoms pass at your `targetLevel`. This keeps the CLI surface to the eight
+agent-first commands above; see `convention.root-taxonomy`.
 
 ---
 

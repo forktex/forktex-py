@@ -35,7 +35,7 @@ import json
 import os
 from typing import Any, Optional
 
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
 from forktex_intelligence import IntelligenceSettings
 
 # Cached settings
@@ -73,7 +73,7 @@ def load_intelligence_settings(
     if project_root:
         from pathlib import Path as _P
 
-        project_path = _cloud_paths.project_dir(_P(project_root)) / "intelligence.json"
+        project_path = _cloud_paths.project_intelligence_file(_P(project_root))
         if project_path.exists():
             try:
                 data = json.loads(project_path.read_text())
@@ -142,7 +142,7 @@ def save_intelligence_project(
     from forktex.graph.io_proxy import tracked_write
 
     _cloud_paths.ensure_project_dirs(_P(project_root))
-    path = _cloud_paths.project_dir(_P(project_root)) / "intelligence.json"
+    path = _cloud_paths.project_intelligence_file(_P(project_root))
     data = {"endpoint": settings.endpoint, "api_key": settings.api_key}
     tracked_write(
         path,

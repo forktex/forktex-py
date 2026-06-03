@@ -4,7 +4,96 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 
 ## [Unreleased]
 
-_(nothing yet)_
+### 0.8.0 — `forktex.substrate`, bucketed `.forktex/`, filesystem-free libraries, run-anywhere
+
+**BREAKING CHANGES** (hard break, no migration shims — existing on-disk `.forktex/` state is regenerated; only the committed `knowledge/` bucket keeps its path). Implements Ring 1 + run-anywhere of `standard.forktex-architecture`.
+
+#### Added
+
+- **`forktex.substrate`** — the single filesystem authority. Unifies the path factories (moved out of `forktex_cloud.paths`), the `.forktex/` spec (`EntrySpec`/`PROJECT_SPEC`/`GLOBAL_SPEC`, formerly `forktex.graph.structure`), and the audit surface. `forktex-py` is now the only component that knows `.forktex/` exists.
+- **Run-anywhere.** `@needs_project(soft=True)` lets commands degrade in a bare directory instead of erroring; `forktex arch build --scope os`, `knowledge search`, and the agent all run with no `forktex.json`. Writes lazily create `.forktex/` (init-on-first-write). `knowledge search` with no sources prints a hint instead of failing.
+- **`forktex serve` — one generic tool API (HTTP + MCP).** A single FastAPI app (`forktex.api`) mounts every tool group at a root path — `/knowledge`, `/arch`, `/fsd` — over the *same* `Tool` registry the CLI and agent loop use; each tool is a typed `POST /{domain}/{op}`. `fastapi_mcp` rides the whole app so every route is also an MCP tool at `/mcp`. Optional `[mcp]` extra (`fastapi-mcp`); the stdio `knowledge mcp` reuses the same `mcp` lib. The `arch serve` graph viewer is folded in under `/arch` (one server, not one-per-command).
+- **`knowledge ingest`** — bulk-import a source (ecosystem `AGENTS.md` → remote vector store); absorbs the former `intelligence index-ecosystem`.
+- **`chat --ecosystem`** — ground the agent on the whole workspace (parent `docs/AGENTS.md` + the cross-project knowledge graph); absorbs the retired `agents root`.
+- **`agent/tools/catalog.py`** — the central tool-builder catalog (`build_group`/`compose`); the two `ToolServer`s and the API all compose from it (one source, no divergent compositions).
+
+#### Changed
+
+- **`graph` + `manual` merged into `arch`.** `arch build` projects the graph diagrams *and* the agent-grounding `manual_bundle.json` from a single graph build (was a double build); `arch search` is the merged keyword index. Grounding namespace is now `knowledge` + `arch`.
+
+- **Bucketed `.forktex/` layout** (schema version 1 → 2), organized by lifecycle: `knowledge/` (committed) · `secrets/` (creds, vault, keys, `.env`, cloud/intelligence/network config) · `cache/` (graph, c4, manual, compose, observability, fsd evidence, data, db/redis, backups) · `state/` (instances, servers, agent history). Root markers `.version`/`.gitignore`/`config.json` stay at the `.forktex/` root.
+- **`forktex_cloud` is filesystem-free (2.0.0).** `forktex_cloud/paths.py` is **deleted**; the bridge emits pure compose data (sibling `./observability` + `./data` binds) with `render_observability_configs()`; `get_secrets_provider(vault_root=…)` takes a caller-supplied path; `write_local_compose` moved into forktex-py (writes via `tracked_write`). The SDK no longer knows the `.forktex/` layout. forktex-py now requires `forktex-cloud >=2.0.0`.
+- `forktex.graph.structure` is a back-compat shim re-exporting `forktex.substrate.spec`; the touch registry moved to `state/registry.json`.
+
+#### Removed
+
+- **`agent/commands/` package** (the pre-0.7 `forktex agents` group's tail): `agents.py`, `index_ecosystem.py` (→ `knowledge ingest`), `root_agent.py` (→ `chat --ecosystem`), and the dead `ground.py` AGENTS.md scaffolder. The top-level `graph` and `manual` commands are gone (merged into `arch`).
+
+#### Fixed
+
+- Path-literal bugs that bypassed the factories (cloud + intelligence settings wrote flat `intelligence.json`/`cloud.json`; `instance.py` + graph exporters wrote flat) now route through the bucketed factories.
+
+#### Deferred
+
+- Full SDK purity (manifest_data-only client + `FernetCipher` extraction) — the client still reads `<project>/forktex.json` as input; `FernetVault` does I/O on a caller-supplied path.
+- A resilient node loader in `forktex_core.fractal` (skip + warn on one malformed node instead of failing the whole knowledge load) — cross-repo core change.
+- Deleting the `/ecosystem/` surrogate (gated on confirming essentials graduated). `StateManager` + the top-level service re-exports are **kept** (load-bearing — verified by audit, not legacy). The docs manifest is now generated from frontmatter (done).
+- _Done since:_ the generic knowledge adapters (`generic_markdown` / `code_index` — point forktex at any markdown tree / codebase, ad-hoc via `knowledge … --source ADAPTER:PATH` or declared in `forktex.json [knowledge].layers`); local-first `knowledge ingest` (writes nodes with no Intelligence; `--remote` opt-in); the agentic engine domain (`agent/engine/`); and the `ecosystem`→`workspace` rename.
+
+### 0.7.0 — Final root taxonomy + `.forktex/` fingerprint standard
+
+**BREAKING CHANGES** — the root command tree was cut from 31 to 10 deliberate keys, no aliases. The rationale + design are recorded in `convention.root-taxonomy` (a recycled lesson in `forktex-py/.forktex/knowledge/`) and the new `standard.forktex-fingerprint`.
+
+#### Removed
+
+- **All FSD-atom CLI registrations** — `forktex test` / `build` / `format` / `lint` / `typing` / `security` / `license` / `install` / `publish` / `sync` / `docs` / `backup` / `seed` / `apply` / `destroy` / `monitor` / `rollback` / `acceptance` (19 commands). The atoms were a parallel implementation of the project's Makefile; `make` already owns lifecycle. `forktex fsd check` is unchanged (reads the static Makefile; never depended on atom dispatch). Migration: run `make <atom>` instead of `forktex <atom>`. The dispatcher in `forktex.agent.atoms` remains importable for downstream tooling that needs to construct atom Make targets programmatically; only the CLI registration is gone.
+- **`forktex status`** → `forktex auth` (see Added). Cross-service credential aggregator is now the auth domain's default action.
+- **`forktex network`** (the group: `status`, `connect`, `disconnect`) → `forktex auth network <verb>`. The `forktex_network` SDK is unchanged for Python consumers.
+- **`forktex intelligence`** (the group) — dissolved. Specific renames:
+  - `forktex intelligence ask` → use `forktex chat` (interactive) or `forktex run --no-tools` (one-shot, scriptable).
+  - `forktex intelligence run` → `forktex run`.
+  - `forktex intelligence scrape` → use `forktex chat` (browser becomes a tool inside the agent loop).
+  - `forktex intelligence index-ecosystem` → `forktex knowledge ingest` (deferred; until landed, the prior path stays available via `python -m forktex.agent.commands.index_ecosystem`).
+  - `forktex intelligence connect / disconnect / status` → `forktex auth intelligence connect / disconnect`, `forktex auth`.
+- **`forktex agents`** (the group: `list`, `show`, `cancel`, `ground`, `root`) — dissolved.
+  - `list / show / cancel` removed (rare process audit; inspect `.forktex/agents/history/` directly when debugging).
+  - `ground refresh` deferred-merge into `forktex manual build` (until landed, callable via `python -m forktex.agent.commands.ground`).
+  - `root` (ecosystem-scoped REPL) deferred-merge into `forktex chat --ecosystem` (until landed, callable via `python -m forktex.agent.commands.root_agent`).
+- **`forktex mcp`** → `forktex knowledge mcp` (the MCP server only ever served knowledge tools).
+- **`forktex serve`** → `forktex graph serve` (the FastAPI viewer only ever browsed the project graph).
+- **`forktex knowledge ask`** → `forktex knowledge search` (frees `ask` semantics for the LLM agentic verbs; `search` is the honest verb for ranked-token doc-space query).
+
+#### Added
+
+- **`forktex chat`** — explicit alias for the bare-`forktex` chat REPL. Discoverable in `--help`; bare invocation is preserved.
+- **`forktex run <task>`** — orchestrated agentic task with tools (promoted from `forktex intelligence run`).
+- **`forktex auth`** — cross-service sign-in surface. Bare `forktex auth` prints the aggregated status across cloud / intelligence / network (the same surface that used to live at `forktex status`). Per-service subgroups expose `connect` / `disconnect`: `forktex auth cloud connect`, `forktex auth intelligence connect`, `forktex auth network connect`. Single mental model, one place.
+- **`forktex knowledge mcp`** — the MCP stdio server is now a `knowledge` subcommand.
+- **`forktex graph serve`** — the FastAPI viewer is now a `graph` subcommand.
+- **`forktex.agent.cli_help.CATEGORIES`** — single source of truth for the `--help` taxonomy. Adding or moving a top-level command is one edit here. The renderer (`forktex.agent.lazy_group.AsyncLazyGroup.format_commands`) groups commands into `Core` / `Grounding` / `Services` / `Housekeeping` sections, `make help`-style: cyan name padded to 22 chars, two-space indent, description after. Cyan on TTY only.
+- **`docs/engineering/standards/forktex-fingerprint.md`** (pinned). The on-disk surface (`.forktex/` project-scope + `~/.forktex/` global-scope) is now a documented standard: every file declared in `forktex.graph.structure.PROJECT_SPEC` / `GLOBAL_SPEC`, every write validated by `forktex.graph.io_proxy.tracked_write`. Adding a new on-disk artefact requires an `EntrySpec` first.
+
+#### Changed
+
+- **`forktex.graph.structure.PROJECT_SPEC` clarifications** — the `cloud.json` and `conversation_*.json` entries are now explicitly marked `LEGACY` in their purpose strings, with notes pointing at the V1 canonical paths (`cloud/config.json` and `agents/history/*.jsonl`) and the deferred 0.8.0 milestone for actual removal. The `manual/**` entry now names each of the four output files individually with their reader (`manual_bundle.json` is the load-bearing one — read by `intelligence.grounding`; the others are advisory or browser-only).
+- **`forktex.agent.knowledge.cli.knowledge`** and **`forktex.agent.graph.cli.graph`** are now `AsyncLazyGroup` subclasses so subgroup nesting can be lazy (the new `knowledge mcp` and `graph serve` registrations don't load their heavy deps until invoked).
+- **`PROJECT_SPEC` now covers the full live `.forktex/` footprint.** A full-ecosystem audit (`structure.audit` across all 18 nested `.forktex/` dirs) found 77 drift entries — almost all spec *under-coverage*, not cruft. Added `EntrySpec`s for files real workflows already produce: `.env` (compose env, secret), `db/**` + `redis/**` (per-service build contexts the cloud SDK tarballs), `state/backups/**` (pre-deploy DB snapshots, secret), and `knowledge/README.md` (seeded by `knowledge init`). The legacy `./.forktex/architecture/**` tree (49 superseded arch dumps at the monorepo root) was deleted. Result: 77 → 4 residual (incidental missing `.gitignore`/`.version` that self-heal on next invocation, plus one stray user script).
+- **`forktex knowledge init` now produces a spec-clean `.forktex/`.** It runs the standard lifecycle bootstrap (`lifecycle.install_project`) before scaffolding, so `.version` + the defence-in-depth `.gitignore` are present, and writes its README through `tracked_write` (kind `knowledge_readme`) instead of a raw side write. A knowledge-only init used to leave a directory that failed its own audit. Regression-guarded by `test_init_produces_spec_clean_forktex_dir`.
+- **Grounding index prioritises project-local knowledge.** `intelligence.grounding._knowledge_section` now ranks overlay-layer (project) nodes ahead of the base docs catalog in the bounded index, so project lessons aren't starved out of the agent's system prompt as the global corpus grows (it had crossed 108 nodes). Pinned tier unchanged.
+- **Stale post-rename strings fixed.** `knowledge init`'s "Next:" hints, its README template, the `init` module docstring, and the grounding system-prompt blurb all referred to the pre-0.7.0 `forktex knowledge ask` / `forktex mcp`; updated to `forktex knowledge search` / `forktex knowledge mcp`.
+- **`test_cli_taxonomy` snapshot now runs under `--user` editable installs.** The autouse `isolated_home` fixture repoints `HOME`, which hid a `pip install --user -e .` editable `.pth` from the clean `--help` subprocess (`ModuleNotFoundError: No module named 'forktex'`). The test now pins `PYTHONPATH` to the running interpreter's `sys.path` so module resolution is HOME-independent.
+
+#### Performance
+
+- `forktex --help` cold-start measured **0.84 s** on the dev workstation (CP2 baseline 1.66 s; under the < 2 s budget set in the v1 plan).
+
+#### Deferred to a follow-up
+
+The user-facing IA contract is in. These three internal-logic moves are deferred (`forktex.agent.commands.*` modules are still importable on demand for any remaining callsites):
+
+- `forktex knowledge ingest` absorbing `forktex.agent.commands.index_ecosystem` (the body is ready; the CLI registration + flag wiring is the remaining work).
+- `forktex manual build` absorbing `forktex.agent.commands.ground.refresh` (briefing regeneration becomes part of bundle generation).
+- `forktex chat --ecosystem` switching the grounding scope to replace `forktex agents root`.
 
 ## [0.6.0] — 2026-05-17
 

@@ -25,7 +25,7 @@
 
 import pytest
 
-from forktex.graph import structure
+from forktex.substrate import spec as structure
 
 
 # ── _matches: segment semantics + ** ──────────────────────────────────────
@@ -59,9 +59,9 @@ def test_validate_path_accepts_known_patterns():
     assert structure.validate_path("project", "config.json").ok
     assert structure.validate_path("project", ".version").ok
     assert structure.validate_path("project", ".gitignore").ok
-    assert structure.validate_path("project", "instances/abc.json").ok
-    assert structure.validate_path("os", "registry.json").ok
-    assert structure.validate_path("os", "graph.json").ok
+    assert structure.validate_path("project", "state/instances/abc.json").ok
+    assert structure.validate_path("os", "state/registry.json").ok
+    assert structure.validate_path("os", "cache/graph.json").ok
 
 
 def test_validate_path_rejects_unknown_patterns():

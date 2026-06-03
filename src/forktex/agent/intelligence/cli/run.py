@@ -48,8 +48,8 @@ def _get_project_root() -> str:
 @click.option(
     "--agent-type",
     "-t",
-    default="developer",
-    help="Agent type (developer, researcher, reviewer, assistant)",
+    default=None,
+    help="Override the auto-selected agent (advanced). Normally forktex chooses.",
 )
 @click.option(
     "--desktop",
@@ -57,17 +57,25 @@ def _get_project_root() -> str:
     help="Enable observe-only desktop tools for the local agent loop.",
 )
 async def run(task, project, agent_type, desktop):
-    """Run a task with full orchestration via the Intelligence API.
+    """Run a task — forktex picks the right agent for it automatically.
 
-    Creates a session and agent process, then executes the task.
+    The agent is selected from the task (research / build / review / general);
+    pass ``-t`` only to override.
 
     Example:
         forktex run "Add error handling to src/app.py"
-        forktex run --agent-type researcher "What testing patterns does this project use?"
+        forktex run "What testing patterns does this project use?"
     """
     from forktex.agent.intelligence.settings import get_intelligence_settings
-    from forktex_intelligence import Intelligence, SSEEventType
+    from forktex_intelligence import Intelligence
+    from forktex.agent.engine import get_agent_type_registry, route_agent_type
+    from forktex.agent.engine.streaming import stream_agent_output
+    from forktex.agent.intelligence.grounding import build_system_prompt
     from forktex.agent.manager import AgentManager
+
+    # forktex chooses its own agent unless explicitly overridden.
+    auto = agent_type is None
+    agent_type = agent_type or route_agent_type(task)
 
     project_root = project or _get_project_root()
     settings = get_intelligence_settings(project_root=project_root)
@@ -91,11 +99,20 @@ async def run(task, project, agent_type, desktop):
 
     session = manager.create_session()
 
+    # Ground the agent on the project's knowledge (pinned standards + AGENTS.md +
+    # graph index) the same way `chat` does — `run` was previously ungrounded, so
+    # an agent only saw the KB if it actively called knowledge_search.
+    _at = get_agent_type_registry(project_root).get(agent_type)
+    grounded_system = (
+        build_system_prompt(project_root, base_prompt=_at.system_prompt) if _at else None
+    )
+
     try:
         process = manager.create_agent(
             session,
             agent_type,
             task=task,
+            system_prompt=grounded_system,
         )
     except ValueError as e:
         error(str(e))
@@ -104,32 +121,25 @@ async def run(task, project, agent_type, desktop):
 
     try:
         console.print(f"\n[bold]Task:[/bold] {task}")
+        picked = f"{agent_type} (auto)" if auto else agent_type
         console.print(
-            f"[dim]Session: {session.id} | Agent: {process.id} ({agent_type})[/dim]"
+            f"[dim]Session: {session.id} | Agent: {process.id} ({picked})[/dim]"
         )
         console.print()
 
         # Stream the response
         console.print("[bold green]Assistant:[/bold green]")
-        full_text = ""
-
-        async for event in process.chat_stream(task):
-            if event.event == SSEEventType.DELTA:
-                console.print(event.delta_text, end="")
-                full_text += event.delta_text
-            elif event.event == SSEEventType.USAGE:
-                pass
-            elif event.event == SSEEventType.ERROR:
-                error(event.error_message)
-                break
-            elif event.event == SSEEventType.DONE:
-                pass
+        full_text = await stream_agent_output(
+            process.chat_stream(task),
+            on_delta=lambda t: console.print(t, end=""),
+            on_error=error,
+        )
 
         if full_text:
             console.print()  # Newline after streaming
 
         # Finalize
-        from forktex.agent.process import AgentStatus
+        from forktex.agent.engine import AgentStatus
 
         if process.status != AgentStatus.FAILED:
             process.status = AgentStatus.COMPLETED

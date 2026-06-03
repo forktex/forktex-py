@@ -79,7 +79,7 @@ def temp_git_repo(temp_dir):
 
 @pytest.fixture(autouse=True)
 def isolated_home(tmp_path, monkeypatch, request):
-    """Redirect ``Path.home()`` (and therefore ``forktex_cloud.paths.global_dir``)
+    """Redirect ``Path.home()`` (and therefore ``forktex.substrate.paths.global_dir``)
     to a tmp directory so the real ``~/.forktex/`` is never touched.
 
     Autouse so every test in the suite is sandboxed by default — pre-existing

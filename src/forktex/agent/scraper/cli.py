@@ -95,7 +95,8 @@ async def scrape(
             --client-pfx licitatii.p12 --client-passphrase "secret"
     """
     from forktex.agent.intelligence.settings import get_intelligence_settings
-    from forktex_intelligence import Intelligence, SSEEventType
+    from forktex_intelligence import Intelligence
+    from forktex.agent.engine.streaming import stream_agent_output
     from forktex.agent.manager import AgentManager
     from forktex.agent.tools.scraper import StatefulBrowser
     from forktex.agent.scraper.truths import TruthsStore
@@ -191,25 +192,17 @@ async def scrape(
 
         # Stream the response
         console.print("[bold green]Scraper Agent:[/bold green]")
-        full_text = ""
-
-        async for event in process.chat_stream(task):
-            if event.event == SSEEventType.DELTA:
-                console.print(event.delta_text, end="")
-                full_text += event.delta_text
-            elif event.event == SSEEventType.USAGE:
-                pass
-            elif event.event == SSEEventType.ERROR:
-                error(event.error_message)
-                break
-            elif event.event == SSEEventType.DONE:
-                pass
+        full_text = await stream_agent_output(
+            process.chat_stream(task),
+            on_delta=lambda t: console.print(t, end=""),
+            on_error=error,
+        )
 
         if full_text:
             console.print()
 
         # Finalize
-        from forktex.agent.process import AgentStatus
+        from forktex.agent.engine import AgentStatus
 
         if process.status != AgentStatus.FAILED:
             process.status = AgentStatus.COMPLETED

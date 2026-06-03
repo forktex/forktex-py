@@ -109,7 +109,7 @@ _GRAPH_HTML_TEMPLATE = """\
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>forktex manual @ graph — {title}</title>
+<title>forktex arch @ graph — {title}</title>
 <style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
        max-width: 1100px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }}

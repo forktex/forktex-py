@@ -30,8 +30,14 @@ the atom semantics themselves.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from forktex.manifest.models import FSDConfig, ForktexManifest
+# Type-only — see the docstring in ``forktex.fsd.loader`` for the cycle this
+# avoids. With ``from __future__ import annotations`` the runtime sees the
+# annotations as strings; isinstance/instantiation never references these
+# symbols at module load.
+if TYPE_CHECKING:  # pragma: no cover
+    from forktex.manifest.models import FSDConfig, ForktexManifest
 
 
 @dataclass(frozen=True)

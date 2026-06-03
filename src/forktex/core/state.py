@@ -36,7 +36,7 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
 
 from forktex.core.paths import resolve_path
 

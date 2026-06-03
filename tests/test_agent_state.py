@@ -21,9 +21,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Tests for forktex.agent.state — Agent state persistence."""
+"""Tests for forktex.agent.engine.state — Agent state persistence."""
 
-from forktex.agent.state import AgentStateStore
+from forktex.agent.engine import AgentStateStore
 
 
 class TestAgentStateStore:

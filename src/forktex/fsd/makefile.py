@@ -304,11 +304,11 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
         ]
     if atom_id == "docs":
         return [
-            '@echo "$(PROJECT_NAME): docs — declare fsd.atoms.\\"docs@<kind>\\" overrides (e.g. docs@arch via \'forktex graph c4\')."',
+            '@echo "$(PROJECT_NAME): docs — declare fsd.atoms.\\"docs@<kind>\\" overrides (e.g. docs@arch via \'forktex arch c4\')."',
         ]
     if atom_id == "manual":
         return [
-            '@echo "$(PROJECT_NAME): manual — declare fsd.atoms.\\"manual\\" or use \'forktex manual build [--scope arch|graph|agents|search]\'."',
+            '@echo "$(PROJECT_NAME): manual — declare fsd.atoms.\\"manual\\" or use \'forktex arch build\' (graph diagrams + grounding bundle)."',
         ]
 
     # ── infra domain ─────────────────────────────────────────────────────────
@@ -364,7 +364,7 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
         ]
     if atom_id == "monitor":
         return [
-            '@echo "$(PROJECT_NAME): monitor — declare fsd.atoms.\\"monitor@<env>\\" (health, metrics, logs) or use \'forktex status\'."',
+            '@echo "$(PROJECT_NAME): monitor — declare fsd.atoms.\\"monitor@<env>\\" (health, metrics, logs) or use \'forktex cloud\' (deploy & observe)."',
         ]
     if atom_id == "rollback":
         return [

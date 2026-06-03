@@ -30,7 +30,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
 
 from forktex.core.paths import FORKTEX_MANIFEST
 

@@ -21,9 +21,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Tests for Conversation and AgentResponse from agent.intelligence.agent."""
+"""Tests for Conversation and AgentResponse from agent.engine."""
 
-from forktex.agent.intelligence.agent import AgentResponse, Conversation
+from forktex.agent.engine import AgentResponse, Conversation
 
 
 class TestConversation:
