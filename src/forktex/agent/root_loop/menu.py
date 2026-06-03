@@ -33,8 +33,9 @@ Auto-upgrades into the intelligence chat REPL when intelligence is reachable.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import asyncclick as click
 from prompt_toolkit import PromptSession
@@ -153,7 +154,10 @@ class _TrackedFileHistory(FileHistory):
         lines.extend(f"+{line}" for line in string.split("\n"))
         try:
             tracked_append(
-                self.filename,
+                # FileHistory.filename is typed _StrOrBytesPath; tracked_append
+                # wants Path | str, so coerce to a Path (history paths are
+                # always filesystem paths).
+                Path(os.fsdecode(self.filename)),
                 "\n".join(lines),
                 kind="repl_history",
                 writer="forktex.agent.root_loop.menu",
@@ -292,7 +296,9 @@ async def run(project: Optional[str] = None) -> None:
         # Plain-word service drill-down.
         service = _KEYS.get(lc) or (_KEYS.get(lc[:1]) if lc else None)
         if lc in SERVICE_NAMES:
-            service = lc  # type: ignore[assignment]
+            # SERVICE_NAMES is the runtime list of Facet values, so a match
+            # is provably a Facet.
+            service = cast(Facet, lc)
         if service:
             acted = await _show_service_help(
                 service, states[service], str(root), session

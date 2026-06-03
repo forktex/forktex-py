@@ -27,7 +27,8 @@ Two tiers behind one interface (:class:`PlanExecutor`):
 
 - :class:`InProcessExecutor` — sequential, in-process, DB-free. The default.
 - ``FlowExecutor`` (``flow_backend``) — durable/parallel via ``forktex_core.flow``,
-  selected only when a flow DB is configured. ``select_executor`` picks.
+  selected when a flow DB is configured. *Planned, not yet built*:
+  ``select_executor`` currently degrades to the in-process tier.
 """
 
 from __future__ import annotations
@@ -106,9 +107,7 @@ class InProcessExecutor:
         context: list[str] = []
         for i, step in enumerate(plan.steps):
             if on_step_event:
-                on_step_event(
-                    "plan_step", f"{i + 1}/{len(plan.steps)} {step.kind}", {}
-                )
+                on_step_event("plan_step", f"{i + 1}/{len(plan.steps)} {step.kind}", {})
             result = await self._run_step(step, context)
             results.append(result)
             if result.summary:
@@ -130,10 +129,14 @@ class InProcessExecutor:
             if isinstance(payload, ToolCallStep):
                 return await self._run_tool(payload.tool, payload.arguments)
             if isinstance(payload, ShellStep):
-                return await self._run_tool("bash_execute", {"command": payload.command})
+                return await self._run_tool(
+                    "bash_execute", {"command": payload.command}
+                )
             if isinstance(payload, FileEditStep):
                 return await self._run_file_edit(payload)
-            return StepResult(kind=step.kind, status="failed", error="unknown step kind")
+            return StepResult(
+                kind=step.kind, status="failed", error="unknown step kind"
+            )
         except Exception as exc:  # a step failure must not crash the run
             return StepResult(kind=step.kind, status="failed", error=str(exc))
 
@@ -167,7 +170,11 @@ class InProcessExecutor:
             status="completed" if res.status == "completed" else "failed",
             summary=res.summary,
             error=res.error,
-            data={"tokens": res.tokens_used, "rounds": res.rounds_used, "name": res.name},
+            data={
+                "tokens": res.tokens_used,
+                "rounds": res.rounds_used,
+                "name": res.name,
+            },
         )
 
     async def _run_tool(self, tool: str, arguments: dict[str, Any]) -> StepResult:
@@ -187,7 +194,9 @@ class InProcessExecutor:
         if p.operation == "delete":
             res = await self._run_tool("delete_file", {"path": p.path})
         else:  # create | modify → write the full body
-            res = await self._run_tool("write_file", {"path": p.path, "content": p.body})
+            res = await self._run_tool(
+                "write_file", {"path": p.path, "content": p.body}
+            )
         res.kind = "file_edit"
         return res
 
@@ -204,18 +213,17 @@ def select_executor(
     on_tool_event: StepEventCallback = None,
     flow_db: Optional[str] = None,
 ) -> PlanExecutor:
-    """Pick the durable ``@flow`` tier when a flow DB is configured + importable,
-    else the in-process default. Mirrors the graceful-degrade grounding pattern."""
+    """Pick the durable ``@flow`` tier when a flow DB is configured + available,
+    else the in-process default. Mirrors the graceful-degrade grounding pattern.
+
+    The durable ``FlowExecutor`` (``flow_backend``, on ``forktex_core.flow``) is
+    not yet implemented, so a configured flow DB currently degrades cleanly to
+    the in-process tier. Wire the backend here when it lands.
+    """
     url = flow_db or resolve_flow_db()
     if url:
-        try:
-            from forktex.agent.workflow.flow_backend import FlowExecutor
-
-            return FlowExecutor(
-                intelligence, tool_server, database_url=url, on_tool_event=on_tool_event
-            )
-        except Exception:
-            pass  # fall back to in-process if flow isn't available
+        # Durable @flow tier not yet built — fall back to in-process.
+        pass
     return InProcessExecutor(intelligence, tool_server, on_tool_event=on_tool_event)
 
 

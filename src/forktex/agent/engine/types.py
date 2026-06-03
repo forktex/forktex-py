@@ -133,7 +133,11 @@ DEVELOPER = AgentType(
 RESEARCHER = AgentType(
     name="researcher",
     description="Read-only agent with web access for research tasks",
-    allowed_tools=_RO_TOOLS | _WEB_TOOLS | _DESKTOP_TOOLS | _KNOWLEDGE_TOOLS | _MEMORY_TOOLS,
+    allowed_tools=_RO_TOOLS
+    | _WEB_TOOLS
+    | _DESKTOP_TOOLS
+    | _KNOWLEDGE_TOOLS
+    | _MEMORY_TOOLS,
     can_spawn=False,
     system_prompt=(
         "You are a research assistant. You can read files and search the web "
@@ -144,7 +148,11 @@ RESEARCHER = AgentType(
 REVIEWER = AgentType(
     name="reviewer",
     description="Read-only agent for code review with bash for running tests",
-    allowed_tools=_RO_TOOLS | _BASH_TOOLS | _DESKTOP_TOOLS | _KNOWLEDGE_TOOLS | _MEMORY_TOOLS,
+    allowed_tools=_RO_TOOLS
+    | _BASH_TOOLS
+    | _DESKTOP_TOOLS
+    | _KNOWLEDGE_TOOLS
+    | _MEMORY_TOOLS,
     can_spawn=False,
     system_prompt=(
         "You are a code reviewer. You can read files and run commands "

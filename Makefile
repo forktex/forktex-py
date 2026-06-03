@@ -31,20 +31,12 @@ test: ## Automated tests verify behaviour at the unit and integration level
 	poetry run pytest tests/ -q
 
 security: ## Scan installed Python deps for known CVEs (pip-audit; install via dev deps)
-	poetry run pip-audit --skip-editable
+	poetry run pip-audit --skip-editable --timeout 30
 
-license: ## Source headers and dependency licenses verified against policy
-	@if [ -x scripts/license_headers.py ]; then \
-		python3 scripts/license_headers.py check; \
-	else \
-		echo "license: no scripts/license_headers.py — declare overrides in forktex.json"; \
-	fi
+license: ## Verify every source file carries the current AGPL-3.0 + Commercial dual-license header (CI gate)
+	python3 scripts/license_headers.py check
 
-sync: ## Not applicable: forktex-py has no schema-derived artifacts (pure Python CLI, no generated code)
-	@echo 'sync: not applicable for forktex-py (no codegen artifacts to keep current)'
-
-docs: ## Project documentation exists and is current — architecture diagrams, API reference, runbooks, ADRs
-	@echo "$(PROJECT_NAME): docs — declare fsd.atoms.\"docs@<kind>\" overrides (e.g. docs@arch via 'forktex arch c4')."
+license-check: license
 
 manual: ## Build the system-wide architecture + AI context manual from the project graph (humans + agents).
 	poetry run forktex arch build
@@ -86,17 +78,20 @@ clean: ## Build artifacts and caches removable from project tree
 	find . -type f -name .coverage -delete 2>/dev/null; true
 
 acceptance: ## Install the published wheel into a fresh venv and battle-test the CLI end-to-end (forktex --version, every subcommand --help, fsd check + arch build against forktex-py itself)
-	@if ! ls dist/forktex-*.whl >/dev/null 2>&1; then echo '  building wheel first...'; $(MAKE) build; fi
+	@echo '  building a fresh wheel from current source...'
+	$(MAKE) build
 	@command -v python3.14 >/dev/null 2>&1 || { echo '  ✗ no python3.14 on PATH (the published wheel pins Python ≥ 3.14)' >&2; exit 1; }
 	@rm -rf /tmp/forktex-accept-venv && python3.14 -m venv /tmp/forktex-accept-venv
 	@/tmp/forktex-accept-venv/bin/pip install --quiet --upgrade pip
 	@WHEEL=$$(ls -t dist/forktex-*.whl | head -1) && /tmp/forktex-accept-venv/bin/pip install --quiet $$WHEEL && echo "  installed: $$WHEEL"
 	@/tmp/forktex-accept-venv/bin/forktex --version
 	@/tmp/forktex-accept-venv/bin/forktex --help > /dev/null && echo '  ✓ forktex --help'
-	@for sub in chat run knowledge arch cloud fsd auth clean; do /tmp/forktex-accept-venv/bin/forktex $$sub --help > /dev/null && echo "  ✓ forktex $$sub --help"; done
+	@for sub in $$(/tmp/forktex-accept-venv/bin/forktex --help 2>/dev/null | awk '/^Commands:/{f=1;next} f&&/^  [a-z]/{print $$1}'); do /tmp/forktex-accept-venv/bin/forktex $$sub --help >/dev/null 2>&1 && echo "  ✓ forktex $$sub --help" || { echo "  ✗ forktex $$sub --help FAILED"; exit 1; }; done
 	@echo '' && echo '── battle: forktex on forktex-py ──'
-	@/tmp/forktex-accept-venv/bin/forktex fsd check 2>&1 | tail -3
-	@/tmp/forktex-accept-venv/bin/forktex arch build 2>&1 | tail -2
+	@/tmp/forktex-accept-venv/bin/forktex fsd check >/dev/null 2>&1 || { echo '  ✗ fsd check failed'; exit 1; }
+	@echo '  ✓ fsd check'
+	@/tmp/forktex-accept-venv/bin/forktex arch build >/dev/null 2>&1 || { echo '  ✗ arch build failed'; exit 1; }
+	@echo '  ✓ arch build'
 	@rm -rf /tmp/forktex-accept-venv
 	@echo '' && echo 'acceptance: forktex CLI installs + invokes correctly'
 
@@ -123,25 +118,28 @@ installer-build: ## Bundle scripts/install.sh + install.ps1 with _install_core.p
 installer-test: ## Run the installer across Linux distros via Docker (ubuntu/fedora/arch). Requires installer-build first.
 	bash scripts/install_test.sh
 
-license-check: ## Verify every source file carries the current AGPL-3.0 + Commercial dual-license header (CI gate)
-	python3 scripts/license_headers.py check
-
 license-fix: ## Add or update the dual-license header on every source file (idempotent)
 	python3 scripts/license_headers.py fix
 
 license-strip: ## Remove the dual-license header from every source file (use before license model changes)
 	python3 scripts/license_headers.py strip
 
-gate: ## Pre-merge quality gate: format-check + lint + license-check + security + test + build (renamed from `ci`)
+gate: ## Pre-merge quality gate: format-check + lint + license + security + test + build (renamed from `ci`)
 	@$(MAKE) format-check
 	@$(MAKE) lint
-	@$(MAKE) license-check
+	@$(MAKE) license
 	@$(MAKE) security
 	@$(MAKE) test
 	@$(MAKE) build
 	@echo ''
 	@echo 'Gate passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'
 	@echo '(make typing reports cross-SDK type drifts; tracked separately)'
+
+verify: ## Full pre-publish verification: gate (format/lint/license/security/test/build) + typing + acceptance
+	@$(MAKE) gate
+	@$(MAKE) typing
+	@$(MAKE) acceptance
+	@echo '' && echo 'verify: full forktex-py verification passed'
 
 format-check: ## Check formatting without rewriting files
 	ruff format --check src/ tests/
@@ -166,4 +164,4 @@ quality: format lint typing ## chord (format + lint + typing)
 install-global: ## Install the latest local forktex CLI globally in editable mode
 	pip install --break-system-packages -e .
 
-.PHONY: format lint typing test security license sync docs manual install build publish clean acceptance publish-test dev-link-sdks dev-unlink-sdks dev-install installer-build installer-test license-check license-fix license-strip gate format-check lint-fix test-cov deps-lock quality install-global
+.PHONY: format lint typing test security license manual install build publish clean acceptance publish-test dev-link-sdks dev-unlink-sdks dev-install installer-build installer-test license-fix license-strip gate verify format-check lint-fix test-cov deps-lock quality install-global

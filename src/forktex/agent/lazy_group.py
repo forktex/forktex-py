@@ -148,7 +148,9 @@ class AsyncLazyGroup(click.Group):
         self.commands[cmd_name] = cmd
         return cmd
 
-    def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+    def format_commands(
+        self, ctx: click.Context, formatter: click.HelpFormatter
+    ) -> None:
         """Render the "Commands" section without loading lazy entries.
 
         Two specialisations over Click's default:
@@ -210,7 +212,11 @@ class AsyncLazyGroup(click.Group):
             # ``write_text`` / ``write_dl`` do). Prefix manually so rows align
             # under the section heading just like Click's default sections do.
             indent = " " * formatter.current_indent
-            label = f"{ANSI_CYAN}{name:<{width}}{ANSI_RESET}" if use_colour else f"{name:<{width}}"
+            label = (
+                f"{ANSI_CYAN}{name:<{width}}{ANSI_RESET}"
+                if use_colour
+                else f"{name:<{width}}"
+            )
             formatter.write(f"{indent}{label}  {short_help}\n")
 
         for label, names in categories:

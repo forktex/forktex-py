@@ -48,7 +48,7 @@ async def dns_verify(ctx, domain):
 
     try:
         addrs = socket.getaddrinfo(domain, None)
-        ips = sorted(set(addr[4][0] for addr in addrs))
+        ips = sorted(set(str(addr[4][0]) for addr in addrs))
         click.echo(f"  ✓  {domain} → {', '.join(ips)}")
     except socket.gaierror:
         raise click.ClickException(

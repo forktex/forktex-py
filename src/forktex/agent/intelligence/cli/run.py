@@ -104,7 +104,9 @@ async def run(task, project, agent_type, desktop):
     # an agent only saw the KB if it actively called knowledge_search.
     _at = get_agent_type_registry(project_root).get(agent_type)
     grounded_system = (
-        build_system_prompt(project_root, base_prompt=_at.system_prompt) if _at else None
+        build_system_prompt(project_root, base_prompt=_at.system_prompt)
+        if _at
+        else None
     )
 
     try:

@@ -140,7 +140,9 @@ async def craft_plan(
     """Craft a :class:`Plan` for *task* using the configured model."""
     from forktex.agent.intelligence.grounding import build_system_prompt
 
-    system = build_system_prompt(project_root, base_prompt=base_prompt or _CRAFT_INSTRUCTIONS)
+    system = build_system_prompt(
+        project_root, base_prompt=base_prompt or _CRAFT_INSTRUCTIONS
+    )
 
     data = await _craft_structured(task, intelligence, system)
     if data is None:
@@ -148,7 +150,9 @@ async def craft_plan(
     return Plan.from_dict(_normalize(data))
 
 
-async def _craft_structured(task: str, intelligence: Any, system: str) -> dict[str, Any] | None:
+async def _craft_structured(
+    task: str, intelligence: Any, system: str
+) -> dict[str, Any] | None:
     """Try the structured-output endpoint; return None to fall back."""
     try:
         from forktex_intelligence import Inputs

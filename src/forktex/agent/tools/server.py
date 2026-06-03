@@ -131,7 +131,9 @@ def local_tool_server(
     enable_desktop: Optional[bool] = None,
 ) -> ToolServer:
     """The CLI / local agent toolset (filesystem · bash · git · ±desktop · ±web)."""
-    return ToolServer(project_root, enable_web=enable_web, enable_desktop=enable_desktop)
+    return ToolServer(
+        project_root, enable_web=enable_web, enable_desktop=enable_desktop
+    )
 
 
 def intelligence_tool_server(

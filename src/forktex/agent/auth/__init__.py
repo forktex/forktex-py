@@ -36,6 +36,8 @@ That replaces the prior ``forktex network`` top-level group and the
 
 from __future__ import annotations
 
+from typing import cast
+
 import asyncclick as click
 
 from forktex.agent.auth.cli import (
@@ -71,7 +73,9 @@ for _facet, _connect_impl in (
     ("intelligence", connect_intelligence),
     ("network", connect_network),
 ):
-    _connect, _disconnect = build_facet_commands(_facet, _connect_impl)
+    # The tuple literals make `_facet` infer as `str`; it is provably one of
+    # the `Facet` literals above, so narrow it for `build_facet_commands`.
+    _connect, _disconnect = build_facet_commands(cast(Facet, _facet), _connect_impl)
 
     @auth.group(name=_facet)
     async def _facet_group() -> None:

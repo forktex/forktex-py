@@ -39,6 +39,7 @@ from __future__ import annotations
 import io
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Optional
 
 from prompt_toolkit.application import Application
@@ -56,7 +57,7 @@ from prompt_toolkit.styles import Style
 from rich.console import Console
 
 from forktex.agent.auth.status import collect_auth_status
-from forktex.agent.auth.types import FACETS, AuthState
+from forktex.agent.auth.types import FACETS, AuthState, Facet
 from forktex.agent.root_loop.slash import (
     SERVICES,
     SLASH_COMMANDS,
@@ -74,7 +75,7 @@ class ChatAppState:
     flash_cards_until: float = (
         0.0  # monotonic seconds; show_cards forced True until then
     )
-    cards: dict[str, AuthState] = field(default_factory=dict)
+    cards: dict[Facet, AuthState] = field(default_factory=dict)
     transcript: list[str] = field(default_factory=list)  # plain strings, for /history
     buffer: Optional[Buffer] = None
     exit_reason: str = ""  # "" | "menu" | "quit"
@@ -343,7 +344,14 @@ def build_app(
     # input submission.
     if initial_message:
         input_buffer.text = initial_message
-        app.create_background_task(handle_submit(input_buffer))
+
+        # ``handle_submit`` returns a bool (consumed by the accept-handler), but
+        # ``create_background_task`` expects a None-returning coroutine. Wrap it
+        # so the fire-and-forget result is awaited and discarded.
+        async def _fire_initial() -> None:
+            await handle_submit(input_buffer)
+
+        app.create_background_task(_fire_initial())
 
     return app
 
@@ -369,7 +377,7 @@ async def run_chat(
     # Preload auth state for the (hidden) cards; the flash after a /login will
     # re-populate this with fresh probes.
     try:
-        state.cards = await collect_auth_status(project_root, probe=False)
+        state.cards = await collect_auth_status(Path(project_root), probe=False)
     except Exception:
         state.cards = {}
 

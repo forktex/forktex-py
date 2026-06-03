@@ -346,7 +346,7 @@ async def connect_cloud(
                 click.echo("\nAvailable organizations:")
                 for i, o in enumerate(orgs, 1):
                     click.echo(f"  {i}. {o.name} ({o.slug})")
-                choice = click.prompt(
+                choice = await click.prompt(
                     "Select organization", type=click.IntRange(1, len(orgs)), default=1
                 )
                 org = orgs[choice - 1]
@@ -484,7 +484,11 @@ async def connect_network(
 
     settings = NetworkSettings(
         endpoint=url,
-        jwt_token=token.jwt_token,
+        # `jwt_token` is a real field on the SDK's AuthToken (see
+        # forktex_network.client.generated.AuthToken), but pyright loses the
+        # attribute through the try/except reassignment join above, narrowing
+        # `token` to a bare AuthToken whose fields it can't see. Safe at runtime.
+        jwt_token=token.jwt_token,  # type: ignore[attr-defined]
         principal_email=email,
         authenticated_at=datetime.now(timezone.utc).isoformat(),
     )

@@ -55,7 +55,7 @@ _JSON_PY: dict[str, Any] = {
 def _op_name(domain: str, tool_name: str) -> str:
     """Strip a redundant ``{domain}_`` prefix so paths read ``/knowledge/search``."""
     prefix = f"{domain}_"
-    return tool_name[len(prefix):] if tool_name.startswith(prefix) else tool_name
+    return tool_name[len(prefix) :] if tool_name.startswith(prefix) else tool_name
 
 
 def _request_model(tool: Tool):
@@ -70,14 +70,17 @@ def _request_model(tool: Tool):
     schema = tool.parameters or {}
     props: dict[str, dict] = schema.get("properties", {})
     required = set(schema.get("required", []))
-    fields: dict[str, tuple] = {}
+    fields: dict[str, Any] = {}
     for key, spec in props.items():
         py = _JSON_PY.get(spec.get("type", "string"), str)
         desc = spec.get("description")
         if key in required:
             fields[key] = (py, Field(..., description=desc))
         else:
-            fields[key] = (py | None, Field(spec.get("default", None), description=desc))
+            fields[key] = (
+                py | None,
+                Field(spec.get("default", None), description=desc),
+            )
     model_name = f"{tool.name.title().replace('_', '')}In"
     return create_model(model_name, **fields) if fields else create_model(model_name)
 

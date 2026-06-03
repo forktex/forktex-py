@@ -72,7 +72,11 @@ def create_fsd_tools(project_root: str | Path) -> list[Tool]:
                 "returns per-atom pass/fail/skip + the achieved maturity level (L0–L4). "
                 "Use this to know what delivery gates a project does and doesn't meet."
             ),
-            parameters={"type": "object", "properties": {}, "additionalProperties": False},
+            parameters={
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
             handler=_check,
         ),
     ]

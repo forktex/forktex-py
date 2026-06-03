@@ -110,7 +110,7 @@ async def scrape(
         sys.exit(1)
 
     client = Intelligence.from_settings(settings)
-    if not client._org_id:
+    if not client.org_id:
         await client.whoami()
 
     # Set up browser and truths

@@ -25,6 +25,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import asyncclick as click
 
 from forktex.runtime.decorators import long_running, needs_project
@@ -64,9 +66,10 @@ async def serve_cmd(
             f"pip install 'forktex[web]' ({exc.name} missing)"
         ) from exc
 
-    await run_server(
-        host=host, port=port, project_root=project_root, scope=scope.lower()
-    )
+    # @needs_project resolves project_root to a real Path; fall back to cwd
+    # to satisfy run_server's Path contract if it ever arrives as None.
+    root = Path(project_root) if project_root is not None else Path.cwd()
+    await run_server(host=host, port=port, project_root=root, scope=scope.lower())
 
 
 __all__ = ["serve_cmd"]

@@ -30,7 +30,7 @@
         ],
         "description": "Scan installed Python deps for known CVEs (pip-audit; install via dev deps)",
         "commands": [
-          "poetry run pip-audit --skip-editable"
+          "poetry run pip-audit --skip-editable --timeout 30"
         ]
       },
       "build": {
@@ -68,17 +68,20 @@
         ],
         "description": "Install the published wheel into a fresh venv and battle-test the CLI end-to-end (forktex --version, every subcommand --help, fsd check + arch build against forktex-py itself)",
         "commands": [
-          "@if ! ls dist/forktex-*.whl >/dev/null 2>&1; then echo '  building wheel first...'; $(MAKE) build; fi",
+          "@echo '  building a fresh wheel from current source...'",
+          "$(MAKE) build",
           "@command -v python3.14 >/dev/null 2>&1 || { echo '  ✗ no python3.14 on PATH (the published wheel pins Python ≥ 3.14)' >&2; exit 1; }",
           "@rm -rf /tmp/forktex-accept-venv && python3.14 -m venv /tmp/forktex-accept-venv",
           "@/tmp/forktex-accept-venv/bin/pip install --quiet --upgrade pip",
           "@WHEEL=$$(ls -t dist/forktex-*.whl | head -1) && /tmp/forktex-accept-venv/bin/pip install --quiet $$WHEEL && echo \"  installed: $$WHEEL\"",
           "@/tmp/forktex-accept-venv/bin/forktex --version",
           "@/tmp/forktex-accept-venv/bin/forktex --help > /dev/null && echo '  ✓ forktex --help'",
-          "@for sub in chat run knowledge arch cloud fsd auth clean; do /tmp/forktex-accept-venv/bin/forktex $$sub --help > /dev/null && echo \"  ✓ forktex $$sub --help\"; done",
+          "@for sub in $$(/tmp/forktex-accept-venv/bin/forktex --help 2>/dev/null | awk '/^Commands:/{f=1;next} f&&/^  [a-z]/{print $$1}'); do /tmp/forktex-accept-venv/bin/forktex $$sub --help >/dev/null 2>&1 && echo \"  ✓ forktex $$sub --help\" || { echo \"  ✗ forktex $$sub --help FAILED\"; exit 1; }; done",
           "@echo '' && echo '── battle: forktex on forktex-py ──'",
-          "@/tmp/forktex-accept-venv/bin/forktex fsd check 2>&1 | tail -3",
-          "@/tmp/forktex-accept-venv/bin/forktex arch build 2>&1 | tail -2",
+          "@/tmp/forktex-accept-venv/bin/forktex fsd check >/dev/null 2>&1 || { echo '  ✗ fsd check failed'; exit 1; }",
+          "@echo '  ✓ fsd check'",
+          "@/tmp/forktex-accept-venv/bin/forktex arch build >/dev/null 2>&1 || { echo '  ✗ arch build failed'; exit 1; }",
+          "@echo '  ✓ arch build'",
           "@rm -rf /tmp/forktex-accept-venv",
           "@echo '' && echo 'acceptance: forktex CLI installs + invokes correctly'"
         ]
@@ -133,8 +136,11 @@
           "bash scripts/install_test.sh"
         ]
       },
-      "license-check": {
+      "license": {
         "targets": [
+          "license"
+        ],
+        "aliases": [
           "license-check"
         ],
         "description": "Verify every source file carries the current AGPL-3.0 + Commercial dual-license header (CI gate)",
@@ -161,29 +167,35 @@
         ]
       },
       "sync": {
-        "targets": [
-          "sync"
-        ],
-        "description": "Not applicable: forktex-py has no schema-derived artifacts (pure Python CLI, no generated code)",
-        "commands": [
-          "@echo 'sync: not applicable for forktex-py (no codegen artifacts to keep current)'"
-        ]
+        "disabled": true
       },
       "gate": {
         "targets": [
           "gate"
         ],
-        "description": "Pre-merge quality gate: format-check + lint + license-check + security + test + build (renamed from `ci`)",
+        "description": "Pre-merge quality gate: format-check + lint + license + security + test + build (renamed from `ci`)",
         "commands": [
           "@$(MAKE) format-check",
           "@$(MAKE) lint",
-          "@$(MAKE) license-check",
+          "@$(MAKE) license",
           "@$(MAKE) security",
           "@$(MAKE) test",
           "@$(MAKE) build",
           "@echo ''",
           "@echo 'Gate passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'",
           "@echo '(make typing reports cross-SDK type drifts; tracked separately)'"
+        ]
+      },
+      "verify": {
+        "targets": [
+          "verify"
+        ],
+        "description": "Full pre-publish verification: gate (format/lint/license/security/test/build) + typing + acceptance",
+        "commands": [
+          "@$(MAKE) gate",
+          "@$(MAKE) typing",
+          "@$(MAKE) acceptance",
+          "@echo '' && echo 'verify: full forktex-py verification passed'"
         ]
       },
       "manual": {
@@ -194,6 +206,9 @@
         "commands": [
           "poetry run forktex arch build"
         ]
+      },
+      "docs": {
+        "disabled": true
       }
     }
   },

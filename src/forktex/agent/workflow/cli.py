@@ -101,7 +101,9 @@ async def plan(task, project, yes, desktop):
     try:
         console.print(f"[bold]Task:[/bold] {task}")
         with console.status("[cyan]crafting plan…[/cyan]", spinner="dots"):
-            plan_obj = await craft_plan(task, intelligence=client, project_root=project_root)
+            plan_obj = await craft_plan(
+                task, intelligence=client, project_root=project_root
+            )
         _render_plan(plan_obj)
 
         if plan_obj.requires_approval and not yes:
@@ -115,20 +117,28 @@ async def plan(task, project, yes, desktop):
         console.print("[bold green]Executing:[/bold green]")
         result = await executor.execute(
             plan_obj,
-            on_step_event=lambda kind, name, data: console.print(f"[dim]▸ {name}[/dim]"),
+            on_step_event=lambda kind, name, data: console.print(
+                f"[dim]▸ {name}[/dim]"
+            ),
         )
 
         console.print()
         for i, sr in enumerate(result.steps, 1):
             mark = "[green]✓[/green]" if sr.status == "completed" else "[red]✗[/red]"
-            console.print(f"  {mark} {i}. {sr.kind} — {sr.summary or sr.error or ''}".rstrip())
+            console.print(
+                f"  {mark} {i}. {sr.kind} — {sr.summary or sr.error or ''}".rstrip()
+            )
         console.print()
         if result.status == "completed":
             info(f"Plan completed — {len(result.steps)} step(s).")
         else:
             error(
                 f"Plan failed at step {(result.failed_index or 0) + 1}. "
-                + (f"Rollback hint: {result.rollback_hint}" if result.rollback_hint else "")
+                + (
+                    f"Rollback hint: {result.rollback_hint}"
+                    if result.rollback_hint
+                    else ""
+                )
             )
 
     except Exception as e:

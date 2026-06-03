@@ -26,8 +26,65 @@
 from __future__ import annotations
 
 from importlib import import_module
+from typing import TYPE_CHECKING
 
 from forktex.models.base import ForkTexModel, Identifiable, Versioned, Tagged
+
+if TYPE_CHECKING:
+    # Static visibility for the lazily-exported names (runtime path is the
+    # ``__getattr__`` below). Lets type-checkers resolve ``from forktex.models
+    # import <Name>`` and satisfy ``__all__`` without importing the heavy
+    # submodules at runtime.
+    from forktex.architecture.models import (
+        Component,
+        Container,
+        Dependency,
+        HealthCheck,
+        Port,
+        ServiceType,
+        SoftwareSystem,
+        TechCategory,
+        Technology,
+        Workspace,
+    )
+    from forktex.engineering.models import (
+        Archetype,
+        Blueprint,
+        DeliveryStandard,
+        TechItem,
+    )
+    from forktex.fsd.models import (
+        Atom,
+        Domain,
+        FacetAtomRef,
+        Facet,
+        FSDAtom,
+        FSDDomain,
+        FSDLevel,
+        FSDProfile,
+        FSDProfileAtomPolicy,
+        FSDProjectAtomOverride,
+        FSDProjectConfig,
+        FSDStandard,
+        FSDStandardV1,
+        ISORef,
+        Level,
+        ResolveRule,
+    )
+    from forktex.manifest.models import (
+        AtomOverride,
+        DeploymentDef,
+        FSDConfig,
+        ForktexManifest,
+        GatewayDef,
+        GatewayDomain,
+        InfrastructureDef,
+        MetadataDef,
+        ObservabilityDef,
+        PackageDef,
+        ServiceDef,
+        SSLConfig,
+    )
 
 
 _EXPORTS = {
@@ -87,10 +144,58 @@ def __getattr__(name: str):
     raise AttributeError(name)
 
 
+# Static public surface (mirrors the lazy ``_EXPORTS`` keys above). Kept literal
+# so type-checkers can resolve ``from forktex.models import *`` without evaluating
+# the dict; a test asserts this list stays in sync with ``_EXPORTS``.
 __all__ = [
     "ForkTexModel",
     "Identifiable",
     "Versioned",
     "Tagged",
-    *_EXPORTS.keys(),
+    # fsd
+    "ISORef",
+    "ResolveRule",
+    "Domain",
+    "Atom",
+    "FacetAtomRef",
+    "Facet",
+    "Level",
+    "FSDStandard",
+    "FSDAtom",
+    "FSDDomain",
+    "FSDLevel",
+    "FSDStandardV1",
+    "FSDProfileAtomPolicy",
+    "FSDProfile",
+    "FSDProjectAtomOverride",
+    "FSDProjectConfig",
+    # architecture
+    "Technology",
+    "Port",
+    "Dependency",
+    "HealthCheck",
+    "Component",
+    "Container",
+    "SoftwareSystem",
+    "Workspace",
+    "ServiceType",
+    "TechCategory",
+    # engineering
+    "TechItem",
+    "Archetype",
+    "Blueprint",
+    "DeliveryStandard",
+    # manifest
+    "ForktexManifest",
+    "FSDConfig",
+    "AtomOverride",
+    "ServiceDef",
+    "PackageDef",
+    "MetadataDef",
+    "InfrastructureDef",
+    "DeploymentDef",
+    "GatewayDef",
+    "ObservabilityDef",
+    "GatewayDomain",
+    "SSLConfig",
 ]

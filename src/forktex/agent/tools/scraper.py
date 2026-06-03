@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional, cast
 
 from forktex.substrate import paths as _cloud_paths
 
@@ -179,7 +179,14 @@ def create_scraper_tools(
             page = browser.page
             if page is None:
                 return ToolResult(content="Browser not started", is_error=True)
-            resp = await page.goto(url, wait_until=wait_until, timeout=30000)
+            resp = await page.goto(
+                url,
+                wait_until=cast(
+                    Literal["commit", "domcontentloaded", "load", "networkidle"],
+                    wait_until,
+                ),
+                timeout=30000,
+            )
             status = resp.status if resp else "unknown"
             title = await page.title()
             return ToolResult(
@@ -241,7 +248,11 @@ def create_scraper_tools(
             if page is None:
                 return ToolResult(content="Browser not started", is_error=True)
             sel = _resolve_selector(selector)
-            await page.wait_for_selector(sel, state=state, timeout=timeout)
+            await page.wait_for_selector(
+                sel,
+                state=cast(Literal["attached", "detached", "hidden", "visible"], state),
+                timeout=timeout,
+            )
             return ToolResult(content=f"Element '{selector}' is {state}")
         except Exception as exc:
             return ToolResult(content=f"Wait error: {exc}", is_error=True)
@@ -303,7 +314,7 @@ def create_scraper_tools(
     async def _screenshot(filename: str = "", full_page: bool = False) -> ToolResult:
         try:
             page = browser.page
-            if page is None:
+            if page is None or browser._screenshots_dir is None:
                 return ToolResult(content="Browser not started", is_error=True)
             fname = filename or f"screenshot_{int(time.time())}"
             if not fname.endswith(".png"):

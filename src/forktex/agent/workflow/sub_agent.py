@@ -36,11 +36,12 @@ scaffolding at ``forktex.agent.manager`` to actually run the loop.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 
 if TYPE_CHECKING:
-    from forktex.intelligence.protocol import Intelligence
+    from forktex.intelligence import Intelligence
 
 
 __all__ = [
@@ -246,6 +247,8 @@ def _available_tools(tool_server: Any) -> frozenset[str]:
         schemas = get_schemas()
     except Exception:
         return frozenset()
+    if not isinstance(schemas, Iterable):
+        return frozenset()
     return frozenset(
         str(s["name"]) for s in schemas if isinstance(s, dict) and "name" in s
     )
@@ -297,11 +300,16 @@ async def _run_sub_agent(
         + spec.system_prompt_addendum
     ).strip()
 
-    nested_event = None
+    nested_event: Optional[Callable[[str, str, dict[str, Any]], None]] = None
     if on_tool_event is not None:
+        parent_cb = on_tool_event
 
-        def nested_event(kind: str, name: str, data: dict[str, Any], _p=spec.name) -> None:
-            on_tool_event(kind, f"{_p}▸{name}" if name else _p, data)
+        def _nested(
+            kind: str, name: str, data: dict[str, Any], _p: str = spec.name
+        ) -> None:
+            parent_cb(kind, f"{_p}▸{name}" if name else _p, data)
+
+        nested_event = _nested
 
     loop = AgentLoop(
         provider,
@@ -312,7 +320,9 @@ async def _run_sub_agent(
     )
 
     try:
-        resp = await asyncio.wait_for(loop.run_task(spec.intent), timeout=spec.timeout_s)
+        resp = await asyncio.wait_for(
+            loop.run_task(spec.intent), timeout=spec.timeout_s
+        )
     except asyncio.TimeoutError:
         return SubAgentResult(
             name=spec.name,
@@ -329,7 +339,13 @@ async def _run_sub_agent(
 
     summary = resp.text or (resp.error or "")
     artifacts = (
-        (Artifact(kind="summary", summary=(resp.text or "")[:200], payload={"text": resp.text}),)
+        (
+            Artifact(
+                kind="summary",
+                summary=(resp.text or "")[:200],
+                payload={"text": resp.text},
+            ),
+        )
         if resp.text
         else ()
     )

@@ -320,7 +320,7 @@ def _check_ingested_staleness(space: Path) -> list[Issue]:
                 current = hashlib.sha256(
                     src.read_text(encoding="utf-8").encode("utf-8")
                 ).hexdigest()
-            except OSError, UnicodeDecodeError:
+            except (OSError, UnicodeDecodeError):
                 continue
             if current != expected:
                 out.append(

@@ -246,14 +246,14 @@ class KnowledgeConfig(ForkTexModel):
 
     #: Tag that marks a node as always-inject in grounding. The forktex
     #: convention is ``"pinned"``; rename per project if needed.
-    pinned_tag: str = Field("pinned", alias="pinnedTag")
+    pinned_tag: str = Field(default="pinned", alias="pinnedTag")
     #: Char budget for the whole knowledge section in the grounded system prompt.
-    grounding_char_budget: int = Field(4_000, alias="groundingCharBudget")
+    grounding_char_budget: int = Field(default=4_000, alias="groundingCharBudget")
     #: How many index-tier (non-pinned) nodes to list before truncation.
-    knowledge_limit: int = Field(40, alias="knowledgeLimit")
+    knowledge_limit: int = Field(default=40, alias="knowledgeLimit")
     #: Minimum token length for keyword search — 2 keeps high-signal tech
     #: tokens (``uv``, ``ci``, ``db``); the stopword set carries noise filtering.
-    min_token_len: int = Field(2, alias="minTokenLen")
+    min_token_len: int = Field(default=2, alias="minTokenLen")
     #: Search stopwords. When None, the runtime default applies.
     stopwords: list[str] | None = None
     #: Node statuses filtered from grounding + default ranked-search. Rolled-up

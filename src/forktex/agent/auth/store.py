@@ -34,7 +34,7 @@ from typing import Optional
 
 from forktex.substrate import paths as _cloud_paths
 
-from forktex.agent.auth.types import AuthState, Facet
+from forktex.agent.auth.types import AuthState, Facet, Scope
 
 
 def _source_for(facet: Facet, scope: str, project_root: Optional[Path]) -> Path:
@@ -146,7 +146,7 @@ def _load_network(project_root: Optional[Path]) -> AuthState:
     )
 
 
-def _resolve_scope(facet: Facet, project_root: Optional[Path]) -> tuple[str, Path]:
+def _resolve_scope(facet: Facet, project_root: Optional[Path]) -> tuple[Scope, Path]:
     """Report which file the live settings actually resolved to.
 
     Project overrides global, so we check project first when a project is given.

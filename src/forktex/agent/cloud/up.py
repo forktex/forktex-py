@@ -36,7 +36,9 @@ from forktex.substrate import paths as cloud_paths
 from forktex.agent.cloud.errors import translate_cloud_errors
 
 
-def _compose_base(project_name: str, compose_file: str, env_file: str | None) -> list[str]:
+def _compose_base(
+    project_name: str, compose_file: str, env_file: str | None
+) -> list[str]:
     """``docker compose`` invocation, optionally pinning the env file used for
     ``${VAR}`` interpolation.
 
@@ -426,17 +428,11 @@ def _tail_loki(project_root, *, service, since, env_name="local"):
     from forktex_cloud.bridge.loki import loki_ready, build_logql, tail
     from forktex_cloud.bridge.log_formatter import assign_colors, format_line, COLORS
 
-    # Cloud's stack publishes Loki on a non-default host port (3110)
-    # so it can coexist with other forktex stacks that also default to
-    # 3100. Read the canonical constant from the SDK so the two stay
-    # in lock-step. Older SDK builds without this symbol fall back
-    # to 3100.
-    try:
-        from forktex_cloud.bridge.local_compose import loki_host_port
-
-        host_port = loki_host_port()
-    except ImportError:
-        host_port = 3100
+    # Cloud's local stack publishes Loki on the canonical observability port
+    # 3100 (see forktex_cloud.bridge.local_compose._OBSERVABILITY_PORTS and the
+    # loki service's "3100:3100" mapping). The SDK no longer exposes a
+    # loki_host_port() helper, so use the canonical default directly.
+    host_port = 3100
 
     compose_file = str(cloud_paths.compose_path(project_root, "local"))
     base_url = f"http://localhost:{host_port}"

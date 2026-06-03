@@ -536,7 +536,9 @@ def audit(scope: Scope, root: Path) -> list[AuditEntry]:
     if not base.is_dir():
         for req in required_entries(scope):
             results.append(
-                AuditEntry(req.pattern, "missing_required", req, f"{base} does not exist")
+                AuditEntry(
+                    req.pattern, "missing_required", req, f"{base} does not exist"
+                )
             )
         return results
 
@@ -556,7 +558,9 @@ def audit(scope: Scope, root: Path) -> list[AuditEntry]:
     for req in required_entries(scope):
         if req.pattern not in seen_required:
             results.append(
-                AuditEntry(req.pattern, "missing_required", req, "required entry absent")
+                AuditEntry(
+                    req.pattern, "missing_required", req, "required entry absent"
+                )
             )
     return results
 

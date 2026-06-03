@@ -275,7 +275,9 @@ def _knowledge_section(root: Path) -> str | None:
 
     section = "\n".join(lines)
     if len(section) > char_budget:
-        section = section[:char_budget].rstrip() + "\n- … _(truncated; search for more)_"
+        section = (
+            section[:char_budget].rstrip() + "\n- … _(truncated; search for more)_"
+        )
     return section
 
 

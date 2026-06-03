@@ -19,3 +19,7 @@ htmlcov/
 !.forktex/.version
 !.forktex/knowledge/
 !.forktex/knowledge/**
+
+# forktex — generated + secrets (keep .forktex/.version committed)
+.forktex/**
+!.forktex/.version

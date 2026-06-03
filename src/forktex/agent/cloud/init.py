@@ -47,7 +47,10 @@ async def init(ctx, kind, name, force):
 
     project_root = ctx.obj["project_root"]
     try:
-        path = scaffold_manifest(project_root, kind=kind, name=name, force=force)
+        # NOTE: current forktex_cloud.scaffold_manifest no longer accepts a
+        # `kind=` argument (it writes a single DEFAULT_TEMPLATE). The CLI still
+        # exposes --kind for forward-compat and for the summary echo below.
+        path = scaffold_manifest(project_root, name=name, force=force)
     except FileExistsError as e:
         raise click.ClickException(str(e))
     except ValueError as e:

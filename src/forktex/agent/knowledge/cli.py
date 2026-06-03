@@ -141,7 +141,7 @@ async def ask_cmd(query, kind, limit, docs, project, source, namespace) -> None:
         nodes = ranked_search(
             _query(docs, project, source), namespace, query, kind=kind, limit=limit
         )
-    except NamespaceNotFound, KeyError:
+    except (NamespaceNotFound, KeyError):
         # Run-anywhere: no knowledge sources here is not an error.
         click.echo(
             "no knowledge sources — run `forktex knowledge init` or set $FORKTEX_DOCS"

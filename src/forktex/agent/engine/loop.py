@@ -61,7 +61,9 @@ class Conversation:
 
     def __init__(self, *, system: Optional[str] = None) -> None:
         self.system = system
-        self.messages: list[Dict[str, str]] = []
+        # Heterogeneous: most messages are str-valued, but tool-call turns
+        # also carry a structured ``tool_calls`` list — so values are Any.
+        self.messages: list[Dict[str, Any]] = []
 
     def add_user(self, content: str) -> None:
         self.messages.append({"role": "user", "content": content})

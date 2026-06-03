@@ -27,7 +27,12 @@ Importing :func:`build_domains` is dependency-light (no FastAPI); building the
 app via :func:`create_app` needs the ``[mcp]`` extra (FastAPI + fastapi_mcp).
 """
 
+from typing import TYPE_CHECKING
+
 from forktex.api.registry import build_domains
+
+if TYPE_CHECKING:  # static visibility for `create_app` (runtime path is lazy below)
+    from forktex.api.app import create_app
 
 __all__ = ["build_domains", "create_app"]
 

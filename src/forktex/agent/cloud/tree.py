@@ -83,16 +83,23 @@ async def tree(ctx, org):
             f"└── org: {click.style(o_slug, fg='cyan', bold=True)}  [{_short(o_id)}]"
         )
 
-        # Providers
+        # Providers — the SDK has no list_providers(); derive the set of
+        # configured providers from the org's servers instead. A provider is
+        # considered active when at least one of its servers reports a
+        # running/active status.
         try:
             with Cloud.from_context(cloud_ctx) as client:
-                providers = client.list_providers()
-            if providers:
+                servers = client.list_servers()
+            provider_active: dict[str, bool] = {}
+            for s in servers:
+                is_active = str(s.status).lower() in ("active", "running", "ready")
+                provider_active[s.provider] = (
+                    provider_active.get(s.provider, False) or is_active
+                )
+            if provider_active:
                 pstr = "  ".join(
-                    f"{click.style(p.provider, fg='green')} ✓"
-                    if p.is_active
-                    else p.provider
-                    for p in providers
+                    f"{click.style(name, fg='green')} ✓" if active else name
+                    for name, active in sorted(provider_active.items())
                 )
                 click.echo(f"    ├── providers: {pstr}")
         except Exception:

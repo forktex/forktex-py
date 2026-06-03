@@ -66,7 +66,11 @@ async def status_cmd(project):
     client = build_network_client(settings)
     try:
         me = await client.identity_me()
-        console.print(f"[bold green]Status:[/bold green] OK — me: {me.email}")
+        # `preferred_email` is the real email field on the SDK's UserRead
+        # (the model has no `.email`); pyright can't see members on that
+        # generated model, so silence the false attr-defined error.
+        principal = me.preferred_email  # type: ignore[attr-defined]
+        console.print(f"[bold green]Status:[/bold green] OK — me: {principal}")
     except Exception as exc:
         error(f"identity_me failed: {exc}")
     finally:

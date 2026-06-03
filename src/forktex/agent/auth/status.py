@@ -121,8 +121,11 @@ async def _probe_network(state: AuthState) -> None:
     try:
         me = await asyncio.wait_for(client.identity_me(), timeout=_PROBE_TIMEOUT_S)
         state.reachable = True
-        if getattr(me, "email", None):
-            state.principal = str(me.email)
+        if getattr(me, "preferred_email", None):
+            # `preferred_email` is a real field on the SDK's UserRead, but
+            # pyright can't resolve members on that generated model (only `id`
+            # is visible on its typed surface); guarded by getattr above.
+            state.principal = str(me.preferred_email)  # type: ignore[attr-defined]
     finally:
         await client.close()
 

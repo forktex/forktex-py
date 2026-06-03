@@ -83,9 +83,7 @@ async def new(ctx, template_slug, name, domain, env, list_only):
         overrides = {
             "cloud": {
                 "infrastructure": {
-                    "servers": [
-                        {"id": "primary", "gateway": {"domain": domain}}
-                    ]
+                    "servers": [{"id": "primary", "gateway": {"domain": domain}}]
                 }
             }
         }
@@ -199,9 +197,7 @@ async def new(ctx, template_slug, name, domain, env, list_only):
             overrides = {
                 "cloud": {
                     "infrastructure": {
-                        "servers": [
-                            {"id": "primary", "gateway": {"domain": domain}}
-                        ]
+                        "servers": [{"id": "primary", "gateway": {"domain": domain}}]
                     }
                 }
             }

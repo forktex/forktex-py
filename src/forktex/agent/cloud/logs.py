@@ -248,7 +248,9 @@ def _show_deployment_logs(client, deployment_id: str, ctx) -> None:
                     if isinstance(dep, dict)
                     else str(getattr(dep, "id", ""))
                 )
-                if dep_id == deployment_id or dep_id.startswith(deployment_id):
+                if dep_id is not None and (
+                    dep_id == deployment_id or dep_id.startswith(deployment_id)
+                ):
                     entries = client.get_deployment_logs(
                         str(project.id), str(env.id), dep_id
                     )

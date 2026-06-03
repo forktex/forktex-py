@@ -177,7 +177,7 @@ async def start_chat_session(
 
     seed = (
         f"forktex chat\n"
-        f"endpoint: {client._base_url}\n"
+        f"endpoint: {client.client.base_url}\n"
         f"project:  {project_root}\n"
         f"press /help or Tab for commands · Ctrl+D exits\n"
     )

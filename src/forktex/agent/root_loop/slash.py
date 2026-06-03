@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional, Union
 
 HandlerResult = Union[None, str]  # optional status-line to emit
@@ -84,7 +85,7 @@ class SlashContext:
 # ── handlers ─────────────────────────────────────────────────────────────────
 
 
-def _cmd_help(ctx: SlashContext, args: list[str]) -> str:
+def _cmd_help(ctx: SlashContext, args: list[str]) -> HandlerResult:
     lines = ["[bold]slash commands[/bold]", ""]
     for cmd in SLASH_COMMANDS.values():
         lines.append(f"  [cyan]{cmd.name:<14}[/cyan] {cmd.description}")
@@ -108,10 +109,10 @@ def _cmd_cards(ctx: SlashContext, args: list[str]) -> str:
     return f"cards: {'shown' if ctx.app_state.show_cards else 'hidden'}"
 
 
-async def _cmd_status(ctx: SlashContext, args: list[str]) -> str:
+async def _cmd_status(ctx: SlashContext, args: list[str]) -> HandlerResult:
     from forktex.agent.auth.status import collect_auth_status
 
-    states = await collect_auth_status(ctx.project_root, probe=True)
+    states = await collect_auth_status(Path(ctx.project_root), probe=True)
     lines = ["[bold]status[/bold]"]
     for name, s in states.items():
         if not s.configured:
@@ -156,8 +157,10 @@ async def _cmd_connect(ctx: SlashContext, args: list[str]) -> str:
     }
     impl = impls[service]
 
-    # login impls prompt via rich.Prompt.ask; detach prompt_toolkit I/O for
-    # the turn. Wrap the detach pair in try/finally so the prompt_toolkit
+    # login impls prompt via rich.Prompt.ask; detach prompt_toolkit's input
+    # for the turn so the nested prompt owns the TTY. (Only ``Input`` exposes
+    # ``detach``; ``Output`` has no such method — releasing the input is what
+    # frees the terminal.) Wrap the detach in try/finally so the prompt_toolkit
     # Application's TTY context is *always* restored — even when the impl
     # raises KeyboardInterrupt / SystemExit / a generic exception. Without
     # this, ctrl-c'ing mid-password could leave the chat app with echo off
@@ -167,10 +170,9 @@ async def _cmd_connect(ctx: SlashContext, args: list[str]) -> str:
 
     app = get_app()
     detach_in = app.input.detach()
-    detach_out = app.output.detach()
     err: Optional[BaseException] = None
     try:
-        with detach_in, detach_out:
+        with detach_in:
             try:
                 await impl(
                     project=ctx.project_root,
@@ -226,14 +228,14 @@ def _cmd_clear(ctx: SlashContext, args: list[str]) -> None:
     return None
 
 
-def _cmd_history(ctx: SlashContext, args: list[str]) -> str:
+def _cmd_history(ctx: SlashContext, args: list[str]) -> HandlerResult:
     ctx.emit_markup("[dim]— transcript —[/dim]")
     for m in ctx.app_state.transcript:
         ctx.emit(m)
     return None
 
 
-def _cmd_tools(ctx: SlashContext, args: list[str]) -> str:
+def _cmd_tools(ctx: SlashContext, args: list[str]) -> HandlerResult:
     tools = ctx.tool_server.list_tools()
     lines = [f"[bold]local tools ({len(tools)})[/bold]"]
     for t in tools:

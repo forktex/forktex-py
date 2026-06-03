@@ -113,7 +113,7 @@ def _ingest_local(files: list[tuple[str, str]], root: Path, target) -> int:
     for rel, label in files:
         try:
             text = (root / rel).read_text(encoding="utf-8")
-        except UnicodeDecodeError, OSError:
+        except (UnicodeDecodeError, OSError):
             console.print(f"  [yellow]skip[/yellow] {rel} (unreadable)")
             continue
         recycle(
@@ -179,7 +179,7 @@ async def _push_remote(files: list[tuple[str, str]], root: Path, space: str) -> 
             for rel, label in files:
                 try:
                     text = (root / rel).read_text(encoding="utf-8")
-                except UnicodeDecodeError, OSError:
+                except (UnicodeDecodeError, OSError):
                     continue
                 try:
                     await space_obj.upsert(
