@@ -96,9 +96,24 @@ async def generate_cmd(ctx, package, all_packages, to_stdout, force):
 @makefile_group.command("sync")
 @click.option("--package", default=None, help="Sync one package path or package name")
 @click.option("--all-packages", is_flag=True, help="Also sync nested package Makefiles")
+@click.option(
+    "--check",
+    "check_only",
+    is_flag=True,
+    help="Verify Makefiles match their forktex.json source without writing; "
+    "exit non-zero on drift (CI drift gate — forbids hand-patches)",
+)
 @click.pass_context
-async def sync_cmd(ctx, package, all_packages):
-    """Synchronize Makefiles from the active FSD standard."""
+async def sync_cmd(ctx, package, all_packages, check_only):
+    """Synchronize Makefiles from the active FSD standard.
+
+    With ``--check`` the Makefiles are regenerated in memory and compared to
+    what is on disk; nothing is written and a unified diff + non-zero exit are
+    produced on any drift. This is the gate that keeps Makefiles a pure
+    projection of ``forktex.json`` — a hand-edited Makefile can never pass CI.
+    """
+    import difflib
+
     project_root: Path = ctx.obj["project_root"]
     manifest = ForktexManifest.load(project_root / "forktex.json")
     ensure_manifest_supported(manifest)
@@ -107,6 +122,34 @@ async def sync_cmd(ctx, package, all_packages):
     generated = generate_makefiles(
         project_root, standard, manifest, package=package, all_packages=all_packages
     )
+
+    if check_only:
+        drifted: list[Path] = []
+        for item in generated:
+            path = item.unit_path / "Makefile"
+            current = path.read_text() if path.exists() else ""
+            if current != item.content:
+                drifted.append(path)
+                for line in difflib.unified_diff(
+                    current.splitlines(),
+                    item.content.splitlines(),
+                    fromfile=f"{path} (on disk)",
+                    tofile=f"{path} (generated from forktex.json)",
+                    lineterm="",
+                ):
+                    click.echo(line)
+        if drifted:
+            names = ", ".join(str(p) for p in drifted)
+            raise click.ClickException(
+                f"{len(drifted)} Makefile(s) drift from forktex.json ({names}). "
+                "Makefiles are generated — edit forktex.json and run "
+                "'forktex fsd makefile sync', do not hand-patch the Makefile."
+            )
+        click.echo(
+            f"makefile-check: {len(generated)} Makefile(s) in sync with forktex.json"
+        )
+        return
+
     written = _write_makefiles(generated, overwrite=True)
     for path in written:
         click.echo(f"Synced {path}")

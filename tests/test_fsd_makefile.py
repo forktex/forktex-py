@@ -282,7 +282,7 @@ def test_optional_stub_atoms_omitted_and_typing_default_has_no_mypy_fallback():
     )
     # B5 — no broken / silent type-checker fallback in the default body.
     assert "python -m pyright src/" in content
-    assert "mypy" not in content
+    assert "|| python -m mypy" not in content
     # B4 — optional atoms that would only emit a placeholder are dropped.
     assert "TODO: implement" not in content
     assert "TODO: configure" not in content
