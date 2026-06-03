@@ -4,7 +4,22 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 
 ## [Unreleased]
 
-### 0.8.0 — `forktex.substrate`, bucketed `.forktex/`, filesystem-free libraries, run-anywhere
+## [0.8.1] — 2026-06-03 — Stabilization: CI realignment, dependency floor, cleanup
+
+#### Changed
+
+- **Merge-guard chord realigned to `ci`** (FSD catalog 1.3.0 → 1.4.0). The v1.2.0 rename `ci`→`gate` is reverted: the pre-merge chord is `make ci` again, matching the canonical FSD `ci` atom (*"CI Gate"*) and the `standard.quality-pipeline` doctrine. `make verify`/`release`, the generated `Makefile`, and the CI workflow all reference `ci`; no deprecated alias is kept.
+- **`forktex-core` floor raised to `>=2.4.0`.** The knowledge subsystem uses the 2.4.0 `fractal` serialize API (`serialize_node`/`serialize_patch`/`load_patch`); `poetry.lock` is refreshed so CI installs a wheel that ships those symbols (fixes the `make ci` test-collection `ImportError`).
+
+#### Removed
+
+- **Dead compatibility shims** `forktex.models.architecture` and `forktex.models.manifest` (zero importers; the canonical homes are `forktex.architecture.models` / `forktex.manifest.models`, already resolved by the `forktex.models` lazy loader).
+
+#### Fixed
+
+- Resolved a stale `forktex.json` package version (`0.5.0` → `0.8.1`) and the `importlib.resources.path` `DeprecationWarning` in the FSD test suite (now `resources.files()`).
+
+## [0.8.0] — 2026-06-03 — `forktex.substrate`, bucketed `.forktex/`, filesystem-free libraries, run-anywhere
 
 **BREAKING CHANGES** (hard break, no migration shims — existing on-disk `.forktex/` state is regenerated; only the committed `knowledge/` bucket keeps its path). Implements Ring 1 + run-anywhere of `standard.forktex-architecture`.
 
@@ -40,7 +55,7 @@ All notable changes to the `forktex` CLI are documented here. This project follo
 - Deleting the `/ecosystem/` surrogate (gated on confirming essentials graduated). `StateManager` + the top-level service re-exports are **kept** (load-bearing — verified by audit, not legacy). The docs manifest is now generated from frontmatter (done).
 - _Done since:_ the generic knowledge adapters (`generic_markdown` / `code_index` — point forktex at any markdown tree / codebase, ad-hoc via `knowledge … --source ADAPTER:PATH` or declared in `forktex.json [knowledge].layers`); local-first `knowledge ingest` (writes nodes with no Intelligence; `--remote` opt-in); the agentic engine domain (`agent/engine/`); and the `ecosystem`→`workspace` rename.
 
-### 0.7.0 — Final root taxonomy + `.forktex/` fingerprint standard
+## [0.7.0] — 2026-06-03 — Final root taxonomy + `.forktex/` fingerprint standard
 
 **BREAKING CHANGES** — the root command tree was cut from 31 to 10 deliberate keys, no aliases. The rationale + design are recorded in `convention.root-taxonomy` (a recycled lesson in `forktex-py/.forktex/knowledge/`) and the new `standard.forktex-fingerprint`.
 

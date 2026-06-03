@@ -160,8 +160,8 @@ def _extract_few_shots(project_root: Path | None) -> list[dict[str, Any]]:
     """Representative tasks. Static set + AGENTS.md "Useful Make targets"."""
     few_shots: list[dict[str, Any]] = [
         {
-            "task": "Run the project quality gate",
-            "command": "make gate",
+            "task": "Run the project CI gate",
+            "command": "make ci",
             "expected": "format-check + lint + license + security + test + build all green",
         },
         {

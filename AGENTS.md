@@ -45,7 +45,7 @@ Useful Make targets:
 
 ```bash
 make help
-make gate            # pre-merge quality chord (renamed from `ci`)
+make ci              # pre-merge CI gate (format-check + lint + license + security + test + build)
 make acceptance      # wheel install + CLI battle-test
 make manual          # generate the architecture + AI context manual
 make format-check
@@ -135,38 +135,6 @@ with Cloud("https://cloud.forktex.com", account_key="ftx-...") as cloud:
 **filesystem-free** (its `paths.py` was deleted — forktex-py's `substrate`
 owns all on-disk layout; the SDK emits compose data). `Cloud.from_context(ctx)`
 works the same.
-
-### Cloud repo: directory-per-VPS layout (in flight)
-
-The cloud repo is migrating to a symmetric directory-per-VPS layout
-(`cloud/backup/`, `cloud/registry/`, `cloud/code/`, `cloud/provider/`,
-each with its own `forktex.json` + own optional Makefile via `forktex fsd
-makefile sync`). The controller still lives at `cloud/api/` for now;
-Phase 3 of the migration moves it into `cloud/controller/`.
-
-Workspace atoms exposed at the root `cloud/Makefile` use the
-`<verb>@<instance>` convention (matches systemd / Docker idiom; chosen
-because it scales as more verbs land — `destroy@*`, `logs@*`, etc.):
-
-| Atom | What it does |
-|---|---|
-| `make apply@backup` | `cd backup && forktex cloud up --env $FORKTEX_ENV` (default `production`) |
-| `make apply@registry` | same shape, `cloud/registry/` |
-| `make apply@code` | same shape, `cloud/code/` |
-| `make apply@provider` | same shape, `cloud/provider/` (stub manifest until DockerProvider Phase 1B) |
-| `make ci@backup` | delegates to `cloud/backup/`'s own `make ci` (format-check + lint + pytest) |
-| `make ci-all` | aggregate CI: ci-fast + ci-api + ci-client + ci@backup + per-subsystem config sanity |
-| `make deps-all` | install deps for every subsystem |
-
-Flat verb names (`ci-fast`, `ci-api`, `ci-all`, `deps-all`,
-`deps`) are kept where the verb isn't parametric. Legacy
-`make deploy-{dev,staging,production}` (controller deploy via env
-overlay) is unchanged — operator runbook compat. Only the new
-per-subsystem atoms use the `<verb>@<instance>` form.
-
-VPN currently lives inside the controller (`cloud/api/src/vpn/`); no
-VPS extraction planned yet — promote when there's a real reason to
-separate it.
 
 ## Recall — ground before you build
 

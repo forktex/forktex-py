@@ -23,7 +23,7 @@
 
 [project]
 name = "forktex"
-version = "0.8.0"
+version = "0.8.1"
 description = "Agentic software-delivery CLI + builtin knowledge base for any software project — chat, ground, recycle, deploy."
 authors = [
     {name = "FORKTEX",email = "info@forktex.com"}
@@ -65,7 +65,7 @@ dependencies = [
     "prompt_toolkit (>=3.0,<4.0)",
     "playwright (>=1.40.0,<2.0.0)",
     "jinja2 (>=3.1.0,<4.0.0)",
-    "forktex-core[fractal] (>=2.3.0,<3.0.0)",
+    "forktex-core[fractal] (>=2.4.0,<3.0.0)",
 ]
 
 [project.optional-dependencies]

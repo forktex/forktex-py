@@ -124,7 +124,7 @@ license-fix: ## Add or update the dual-license header on every source file (idem
 license-strip: ## Remove the dual-license header from every source file (use before license model changes)
 	python3 scripts/license_headers.py strip
 
-gate: ## Pre-merge quality gate: format-check + lint + license + security + test + build (renamed from `ci`)
+ci: ## Pre-merge CI gate: format-check + lint + license + security + test + build
 	@$(MAKE) format-check
 	@$(MAKE) lint
 	@$(MAKE) license
@@ -132,11 +132,11 @@ gate: ## Pre-merge quality gate: format-check + lint + license + security + test
 	@$(MAKE) test
 	@$(MAKE) build
 	@echo ''
-	@echo 'Gate passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'
+	@echo 'CI gate passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'
 	@echo '(make typing reports cross-SDK type drifts; tracked separately)'
 
-verify: ## Full pre-publish verification: gate (format/lint/license/security/test/build) + typing + acceptance
-	@$(MAKE) gate
+verify: ## Full pre-publish verification: ci (format/lint/license/security/test/build) + typing + acceptance
+	@$(MAKE) ci
 	@$(MAKE) typing
 	@$(MAKE) acceptance
 	@echo '' && echo 'verify: full forktex-py verification passed'
@@ -164,4 +164,4 @@ quality: format lint typing ## chord (format + lint + typing)
 install-global: ## Install the latest local forktex CLI globally in editable mode
 	pip install --break-system-packages -e .
 
-.PHONY: format lint typing test security license manual install build publish clean acceptance publish-test dev-link-sdks dev-unlink-sdks dev-install installer-build installer-test license-fix license-strip gate verify format-check lint-fix test-cov deps-lock quality install-global
+.PHONY: format lint typing test security license manual install build publish clean acceptance publish-test dev-link-sdks dev-unlink-sdks dev-install installer-build installer-test license-fix license-strip ci verify format-check lint-fix test-cov deps-lock quality install-global

@@ -2,7 +2,7 @@
   "manifestVersion": "1.0.0",
   "name": "forktex-py",
   "description": "ForkTex Python repo — the CLI, agent, architecture discovery, FSD audit, and orchestration toolkit (single-package repo)",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "fsd": {
     "version": "1.3.0",
     "profiles": [
@@ -169,11 +169,11 @@
       "sync": {
         "disabled": true
       },
-      "gate": {
+      "ci": {
         "targets": [
-          "gate"
+          "ci"
         ],
-        "description": "Pre-merge quality gate: format-check + lint + license + security + test + build (renamed from `ci`)",
+        "description": "Pre-merge CI gate: format-check + lint + license + security + test + build",
         "commands": [
           "@$(MAKE) format-check",
           "@$(MAKE) lint",
@@ -182,7 +182,7 @@
           "@$(MAKE) test",
           "@$(MAKE) build",
           "@echo ''",
-          "@echo 'Gate passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'",
+          "@echo 'CI gate passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'",
           "@echo '(make typing reports cross-SDK type drifts; tracked separately)'"
         ]
       },
@@ -190,9 +190,9 @@
         "targets": [
           "verify"
         ],
-        "description": "Full pre-publish verification: gate (format/lint/license/security/test/build) + typing + acceptance",
+        "description": "Full pre-publish verification: ci (format/lint/license/security/test/build) + typing + acceptance",
         "commands": [
-          "@$(MAKE) gate",
+          "@$(MAKE) ci",
           "@$(MAKE) typing",
           "@$(MAKE) acceptance",
           "@echo '' && echo 'verify: full forktex-py verification passed'"
@@ -216,7 +216,7 @@
     {
       "name": "forktex",
       "path": ".",
-      "version": "0.5.0",
+      "version": "0.8.1",
       "publishable": true,
       "language": "python",
       "registry": "https://pypi.org",

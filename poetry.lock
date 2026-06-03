@@ -747,14 +747,14 @@ pyyaml = ">=6.0"
 
 [[package]]
 name = "forktex-core"
-version = "2.3.0"
+version = "2.4.0"
 description = "Shared Python substrate for ForkTex services — async Postgres, Redis, durable execution, encryption, S3/MinIO, background jobs, vector search, tenant-defined Grid schemas, and structured logging"
 optional = false
 python-versions = "<4.0,>=3.12"
 groups = ["main"]
 files = [
-    {file = "forktex_core-2.3.0-py3-none-any.whl", hash = "sha256:9c0205f8e03a07e6cf16cc2dccb0a9cf9a2b7e5fc5a80fd973121f68e985ffd2"},
-    {file = "forktex_core-2.3.0.tar.gz", hash = "sha256:5e8c3fc990e57b116a824e757c1c87f4f2c55032436112afe3cdc2974f8554d4"},
+    {file = "forktex_core-2.4.0-py3-none-any.whl", hash = "sha256:fd371e336e257fc156a07c9024b894c43823f0d3ed1b583323334a4bc18fa3bd"},
+    {file = "forktex_core-2.4.0.tar.gz", hash = "sha256:64c166ab781f8da9e58bd4e3dabb12d6d45a4894c9d8687644d110f20fb640cd"},
 ]
 
 [package.dependencies]
@@ -3327,4 +3327,4 @@ web = ["fastapi", "uvicorn"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<4.0"
-content-hash = "8a042360f52f5d38c2239cc8bbf4e88818c6e85f49e94dd0ca299cb85ee3c2a8"
+content-hash = "bad329d227f45af0f0b0e0ac6d4974fb2e1b8e85d2c74b9aba30f9adf848d4ff"

@@ -107,13 +107,13 @@ def test_cached_bundle_rules_and_concepts_are_injected(tmp_path):
             "scope": "default",
             "project_name": "test",
             "generated_at": "2026-05-09T00:00:00Z",
-            "rules": ["never push to master", "always run make gate"],
+            "rules": ["never push to master", "always run make ci"],
             "concepts": [
                 {"name": "graph", "kind": "fsd-atom", "summary": "module graph"},
                 {"name": "manual", "kind": "fsd-atom", "summary": "AI bundle"},
             ],
             "few_shots": [
-                {"task": "Run gate", "command": "make gate", "expected": "green"},
+                {"task": "Run ci", "command": "make ci", "expected": "green"},
             ],
         },
     )
@@ -123,7 +123,7 @@ def test_cached_bundle_rules_and_concepts_are_injected(tmp_path):
     assert "## Key Concepts" in prompt
     assert "**graph**" in prompt
     assert "## Common Tasks" in prompt
-    assert "make gate" in prompt
+    assert "make ci" in prompt
     # Hint shouldn't appear when we have a real bundle.
     assert "Run `forktex arch build`" not in prompt
 

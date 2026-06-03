@@ -30,7 +30,8 @@ from forktex.fsd.models import FSDStandard
 
 
 def _load() -> FSDStandard:
-    with resources.path("forktex.data.fsd", "standard.json") as p:
+    source = resources.files("forktex.data.fsd").joinpath("standard.json")
+    with resources.as_file(source) as p:
         return FSDStandard.from_json(Path(p))
 
 
@@ -109,10 +110,11 @@ def test_no_l5_compliant_level():
 
 def test_chord_aliases_present_no_deprecated_aliases():
     """Hard break: deprecated rename aliases (start→apply, etc.) must
-    not survive the cleanup; only chord aliases (quality, gate, release)
-    remain. Note: `ci` was renamed to `gate` in v1.2.0."""
+    not survive the cleanup; only chord aliases (quality, ci, release)
+    remain. The merge-guard chord is `ci` — the canonical FSD atom name
+    (`name: "CI Gate"`); a v1.2.0 rename to `gate` was reverted in v1.4.0."""
     s = _load()
-    assert set(s.aliases.keys()) == {"quality", "gate", "release"}
+    assert set(s.aliases.keys()) == {"quality", "ci", "release"}
     assert s.aliases_deprecated == {}
 
 
