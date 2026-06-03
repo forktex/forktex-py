@@ -37,6 +37,7 @@ configured layers (global docs + project overlay) under the ``knowledge`` namesp
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from collections.abc import Callable
@@ -53,6 +54,8 @@ from forktex_core.fractal import (
     node_from_frontmatter,
 )
 from forktex_core.fractal.io import split_frontmatter
+
+_log = logging.getLogger("forktex.knowledge")
 
 ENGINEERING_DIR = "engineering"
 MANIFEST_FILENAME = "manifest.json"
@@ -92,6 +95,7 @@ def default_docs_path() -> str | None:
         return None
     docs = Path(root) / "docs"
     return str(docs) if docs.is_dir() else None
+
 
 #: Conventional per-project doc-space, under a repo root: the recycle write-target
 #: and the overlay the global docs compose under. One per repo → memory is local
@@ -168,8 +172,14 @@ def _try_load_item(root: Path, item: dict[str, Any]) -> Node | None:
         file_path = root / rel_path[len("docs/") :]
     if not file_path.is_file():
         return None
-    fm, body = split_frontmatter(_strip_docs_header(file_path.read_text(encoding="utf-8")))
-    return _build_node(item, fm, body)
+    try:
+        fm, body = split_frontmatter(
+            _strip_docs_header(file_path.read_text(encoding="utf-8"))
+        )
+        return _build_node(item, fm, body)
+    except Exception as exc:
+        _log.warning("skipped malformed docs node %s: %s", file_path, exc)
+        return None
 
 
 def _build_node(item: dict[str, Any], fm: dict[str, Any], body_md: str) -> Node:
@@ -228,19 +238,49 @@ def _project_references(ws: Workspace, items: list[dict[str, Any]]) -> None:
 #: Directories never descended when indexing an arbitrary tree.
 _IGNORE_DIRS = frozenset(
     {
-        ".git", "node_modules", ".forktex", "dist", "build", ".venv", "venv",
-        "__pycache__", "vendor", ".next", ".cache", "target", ".idea", ".tox",
-        "htmlcov", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+        ".git",
+        "node_modules",
+        ".forktex",
+        "dist",
+        "build",
+        ".venv",
+        "venv",
+        "__pycache__",
+        "vendor",
+        ".next",
+        ".cache",
+        "target",
+        ".idea",
+        ".tox",
+        "htmlcov",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
     }
 )
 
 #: Source extension → language label for ``code_index``.
 _CODE_EXT_LANG: dict[str, str] = {
-    ".py": "python", ".ts": "typescript", ".tsx": "typescript",
-    ".js": "javascript", ".jsx": "javascript", ".go": "go", ".rs": "rust",
-    ".java": "java", ".rb": "ruby", ".c": "c", ".h": "c", ".cpp": "cpp",
-    ".cc": "cpp", ".hpp": "cpp", ".cs": "csharp", ".php": "php",
-    ".swift": "swift", ".kt": "kotlin", ".scala": "scala", ".sh": "shell",
+    ".py": "python",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".go": "go",
+    ".rs": "rust",
+    ".java": "java",
+    ".rb": "ruby",
+    ".c": "c",
+    ".h": "c",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".hpp": "cpp",
+    ".cs": "csharp",
+    ".php": "php",
+    ".swift": "swift",
+    ".kt": "kotlin",
+    ".scala": "scala",
+    ".sh": "shell",
     ".sql": "sql",
 }
 _CODE_MAX_BYTES = 256 * 1024
@@ -302,23 +342,32 @@ def load_generic_markdown(root: Path | str) -> Workspace:
         nid = f"md.{_slug(rel)}"
         if nid in ws.nodes:
             continue  # distinct path, same slug — keep the first, skip the dupe
-        fm, body = split_frontmatter(fp.read_text(encoding="utf-8", errors="replace"))
-        ws.add(
-            node_from_frontmatter(
-                {
-                    "id": nid,
-                    "kind": "markdown",
-                    "title": fm.get("title") or _first_h1(body) or fp.stem,
-                    "summary": fm.get("summary") or _excerpt(body),
-                    "status": str(fm.get("status") or "active"),
-                    "version": str(fm.get("version") or "0.1.0"),
-                    "updated_at": str(fm.get("updated") or fm.get("updated_at") or "")
-                    or None,
-                    "tags": [t for t in (fm.get("tags") or []) if isinstance(t, str)],
-                },
-                body,
+        try:
+            fm, body = split_frontmatter(
+                fp.read_text(encoding="utf-8", errors="replace")
             )
-        )
+            ws.add(
+                node_from_frontmatter(
+                    {
+                        "id": nid,
+                        "kind": "markdown",
+                        "title": fm.get("title") or _first_h1(body) or fp.stem,
+                        "summary": fm.get("summary") or _excerpt(body),
+                        "status": str(fm.get("status") or "active"),
+                        "version": str(fm.get("version") or "0.1.0"),
+                        "updated_at": str(
+                            fm.get("updated") or fm.get("updated_at") or ""
+                        )
+                        or None,
+                        "tags": [
+                            t for t in (fm.get("tags") or []) if isinstance(t, str)
+                        ],
+                    },
+                    body,
+                )
+            )
+        except Exception as exc:
+            _log.warning("skipped malformed markdown %s: %s", fp, exc)
     return ws
 
 
@@ -545,7 +594,9 @@ def build_knowledge_resolver(
         global_kn = _sub.global_knowledge_dir()
         if (global_kn / "nodes").is_dir() or (global_kn / "patches").is_dir():
             specs.append(
-                _LayerSpec("global", global_kn, load_workspace, _WORKSPACE_MTIME_PATTERNS)
+                _LayerSpec(
+                    "global", global_kn, load_workspace, _WORKSPACE_MTIME_PATTERNS
+                )
             )
 
         if project_path is not None:

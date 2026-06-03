@@ -53,9 +53,14 @@ SERVER_NAME = "forktex-knowledge"
 SERVER_VERSION = "0.1.0"
 
 
-def build_mcp_server(query: FractalQuery, *, recycle_dir: str | Path | None = None) -> Server:
+def build_mcp_server(
+    query: FractalQuery, *, recycle_dir: str | Path | None = None
+) -> Server:
     """Build an MCP server projecting the forktex knowledge tool catalog."""
-    tools = {tool.name: tool for tool in build_knowledge_tools(query, recycle_dir=recycle_dir)}
+    tools = {
+        tool.name: tool
+        for tool in build_knowledge_tools(query, recycle_dir=recycle_dir)
+    }
     server: Server = Server(SERVER_NAME)
 
     @server.list_tools()
@@ -78,7 +83,9 @@ def build_mcp_server(query: FractalQuery, *, recycle_dir: str | Path | None = No
     return server
 
 
-async def serve_stdio(query: FractalQuery, *, recycle_dir: str | Path | None = None) -> None:
+async def serve_stdio(
+    query: FractalQuery, *, recycle_dir: str | Path | None = None
+) -> None:
     """Run the knowledge MCP server over stdio."""
     server = build_mcp_server(query, recycle_dir=recycle_dir)
     async with stdio_server() as (read_stream, write_stream):
@@ -101,11 +108,16 @@ async def serve_stdio(query: FractalQuery, *, recycle_dir: str | Path | None = N
     "--docs", default=None, help="Path to the global docs repo (else $FORKTEX_DOCS)."
 )
 @click.option(
-    "--project", "-d", default=None,
-    help="Project doc-space or repo root (else ./.forktex/knowledge)."
+    "--project",
+    "-d",
+    default=None,
+    help="Project doc-space or repo root (else ./.forktex/knowledge).",
 )
 @click.option(
-    "--read-only", is_flag=True, default=False, help="Expose only read tools (no recycle)."
+    "--read-only",
+    is_flag=True,
+    default=False,
+    help="Expose only read tools (no recycle).",
 )
 async def mcp_cmd(docs: str | None, project: str | None, read_only: bool) -> None:
     """Run an MCP server (stdio) exposing fractal knowledge tools.

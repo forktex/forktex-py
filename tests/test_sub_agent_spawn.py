@@ -33,7 +33,8 @@ def _delta(text: str) -> AgentEvent:
 
 def _tool_call(name: str, call_id: str, **args) -> AgentEvent:
     return AgentEvent(
-        event=AgentEventType.TOOL_CALL, data={"name": name, "id": call_id, "arguments": args}
+        event=AgentEventType.TOOL_CALL,
+        data={"name": name, "id": call_id, "arguments": args},
     )
 
 
@@ -70,8 +71,16 @@ class FakeToolServer:
 
     def get_schemas(self):
         return [
-            {"name": "read_file", "description": "r", "parameters": {"type": "object", "properties": {}}},
-            {"name": "write_file", "description": "w", "parameters": {"type": "object", "properties": {}}},
+            {
+                "name": "read_file",
+                "description": "r",
+                "parameters": {"type": "object", "properties": {}},
+            },
+            {
+                "name": "write_file",
+                "description": "w",
+                "parameters": {"type": "object", "properties": {}},
+            },
         ]
 
     async def call(self, name, **kw):
@@ -79,12 +88,16 @@ class FakeToolServer:
         return ToolResult(content=f"ran {name}")
 
 
-_SPEC = SubAgentSpec(name="researcher", intent="find the auth flow", tool_subset=frozenset({"read_file"}))
+_SPEC = SubAgentSpec(
+    name="researcher", intent="find the auth flow", tool_subset=frozenset({"read_file"})
+)
 
 
 @pytest.mark.asyncio
 async def test_run_sub_agent_completed():
-    res = await _run_sub_agent(_SPEC, FakeProvider([[_delta("the auth flow is X"), _done()]]), FakeToolServer())
+    res = await _run_sub_agent(
+        _SPEC, FakeProvider([[_delta("the auth flow is X"), _done()]]), FakeToolServer()
+    )
     assert res.status == "completed"
     assert res.name == "researcher"
     assert "auth flow is X" in res.summary
@@ -105,7 +118,10 @@ async def test_run_sub_agent_tool_subset_filters_schemas():
 async def test_run_sub_agent_tool_call_then_summary():
     tool_server = FakeToolServer()
     provider = FakeProvider(
-        [[_tool_call("read_file", "c1", path="x"), _done()], [_delta("summary"), _done()]]
+        [
+            [_tool_call("read_file", "c1", path="x"), _done()],
+            [_delta("summary"), _done()],
+        ]
     )
     res = await _run_sub_agent(_SPEC, provider, tool_server)
     assert res.status == "completed"
@@ -126,6 +142,10 @@ async def test_run_sub_agent_timeout():
 
 @pytest.mark.asyncio
 async def test_spawn_validates_unknown_tool():
-    bad = SubAgentSpec(name="r", intent="i", tool_subset=frozenset({"nonexistent_tool"}))
+    bad = SubAgentSpec(
+        name="r", intent="i", tool_subset=frozenset({"nonexistent_tool"})
+    )
     with pytest.raises(ValueError, match="not on parent server"):
-        await spawn_sub_agent(bad, parent_intelligence=object(), parent_tool_server=FakeToolServer())
+        await spawn_sub_agent(
+            bad, parent_intelligence=object(), parent_tool_server=FakeToolServer()
+        )

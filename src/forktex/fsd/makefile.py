@@ -34,6 +34,30 @@ from forktex.fsd.profiles import resolve_applicable_atoms
 from forktex.manifest.models import AtomOverride, ForktexManifest
 
 
+def _optional_atom_ids(
+    manifest: ForktexManifest,
+    *,
+    package_manifest: ForktexManifest | None = None,
+) -> set[str]:
+    """Atom ids the active profile(s) treat as optional (vs required)."""
+    from forktex.fsd.profiles import PROFILE_CATALOG, resolve_profile_ids
+
+    ids: set[str] = set()
+    for profile_id in resolve_profile_ids(manifest, package_manifest=package_manifest):
+        profile = PROFILE_CATALOG.get(profile_id)
+        if profile:
+            ids |= set(profile.optional)
+    return ids
+
+
+def _is_todo_stub(commands: list[str]) -> bool:
+    """True when a recipe is only an unimplemented placeholder echo."""
+    return len(commands) == 1 and (
+        commands[0].startswith('@echo "TODO: implement')
+        or commands[0].startswith('@echo "TODO: configure')
+    )
+
+
 def _custom_atoms(
     manifest: ForktexManifest,
     standard: FSDStandard,
@@ -278,7 +302,7 @@ def _root_atom_commands(atom_id: str, manifest: ForktexManifest) -> list[str]:
             "\tdone",
         ]
     if atom_id == "typing":
-        return ["python -m pyright src/ 2>/dev/null || python -m mypy src/"]
+        return ["python -m pyright src/"]
     if atom_id == "test":
         lines = ["poetry run pytest tests/ -x -q"]
         for pkg in subpaths:
@@ -421,17 +445,19 @@ def _install_lines(manifest: ForktexManifest) -> list[str]:
 def _package_atom_commands(atom_id: str, src_dir: str = "src") -> list[str]:
     if atom_id == "install":
         return [
-            "pip install --break-system-packages -e . 2>/dev/null || \\",
-            "\tpip install -e .",
+            "@if command -v poetry >/dev/null 2>&1; then \\",
+            '\t\techo "  install: poetry detected → poetry install --with dev"; \\',
+            "\t\tpoetry install --with dev; \\",
+            "\telse \\",
+            "\t\tpip install --break-system-packages -e . 2>/dev/null || pip install -e .; \\",
+            "\tfi",
         ]
     if atom_id == "format":
         return [f"ruff format {src_dir}/ tests/ 2>/dev/null || ruff format {src_dir}/"]
     if atom_id == "lint":
         return [f"ruff check {src_dir}/ tests/ 2>/dev/null || ruff check {src_dir}/"]
     if atom_id == "typing":
-        return [
-            f"python -m pyright {src_dir}/ 2>/dev/null || python -m mypy {src_dir}/"
-        ]
+        return [f"python -m pyright {src_dir}/"]
     if atom_id == "test":
         return ["poetry run pytest tests/ -x -q 2>/dev/null || poetry run pytest -x -q"]
     if atom_id == "security":
@@ -775,6 +801,7 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         custom_target_collisions.add(ctarget)
         custom_target_collisions.update(caliases)
 
+    optional_ids = _optional_atom_ids(manifest)
     for atom in atoms:
         override = _get_atom_override(manifest, atom.id)
         target, aliases = _make_target_names(
@@ -783,6 +810,9 @@ def generate_root_makefile(standard: FSDStandard, manifest: ForktexManifest) -> 
         if target in custom_target_collisions:
             continue
         commands = _override_commands(_root_atom_commands(atom.id, manifest), override)
+        # An optional atom with no override and only a placeholder body is noise.
+        if not override and atom.id in optional_ids and _is_todo_stub(commands):
+            continue
         lines.extend(
             _render_target(
                 atom,
@@ -951,6 +981,7 @@ def generate_package_makefile(
         custom_target_collisions.add(ctarget)
         custom_target_collisions.update(caliases)
 
+    optional_ids = _optional_atom_ids(manifest, package_manifest=package_manifest)
     for atom in atoms:
         override = _get_atom_override(
             manifest, atom.id, package_manifest=package_manifest
@@ -963,6 +994,9 @@ def generate_package_makefile(
         commands = _override_commands(
             _package_atom_commands(atom.id, src_dir), override
         )
+        # An optional atom with no override and only a placeholder body is noise.
+        if not override and atom.id in optional_ids and _is_todo_stub(commands):
+            continue
         lines.extend(
             _render_target(
                 atom,

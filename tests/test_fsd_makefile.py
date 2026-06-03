@@ -248,3 +248,41 @@ def test_format_check_renders_for_sub_package_only_workspace():
     assert "format-check:" in content
     assert "$(MAKE) -C $$pkg format-check" in content
     assert "ruff format --check src/ tests/" not in content
+
+
+def test_optional_stub_atoms_omitted_and_typing_default_has_no_mypy_fallback():
+    """B4 + B5: optional atoms with only a placeholder body are omitted (no
+    ``TODO`` stubs), and the built-in ``typing`` default is a single pyright
+    invocation — never the silent ``pyright || mypy`` fallback."""
+    root_manifest = ForktexManifest.model_validate(
+        {
+            "manifestVersion": "1.0.0",
+            "name": "demo-workspace",
+            "fsd": {"version": "1.0.0", "profiles": ["workspace/python-monorepo"]},
+        }
+    )
+    package_manifest = ForktexManifest.model_validate(
+        {
+            "manifestVersion": "1.0.0",
+            "name": "demo-api",
+            "fsd": {"version": "1.0.0", "profiles": ["package/python-sdk"]},
+            "packages": [
+                {
+                    "name": "demo-api",
+                    "path": ".",
+                    "version": "1.0.0",
+                    "publishable": False,
+                    "language": "python",
+                }
+            ],
+        }
+    )
+    content = generate_package_makefile(
+        load_standard(), root_manifest, package_manifest
+    )
+    # B5 — no broken / silent type-checker fallback in the default body.
+    assert "python -m pyright src/" in content
+    assert "mypy" not in content
+    # B4 — optional atoms that would only emit a placeholder are dropped.
+    assert "TODO: implement" not in content
+    assert "TODO: configure" not in content

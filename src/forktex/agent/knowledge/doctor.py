@@ -24,15 +24,16 @@
 """``forktex knowledge doctor`` — drift detection for the project doc-space.
 
 The maintenance command that surfaces problems *before* an agent reads
-inconsistent knowledge. v1 ships six checks (each implemented as an independent
-function so adding a seventh is one append):
+inconsistent knowledge. Each check is an independent function so adding the next
+is one append:
 
   1. Filename ↔ id mismatch  (would silently shadow on a future load).
   2. Dangling ``reference`` edges (target node not in the workspace).
   3. Cycles among ``parent`` edges (the nesting axis must stay acyclic).
   4. Patch ``output_ids`` that don't resolve (broken provenance link).
   5. Retired nodes that still have inbound references (others point at a tomb).
-  6. ``KnowledgeConfig`` validates (manifest schema drift).
+  6. Ingested nodes whose source file changed since ingest (stale reference dump).
+  7. ``KnowledgeConfig`` validates (manifest schema drift).
 
 Output mirrors ``docs/scripts/render.py:cmd_validate`` — collect issues, print
 them, return the count. The CLI maps non-zero to ``sys.exit(count)``. Issues
@@ -103,6 +104,7 @@ def run_doctor(project_root: str | Path, *, composed: bool = False) -> list[Issu
     issues += _check_parent_cycles(space)
     issues += _check_patches_resolve(space)
     issues += _check_retired_inbound(space)
+    issues += _check_ingested_staleness(space)
     issues += _check_config_valid(root)
     return issues
 
@@ -261,7 +263,9 @@ def _check_retired_inbound(space: Path) -> list[Issue]:
     """A retired node with inbound references is silently broken for readers."""
     out: list[Issue] = []
     nodes = _load_workspace_nodes(space)
-    retired_ids = {nid for nid, n in nodes.items() if getattr(n, "status", None) == "retired"}
+    retired_ids = {
+        nid for nid, n in nodes.items() if getattr(n, "status", None) == "retired"
+    }
     if not retired_ids:
         return out
     for nid, n in nodes.items():
@@ -277,6 +281,56 @@ def _check_retired_inbound(space: Path) -> list[Issue]:
                         message=(
                             f"references retired node {target!r} — either "
                             "re-recycle to point elsewhere or unset --replace-refs."
+                        ),
+                    )
+                )
+    return out
+
+
+def _check_ingested_staleness(space: Path) -> list[Issue]:
+    """Flag ingested nodes whose source file changed since ingest.
+
+    ``forktex knowledge ingest`` records each source's content hash (keyed by the
+    same relpaths as ``source_ids``) plus the workspace root it resolved against on
+    the provenance patch. Re-hash the source and warn on mismatch so a stale
+    reference dump (e.g. an ``AGENTS.md`` edited after ingest) is surfaced — the fix
+    is to re-run ``forktex knowledge ingest``. Best-effort: a moved/unreadable source
+    is skipped (not every node is an ingest, and absence isn't staleness).
+    """
+    import hashlib
+
+    from forktex_core.fractal.io import load_patch
+
+    out: list[Issue] = []
+    for path in (space / "patches").glob("*.md"):
+        try:
+            patch = load_patch(path)
+        except Exception:
+            continue  # unparseable patches are already reported by _check_patches_resolve
+        hashes = getattr(patch, "source_hashes", None)
+        source_root = getattr(patch, "source_root", None)
+        if not hashes or not source_root:
+            continue
+        target = patch.output_ids[0] if patch.output_ids else patch.id
+        for rel, expected in hashes.items():
+            src = Path(source_root) / rel
+            if not src.is_file():
+                continue
+            try:
+                current = hashlib.sha256(
+                    src.read_text(encoding="utf-8").encode("utf-8")
+                ).hexdigest()
+            except OSError, UnicodeDecodeError:
+                continue
+            if current != expected:
+                out.append(
+                    Issue(
+                        code="reference-stale",
+                        severity="warning",
+                        target=target,
+                        message=(
+                            f"source {rel!r} changed since ingest — re-run "
+                            "`forktex knowledge ingest` to refresh this node"
                         ),
                     )
                 )

@@ -41,6 +41,7 @@ Was ``forktex intelligence index-workspace`` before 0.8.0.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -112,7 +113,7 @@ def _ingest_local(files: list[tuple[str, str]], root: Path, target) -> int:
     for rel, label in files:
         try:
             text = (root / rel).read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
+        except UnicodeDecodeError, OSError:
             console.print(f"  [yellow]skip[/yellow] {rel} (unreadable)")
             continue
         recycle(
@@ -124,10 +125,17 @@ def _ingest_local(files: list[tuple[str, str]], root: Path, target) -> int:
             summary=f"Workspace source: {rel} ({label})",
             tags=[label, "workspace", "ingest"],
             source_ids=[rel],
+            source_root=str(root),
+            source_hashes={rel: _source_hash(text)},
             agent="forktex.agent.knowledge.ingest",
         )
         written += 1
     return written
+
+
+def _source_hash(text: str) -> str:
+    """Content hash of an ingested source — lets ``doctor`` detect post-ingest drift."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 async def _push_remote(files: list[tuple[str, str]], root: Path, space: str) -> None:
@@ -171,7 +179,7 @@ async def _push_remote(files: list[tuple[str, str]], root: Path, space: str) -> 
             for rel, label in files:
                 try:
                     text = (root / rel).read_text(encoding="utf-8")
-                except (UnicodeDecodeError, OSError):
+                except UnicodeDecodeError, OSError:
                     continue
                 try:
                     await space_obj.upsert(
@@ -192,7 +200,9 @@ async def _push_remote(files: list[tuple[str, str]], root: Path, space: str) -> 
 
 
 @click.command("ingest")
-@click.option("--dir", "root_dir", default=None, help="Workspace/source root (default: discover).")
+@click.option(
+    "--dir", "root_dir", default=None, help="Workspace/source root (default: discover)."
+)
 @click.option(
     "--project",
     "to_project",
@@ -206,8 +216,14 @@ async def _push_remote(files: list[tuple[str, str]], root: Path, space: str) -> 
     default=False,
     help="Also push to the ForkTex Intelligence vector store (needs `forktex auth intelligence`).",
 )
-@click.option("--space", default=DEFAULT_SPACE, help="Remote knowledge space name (with --remote).")
-@click.option("--dry-run", is_flag=True, help="List what would be ingested; write nothing.")
+@click.option(
+    "--space",
+    default=DEFAULT_SPACE,
+    help="Remote knowledge space name (with --remote).",
+)
+@click.option(
+    "--dry-run", is_flag=True, help="List what would be ingested; write nothing."
+)
 async def ingest_cmd(
     root_dir: str | None,
     to_project: bool,

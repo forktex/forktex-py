@@ -121,7 +121,9 @@ def test_unknown_adapter_skipped_not_crashed(tmp_path: Path) -> None:
     cfg = KnowledgeConfig(
         layers=[
             KnowledgeLayerDef(name="real", path=str(a), adapter="workspace"),
-            KnowledgeLayerDef(name="bogus", path=str(tmp_path / "nope"), adapter="not_real"),
+            KnowledgeLayerDef(
+                name="bogus", path=str(tmp_path / "nope"), adapter="not_real"
+            ),
         ]
     )
     resolver = build_knowledge_resolver(config=cfg)

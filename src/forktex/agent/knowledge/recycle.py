@@ -33,9 +33,10 @@ picks it up: that's the compounding loop across sessions.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from forktex_core.fractal import (
     Node,
@@ -71,6 +72,8 @@ def recycle(
     agent: str | None = None,
     replace_tags: bool = False,
     replace_refs: bool = False,
+    source_root: str | Path | None = None,
+    source_hashes: Mapping[str, str] | None = None,
 ) -> Node:
     """Write/refine a learning node (+ provenance patch) into ``doc_space``.
 
@@ -123,8 +126,20 @@ def recycle(
     # Atomic write (tempfile + os.replace) via tracked_write, so a concurrent
     # reader of the same path never sees a half-written file and a registry
     # record links the disk artefact back to this writer.
-    tracked_write(node_path, serialize_node(node), kind="knowledge_node", writer=_WRITER)
+    tracked_write(
+        node_path, serialize_node(node), kind="knowledge_node", writer=_WRITER
+    )
 
+    # Optional source provenance for drift detection: ingest records each source
+    # file's content hash (keyed by the same relpaths as ``source_ids``) plus the
+    # workspace root they resolve against, so ``doctor`` can later re-hash and flag
+    # a node whose source changed since ingest. Patch is ``extra="allow"`` — these
+    # ride along and round-trip without a schema change. Omitted for plain lessons.
+    provenance: dict[str, Any] = {}
+    if source_hashes:
+        provenance["source_hashes"] = dict(source_hashes)
+    if source_root is not None:
+        provenance["source_root"] = str(source_root)
     patch = Patch(
         id=patch_id,
         kind=RECYCLE_PATCH_KIND,
@@ -134,6 +149,7 @@ def recycle(
         source_id=(source_ids[0] if source_ids else id),
         source_ids=list(source_ids),
         output_ids=[id],
+        **provenance,
     )
     tracked_write(
         patches_dir / f"{patch_id}.md",

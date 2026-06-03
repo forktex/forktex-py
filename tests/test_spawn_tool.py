@@ -20,7 +20,11 @@ from forktex.agent.engine.events import AgentEvent, AgentEventType
 from forktex.agent.manager import AgentManager
 from forktex.agent.tools.base import ToolResult
 from forktex.agent.workflow import sub_agent as sub_agent_mod
-from forktex.agent.workflow.sub_agent import SubAgentResult, SubAgentSpec, _run_sub_agent
+from forktex.agent.workflow.sub_agent import (
+    SubAgentResult,
+    SubAgentSpec,
+    _run_sub_agent,
+)
 
 
 def _mgr(tmp_path, **kw) -> AgentManager:
@@ -48,7 +52,9 @@ def test_spawn_tool_absent_for_non_spawning_agents(tmp_path, type_name):
 
 
 def _fake_spawn(captured):
-    async def _spawn(spec, *, parent_intelligence, parent_tool_server, on_tool_event=None):
+    async def _spawn(
+        spec, *, parent_intelligence, parent_tool_server, on_tool_event=None
+    ):
         captured["spec"] = spec
         captured["on_tool_event"] = on_tool_event
         return SubAgentResult(
@@ -110,7 +116,9 @@ async def test_sub_agent_cannot_spawn(tmp_path, monkeypatch):
 async def test_unknown_role_is_a_clean_tool_error(tmp_path, monkeypatch):
     monkeypatch.setattr(sub_agent_mod, "spawn_sub_agent", _fake_spawn({}))
     server = _server_for(_mgr(tmp_path), "assistant")
-    result = await server.get_tool("spawn_sub_agent").execute(role="telepath", intent="x")
+    result = await server.get_tool("spawn_sub_agent").execute(
+        role="telepath", intent="x"
+    )
     assert result.is_error is True
     assert "telepath" in result.content
 

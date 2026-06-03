@@ -23,8 +23,14 @@ def _manifest(metadata):
 def test_compose_base_injects_env_file_when_present():
     cmd = _compose_base("proj", "/c/compose.yml", "/p/.env.local")
     assert cmd == [
-        "docker", "compose", "--env-file", "/p/.env.local",
-        "-p", "proj", "-f", "/c/compose.yml",
+        "docker",
+        "compose",
+        "--env-file",
+        "/p/.env.local",
+        "-p",
+        "proj",
+        "-f",
+        "/c/compose.yml",
     ]
 
 

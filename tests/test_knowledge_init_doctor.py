@@ -98,9 +98,8 @@ def test_init_is_idempotent(tmp_path: Path) -> None:
     assert result.created_dirs is False
     assert result.created_readme is False  # we don't overwrite the existing one
     assert (
-        (tmp_path / ".forktex" / "knowledge" / "README.md").read_text()
-        == "# my custom readme"
-    )
+        tmp_path / ".forktex" / "knowledge" / "README.md"
+    ).read_text() == "# my custom readme"
 
 
 def test_init_preserves_existing_manifest_block(tmp_path: Path) -> None:
@@ -151,7 +150,9 @@ def test_doctor_surfaces_filename_id_mismatch(tmp_path: Path) -> None:
     space = tmp_path / ".forktex" / "knowledge"
     recycle(space, id="lesson.real", title="Real")
     # Move the file to a path whose stem disagrees with the node's id.
-    (space / "nodes" / "lesson.real.md").rename(space / "nodes" / "lesson.wrong-name.md")
+    (space / "nodes" / "lesson.real.md").rename(
+        space / "nodes" / "lesson.wrong-name.md"
+    )
 
     issues = run_doctor(tmp_path)
     codes = {i.code for i in issues}
@@ -164,13 +165,58 @@ def test_doctor_flags_retired_with_inbound_refs(tmp_path: Path) -> None:
     space = tmp_path / ".forktex" / "knowledge"
     recycle(space, id="lesson.target", title="Will be retired")
     recycle(
-        space, id="lesson.referrer", title="Points at target", references=["lesson.target"]
+        space,
+        id="lesson.referrer",
+        title="Points at target",
+        references=["lesson.target"],
     )
     retire(space, "lesson.target", reason="Superseded.")
 
     issues = run_doctor(tmp_path)
     codes = {i.code for i in issues}
     assert "retired-inbound" in codes
+
+
+def test_doctor_surfaces_unparseable_node(tmp_path: Path) -> None:
+    """A malformed node is reported as a hard error (it no longer silently blanks
+    the graph at load — the load skips+warns, the doctor names it)."""
+    init_doc_space(tmp_path)
+    space = tmp_path / ".forktex" / "knowledge"
+    recycle(space, id="lesson.good", title="Good")
+    # `tags:` with no value -> YAML None, which the Node model rejects.
+    (space / "nodes" / "lesson.bad.md").write_text(
+        "---\nid: lesson.bad\nkind: lesson\ntitle: Bad\ntags:\n---\n\nbody\n",
+        encoding="utf-8",
+    )
+
+    issues = run_doctor(tmp_path)
+    codes = {i.code for i in issues}
+    assert "node-unparseable" in codes
+    assert exit_code(issues, strict=False) == 1  # error blocks
+
+
+def test_doctor_flags_stale_ingested_source(tmp_path: Path) -> None:
+    """An ingested reference node whose source file changed since ingest is flagged
+    ``reference-stale`` (warning) — re-ingesting clears it. Catches the silent drift
+    of ingested AGENTS.md/docs dumps."""
+    from forktex.agent.knowledge.ingest import _ingest_local
+
+    init_doc_space(tmp_path)
+    space = tmp_path / ".forktex" / "knowledge"
+    src = tmp_path / "AGENTS.md"
+    src.write_text("original content", encoding="utf-8")
+    _ingest_local([("AGENTS.md", "test")], tmp_path, space)
+
+    assert not [i for i in run_doctor(tmp_path) if i.code == "reference-stale"]
+
+    src.write_text("CHANGED content", encoding="utf-8")
+    issues = run_doctor(tmp_path)
+    assert [i for i in issues if i.code == "reference-stale"]
+    assert exit_code(issues, strict=False) == 0  # warning only
+    assert exit_code(issues, strict=True) == 1  # strict escalates
+
+    _ingest_local([("AGENTS.md", "test")], tmp_path, space)  # re-ingest refreshes
+    assert not [i for i in run_doctor(tmp_path) if i.code == "reference-stale"]
 
 
 def test_doctor_missing_doc_space_prompts_init(tmp_path: Path) -> None:
@@ -187,7 +233,10 @@ def test_doctor_end_to_end_round_trip(tmp_path: Path) -> None:
     space = tmp_path / ".forktex" / "knowledge"
     recycle(space, id="topic.demo", title="Demo topic", summary="Parent.")
     recycle(
-        space, id="lesson.demo-child", title="Demo child", summary="Will be folded.",
+        space,
+        id="lesson.demo-child",
+        title="Demo child",
+        summary="Will be folded.",
         references=["topic.demo"],
     )
     # Build a real parent-edge via a hand-set Node (recycle doesn't expose parents today).

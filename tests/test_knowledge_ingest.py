@@ -30,9 +30,13 @@ from forktex.agent.knowledge.sources import ensure_doc_space
 def _make_workspace(root):
     root.mkdir(parents=True, exist_ok=True)
     (root / "proj-a").mkdir()
-    (root / "proj-a" / "AGENTS.md").write_text("# proj-a agent guide\nalpha", encoding="utf-8")
+    (root / "proj-a" / "AGENTS.md").write_text(
+        "# proj-a agent guide\nalpha", encoding="utf-8"
+    )
     (root / "proj-b").mkdir()
-    (root / "proj-b" / "AGENTS.md").write_text("# proj-b agent guide\nbeta", encoding="utf-8")
+    (root / "proj-b" / "AGENTS.md").write_text(
+        "# proj-b agent guide\nbeta", encoding="utf-8"
+    )
     (root / ".hidden").mkdir()  # skipped (dotdir)
     (root / ".hidden" / "AGENTS.md").write_text("nope", encoding="utf-8")
     return root
@@ -66,6 +70,23 @@ def test_ingest_local_writes_nodes_no_intelligence(tmp_path):
     assert node.kind == "reference"
     assert "alpha" in node.body_md
     assert "workspace" in node.tags and "ingest" in node.tags
+
+
+def test_ingest_records_source_hash_on_patch(tmp_path):
+    """Ingest stamps each source's content hash + workspace root on the provenance
+    patch so doctor can later detect drift."""
+    from forktex_core.fractal.io import load_patch
+
+    root = _make_workspace(tmp_path / "ws")
+    space = ensure_doc_space(tmp_path / "space")
+    _ingest_local(_collect_files(root), root, space)
+
+    patch = load_patch(
+        space / "patches" / "patch.recycle.reference.proj-a-agents-md.md"
+    )
+    assert getattr(patch, "source_root", None) == str(root)
+    hashes = getattr(patch, "source_hashes", None)
+    assert hashes and "proj-a/AGENTS.md" in hashes
 
 
 def test_ingest_local_is_idempotent(tmp_path):

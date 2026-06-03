@@ -32,6 +32,7 @@ can query live knowledge mid-task.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -41,13 +42,31 @@ from forktex.agent.knowledge.recycle import recycle as _recycle_node
 from forktex.agent.knowledge.retire import retire as _retire_node
 from forktex.agent.knowledge.rollup import rollup as _rollup_subtree
 from forktex.agent.knowledge.search import ranked_search
+from forktex.agent.knowledge.sources import (
+    ensure_doc_space,
+    resolve_doc_space,
+)
 from forktex.agent.tools.base import Tool, ToolResult
 
 DEFAULT_NAMESPACE = "knowledge"
 
+#: Env var a host (Claude Code, Codex) can export per workspace so write tools
+#: target the repo actually in use rather than the server's startup directory.
+DOC_SPACE_ENV = "FORKTEX_DOC_SPACE"
+
 _NAMESPACE_PARAM = {
     "type": "string",
     "description": "Knowledge namespace; defaults to the composed 'knowledge' view.",
+}
+
+_DOC_SPACE_PARAM = {
+    "type": "string",
+    "description": (
+        "Target project to write to — a repo root or a .forktex/knowledge dir. "
+        "A long-lived MCP server is bound to one repo at startup; pass this (or "
+        f"export {DOC_SPACE_ENV}) so a write lands in the repo you're actually in, "
+        "not the server's home. Defaults to that startup doc-space."
+    ),
 }
 
 
@@ -70,6 +89,20 @@ def build_knowledge_tools(
 
     def _ok(payload: Any) -> ToolResult:
         return ToolResult(content=json.dumps(payload, ensure_ascii=False))
+
+    def _write_target(kw: dict[str, Any]) -> Path | None:
+        """Resolve the write doc-space at call time, not server-start time.
+
+        Precedence: explicit ``doc_space`` arg → ``$FORKTEX_DOC_SPACE`` →
+        the server's startup ``recycle_dir`` fallback. Returns ``None`` only when
+        no target is available at all (write tools then report not-enabled).
+        """
+        raw = kw.get("doc_space") or os.environ.get(DOC_SPACE_ENV)
+        if raw:
+            return ensure_doc_space(resolve_doc_space(raw))
+        if recycle_dir is not None:
+            return Path(recycle_dir)
+        return None
 
     async def _search(**kw: Any) -> ToolResult:
         namespace = _ns(kw)
@@ -115,10 +148,13 @@ def build_knowledge_tools(
         return _ok(res.model_dump(mode="json"))
 
     async def _recycle(**kw: Any) -> ToolResult:
-        if recycle_dir is None:  # defensive — tool only registered when set
-            return ToolResult(content="recycling not enabled", is_error=True)
+        target = _write_target(kw)
+        if target is None:  # defensive — tool only registered when a default exists
+            return ToolResult(
+                content="recycling not enabled (no doc-space)", is_error=True
+            )
         node = _recycle_node(
-            recycle_dir,
+            target,
             id=kw["id"],
             title=kw["title"],
             body_md=kw.get("body", ""),
@@ -138,16 +174,19 @@ def build_knowledge_tools(
                 "recycled": node.id,
                 "kind": node.kind,
                 "updated_at": node.updated_at,
-                "doc_space": str(recycle_dir),
+                "doc_space": str(target),
             }
         )
 
     async def _retire(**kw: Any) -> ToolResult:
-        if recycle_dir is None:
-            return ToolResult(content="retire not enabled (no doc-space)", is_error=True)
+        target = _write_target(kw)
+        if target is None:
+            return ToolResult(
+                content="retire not enabled (no doc-space)", is_error=True
+            )
         try:
             node = _retire_node(
-                recycle_dir,
+                target,
                 kw["id"],
                 reason=kw.get("reason"),
                 agent=kw.get("agent") or "knowledge_retire",
@@ -159,16 +198,19 @@ def build_knowledge_tools(
                 "retired": node.id,
                 "status": node.status,
                 "updated_at": node.updated_at,
-                "doc_space": str(recycle_dir),
+                "doc_space": str(target),
             }
         )
 
     async def _rollup(**kw: Any) -> ToolResult:
-        if recycle_dir is None:
-            return ToolResult(content="rollup not enabled (no doc-space)", is_error=True)
+        target = _write_target(kw)
+        if target is None:
+            return ToolResult(
+                content="rollup not enabled (no doc-space)", is_error=True
+            )
         try:
             parent = _rollup_subtree(
-                recycle_dir,
+                target,
                 kw["parent_id"],
                 summary=kw.get("summary"),
                 child_ids=kw.get("child_ids"),
@@ -181,7 +223,7 @@ def build_knowledge_tools(
                 "rolled_up": parent.id,
                 "summary": parent.summary,
                 "updated_at": parent.updated_at,
-                "doc_space": str(recycle_dir),
+                "doc_space": str(target),
             }
         )
 
@@ -287,12 +329,18 @@ def build_knowledge_tools(
                             "type": "string",
                             "description": "Stable node id (dedup key), e.g. 'lesson.testcontainers-not-mocks'.",
                         },
-                        "title": {"type": "string", "description": "Short human title."},
+                        "title": {
+                            "type": "string",
+                            "description": "Short human title.",
+                        },
                         "summary": {
                             "type": "string",
                             "description": "One-line précis — the text that gets embedded + injected.",
                         },
-                        "why": {"type": "string", "description": "Why this matters (rationale)."},
+                        "why": {
+                            "type": "string",
+                            "description": "Why this matters (rationale).",
+                        },
                         "how_to_apply": {
                             "type": "string",
                             "description": "The actionable rule — what to do next time.",
@@ -326,6 +374,7 @@ def build_knowledge_tools(
                             "default": False,
                             "description": "Replace existing references instead of unioning.",
                         },
+                        "doc_space": _DOC_SPACE_PARAM,
                     },
                     "required": ["id", "title"],
                     "additionalProperties": False,
@@ -352,6 +401,7 @@ def build_knowledge_tools(
                             "type": "string",
                             "description": "Why this node is retired (recorded on the patch).",
                         },
+                        "doc_space": _DOC_SPACE_PARAM,
                     },
                     "required": ["id"],
                     "additionalProperties": False,
@@ -387,6 +437,7 @@ def build_knowledge_tools(
                             "items": {"type": "string"},
                             "description": "Explicit children to roll up (default: derived from graph).",
                         },
+                        "doc_space": _DOC_SPACE_PARAM,
                     },
                     "required": ["parent_id"],
                     "additionalProperties": False,

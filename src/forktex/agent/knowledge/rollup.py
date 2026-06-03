@@ -87,7 +87,9 @@ def rollup(
         raise KeyError(f"parent {parent_id!r} not found in {space}")
 
     if child_ids is None:
-        children = [n for n in ws.nodes.values() if parent_id in n.edges.get("parent", [])]
+        children = [
+            n for n in ws.nodes.values() if parent_id in n.edges.get("parent", [])
+        ]
     else:
         children = [ws.nodes[cid] for cid in child_ids if cid in ws.nodes]
 

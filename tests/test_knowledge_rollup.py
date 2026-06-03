@@ -56,7 +56,10 @@ def _seed_subtree(space: Path) -> None:
     today = date.today().isoformat()
     for cid, cprose in [
         ("lesson.use-async-drivers", "Always use async drivers (asyncpg, httpx)."),
-        ("lesson.no-time-sleep", "Use asyncio.sleep, never time.sleep, inside coroutines."),
+        (
+            "lesson.no-time-sleep",
+            "Use asyncio.sleep, never time.sleep, inside coroutines.",
+        ),
     ]:
         node = Node(
             id=cid,
@@ -103,8 +106,14 @@ def test_rollup_accepts_explicit_summary_and_child_ids(tmp_path: Path) -> None:
 
     assert parent.summary == "All IO is async; never block the loop."
     # Only the listed child was demoted; the other stays active.
-    assert load_node(space / "nodes" / "lesson.use-async-drivers.md").status == STATUS_ROLLED_UP
-    assert load_node(space / "nodes" / "lesson.no-time-sleep.md").status != STATUS_ROLLED_UP
+    assert (
+        load_node(space / "nodes" / "lesson.use-async-drivers.md").status
+        == STATUS_ROLLED_UP
+    )
+    assert (
+        load_node(space / "nodes" / "lesson.no-time-sleep.md").status
+        != STATUS_ROLLED_UP
+    )
 
 
 def test_rollup_errors_when_no_children(tmp_path: Path) -> None:

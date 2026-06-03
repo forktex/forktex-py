@@ -55,17 +55,27 @@ def _plan(*steps, **top):
 async def test_executes_steps_in_order(monkeypatch):
     spawned: list[str] = []
 
-    async def fake_spawn(spec, *, parent_intelligence, parent_tool_server, on_tool_event=None):
+    async def fake_spawn(
+        spec, *, parent_intelligence, parent_tool_server, on_tool_event=None
+    ):
         spawned.append(spec.intent)
-        return SubAgentResult(name=spec.name, status="completed", summary="mapped it", rounds_used=2)
+        return SubAgentResult(
+            name=spec.name, status="completed", summary="mapped it", rounds_used=2
+        )
 
     monkeypatch.setattr(executor_mod, "spawn_sub_agent", fake_spawn)
 
     ts = FakeToolServer()
     plan = _plan(
-        {"kind": "sub_agent", "payload": {"role": "researcher", "intent": "find callers"}},
+        {
+            "kind": "sub_agent",
+            "payload": {"role": "researcher", "intent": "find callers"},
+        },
         {"kind": "shell", "payload": {"command": "pytest -q"}},
-        {"kind": "tool_call", "payload": {"tool": "read_file", "arguments": {"path": "x.py"}}},
+        {
+            "kind": "tool_call",
+            "payload": {"tool": "read_file", "arguments": {"path": "x.py"}},
+        },
     )
     result = await InProcessExecutor(object(), ts).execute(plan)
 
@@ -83,21 +93,35 @@ async def test_prior_step_findings_feed_forward(monkeypatch):
     # so an editor can't see a researcher's findings otherwise).
     addenda: list[str] = []
 
-    async def fake_spawn(spec, *, parent_intelligence, parent_tool_server, on_tool_event=None):
+    async def fake_spawn(
+        spec, *, parent_intelligence, parent_tool_server, on_tool_event=None
+    ):
         addenda.append(spec.system_prompt_addendum)
-        summary = "FSD lives in compliance/fsd/README.md" if spec.name == "researcher" else "wrote it"
+        summary = (
+            "FSD lives in compliance/fsd/README.md"
+            if spec.name == "researcher"
+            else "wrote it"
+        )
         return SubAgentResult(name=spec.name, status="completed", summary=summary)
 
     monkeypatch.setattr(executor_mod, "spawn_sub_agent", fake_spawn)
 
     plan = _plan(
-        {"kind": "sub_agent", "payload": {"role": "researcher", "intent": "find FSD docs"}},
-        {"kind": "sub_agent", "payload": {"role": "editor", "intent": "add a scope line"}},
+        {
+            "kind": "sub_agent",
+            "payload": {"role": "researcher", "intent": "find FSD docs"},
+        },
+        {
+            "kind": "sub_agent",
+            "payload": {"role": "editor", "intent": "add a scope line"},
+        },
     )
     await InProcessExecutor(object(), FakeToolServer()).execute(plan)
 
     assert addenda[0] == ""  # researcher had no prior context
-    assert "compliance/fsd/README.md" in addenda[1]  # editor sees the researcher's finding
+    assert (
+        "compliance/fsd/README.md" in addenda[1]
+    )  # editor sees the researcher's finding
 
 
 @pytest.mark.asyncio
@@ -125,13 +149,17 @@ async def test_failing_step_stops_and_surfaces_rollback():
 async def test_sub_agent_role_normalized_and_intersected(monkeypatch):
     captured = {}
 
-    async def fake_spawn(spec, *, parent_intelligence, parent_tool_server, on_tool_event=None):
+    async def fake_spawn(
+        spec, *, parent_intelligence, parent_tool_server, on_tool_event=None
+    ):
         captured["subset"] = set(spec.tool_subset)
         return SubAgentResult(name=spec.name, status="completed", summary="ok")
 
     monkeypatch.setattr(executor_mod, "spawn_sub_agent", fake_spawn)
 
-    plan = _plan({"kind": "sub_agent", "payload": {"role": "researcher", "intent": "x"}})
+    plan = _plan(
+        {"kind": "sub_agent", "payload": {"role": "researcher", "intent": "x"}}
+    )
     await InProcessExecutor(object(), FakeToolServer()).execute(plan)
 
     # researcher's subset intersected with the parent's actual tools.
@@ -141,7 +169,11 @@ async def test_sub_agent_role_normalized_and_intersected(monkeypatch):
 
 def test_normalize_expands_role():
     data = _normalize(
-        {"steps": [{"kind": "sub_agent", "payload": {"role": "editor", "intent": "edit"}}]}
+        {
+            "steps": [
+                {"kind": "sub_agent", "payload": {"role": "editor", "intent": "edit"}}
+            ]
+        }
     )
     payload = data["steps"][0]["payload"]
     assert payload["name"] == "editor"

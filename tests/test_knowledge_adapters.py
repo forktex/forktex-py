@@ -24,9 +24,12 @@ from forktex.agent.knowledge.sources import (
 def _markdown_tree(root):
     (root / "docs").mkdir(parents=True)
     (root / "docs" / "guide.md").write_text(
-        "---\ntitle: My Guide\ntags: [a, b]\n---\n# Heading\nbody text", encoding="utf-8"
+        "---\ntitle: My Guide\ntags: [a, b]\n---\n# Heading\nbody text",
+        encoding="utf-8",
     )
-    (root / "readme.md").write_text("# Readme Title\nplain prose here", encoding="utf-8")
+    (root / "readme.md").write_text(
+        "# Readme Title\nplain prose here", encoding="utf-8"
+    )
     (root / "node_modules").mkdir()
     (root / "node_modules" / "skip.md").write_text("vendored", encoding="utf-8")
     (root / ".hidden").mkdir()
@@ -105,7 +108,11 @@ def test_resolver_composes_declared_layers(tmp_path):
 
     (tmp_path / "note.md").write_text("# Note\nthe flux widget", encoding="utf-8")
     cfg = KnowledgeConfig(
-        layers=[KnowledgeLayerDef(name="notes", path=str(tmp_path), adapter="generic_markdown")]
+        layers=[
+            KnowledgeLayerDef(
+                name="notes", path=str(tmp_path), adapter="generic_markdown"
+            )
+        ]
     )
     ws = build_knowledge_resolver(config=cfg).resolve("knowledge")
     assert "md.note.md" in ws.nodes
@@ -113,7 +120,9 @@ def test_resolver_composes_declared_layers(tmp_path):
 
 def test_resolver_extra_sources_overlay(tmp_path):
     (tmp_path / "x.md").write_text("# X\noverlay content", encoding="utf-8")
-    r = build_knowledge_resolver(extra_sources=[("adhoc", str(tmp_path), "generic_markdown")])
+    r = build_knowledge_resolver(
+        extra_sources=[("adhoc", str(tmp_path), "generic_markdown")]
+    )
     assert "adhoc" in r.namespaces()
     assert "md.x.md" in r.resolve("knowledge").nodes
 
@@ -123,6 +132,12 @@ def test_doctor_accepts_new_adapters():
     from forktex.manifest.models import KnowledgeConfig, KnowledgeLayerDef
 
     for adapter in ("generic_markdown", "code_index"):
-        cfg = KnowledgeConfig(layers=[KnowledgeLayerDef(name="x", path=".", adapter=adapter)])
-        bad = [layer.adapter for layer in cfg.layers if layer.adapter not in known_adapters()]
+        cfg = KnowledgeConfig(
+            layers=[KnowledgeLayerDef(name="x", path=".", adapter=adapter)]
+        )
+        bad = [
+            layer.adapter
+            for layer in cfg.layers
+            if layer.adapter not in known_adapters()
+        ]
         assert not bad

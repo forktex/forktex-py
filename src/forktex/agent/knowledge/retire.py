@@ -85,7 +85,9 @@ def retire(
     node.status = STATUS_RETIRED
     node.updated_at = today
     node.provenance_patch_id = patch_id
-    tracked_write(node_path, serialize_node(node), kind="knowledge_node", writer=_WRITER)
+    tracked_write(
+        node_path, serialize_node(node), kind="knowledge_node", writer=_WRITER
+    )
 
     patch = Patch(
         id=patch_id,

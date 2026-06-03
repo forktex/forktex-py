@@ -97,7 +97,9 @@ def test_recycled_node_is_queryable_next_session(tmp_path: Path) -> None:
     # A brand-new resolver (as a later session would build) sees it on disk.
     resolver = build_knowledge_resolver(project_path=space)
     query = FractalQuery(resolver)
-    hits = ranked_search(query, COMPOSED_NAMESPACE, "async blocking event loop", limit=5)
+    hits = ranked_search(
+        query, COMPOSED_NAMESPACE, "async blocking event loop", limit=5
+    )
     assert any(h.id == "lesson.async-first" for h in hits)
 
     detail = query.get_node(COMPOSED_NAMESPACE, "lesson.async-first").node
@@ -126,8 +128,56 @@ async def test_recycle_tool_round_trips(tmp_path: Path) -> None:
     assert json.loads(result.content)["recycled"] == "lesson.commit-msgs"
 
     # Same query surface now finds the just-written node (mtime reload).
-    found = ranked_search(query, COMPOSED_NAMESPACE, "commit imperative greppable", limit=5)
+    found = ranked_search(
+        query, COMPOSED_NAMESPACE, "commit imperative greppable", limit=5
+    )
     assert any(h.id == "lesson.commit-msgs" for h in found)
+
+
+async def test_recycle_tool_routes_to_explicit_doc_space(tmp_path: Path) -> None:
+    """A long-lived server is bound to one repo (``recycle_dir``), but an explicit
+    ``doc_space`` arg redirects the write to the repo the caller is actually in —
+    and the result echoes where it landed, so a misfile can't happen silently."""
+    server_home = tmp_path / "server-home"
+    (server_home / "nodes").mkdir(parents=True)
+    other_repo = tmp_path / "other-repo"
+    other_repo.mkdir()
+
+    query = FractalQuery(build_knowledge_resolver(project_path=server_home))
+    tools = {t.name: t for t in build_knowledge_tools(query, recycle_dir=server_home)}
+
+    result = await tools["knowledge_recycle"].execute(
+        id="lesson.routed",
+        title="Routed write",
+        summary="Lands in the caller's repo, not the server's home.",
+        doc_space=str(other_repo),
+    )
+    assert not result.is_error
+    payload = json.loads(result.content)
+    assert str(other_repo) in payload["doc_space"]
+    # Written to the explicit target, NOT the server's startup home.
+    assert (other_repo / "nodes" / "lesson.routed.md").is_file()
+    assert not (server_home / "nodes" / "lesson.routed.md").exists()
+
+
+async def test_recycle_tool_routes_via_env(tmp_path: Path, monkeypatch) -> None:
+    """With no arg, ``$FORKTEX_DOC_SPACE`` (set by the host per workspace) wins over
+    the server's startup doc-space."""
+    server_home = tmp_path / "server-home"
+    (server_home / "nodes").mkdir(parents=True)
+    env_repo = tmp_path / "env-repo"
+    env_repo.mkdir()
+    monkeypatch.setenv("FORKTEX_DOC_SPACE", str(env_repo))
+
+    query = FractalQuery(build_knowledge_resolver(project_path=server_home))
+    tools = {t.name: t for t in build_knowledge_tools(query, recycle_dir=server_home)}
+
+    result = await tools["knowledge_recycle"].execute(
+        id="lesson.env", title="Env-routed"
+    )
+    assert not result.is_error
+    assert (env_repo / "nodes" / "lesson.env.md").is_file()
+    assert not (server_home / "nodes" / "lesson.env.md").exists()
 
 
 def test_grounding_surfaces_pinned_with_summary(tmp_path: Path) -> None:
@@ -141,7 +191,9 @@ def test_grounding_surfaces_pinned_with_summary(tmp_path: Path) -> None:
         summary="Battle-test against real containers; never mock infrastructure.",
         tags=["pinned"],
     )
-    recycle(space, id="note.misc", title="A non-pinned note", summary="Just an index entry.")
+    recycle(
+        space, id="note.misc", title="A non-pinned note", summary="Just an index entry."
+    )
 
     section = _knowledge_section(tmp_path)
     assert section is not None

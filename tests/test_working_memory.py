@@ -25,7 +25,9 @@ from forktex.substrate import paths as _sub
 
 
 def test_remember_writes_note_into_state(tmp_path):
-    node = remember(tmp_path, "the auth token lives in secrets/intelligence.json", tags=["auth"])
+    node = remember(
+        tmp_path, "the auth token lives in secrets/intelligence.json", tags=["auth"]
+    )
     assert node.kind == "observation"
     assert "memory" in node.tags and "auth" in node.tags
 

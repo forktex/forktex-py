@@ -99,10 +99,14 @@ def test_retire_filters_from_grounding(tmp_path: Path) -> None:
 def test_recycle_replace_tags_drops_existing(tmp_path: Path) -> None:
     """The demotion path: re-recycle with --replace-tags to actually drop a tag."""
     space = tmp_path / "ds"
-    recycle(space, id="lesson.over-pinned", title="Was pinned", tags=["pinned", "stale"])
+    recycle(
+        space, id="lesson.over-pinned", title="Was pinned", tags=["pinned", "stale"]
+    )
 
     # Default (union) — pinned would stick around.
-    refined_union = recycle(space, id="lesson.over-pinned", title="Was pinned", tags=["fresh"])
+    refined_union = recycle(
+        space, id="lesson.over-pinned", title="Was pinned", tags=["fresh"]
+    )
     assert set(refined_union.tags) == {"pinned", "stale", "fresh"}
 
     # Explicit replace — only the new tags remain.

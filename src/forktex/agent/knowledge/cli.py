@@ -82,7 +82,9 @@ def _query(docs: str | None, project: str | None, sources=()) -> FractalQuery:
     from forktex.core.paths import find_project_root
 
     extra = _parse_sources(sources)
-    mem = memory_source(find_project_root() or os.getcwd())  # recall working memory (5.2)
+    mem = memory_source(
+        find_project_root() or os.getcwd()
+    )  # recall working memory (5.2)
     if mem:
         extra = [mem, *extra]
     return FractalQuery(
@@ -139,7 +141,7 @@ async def ask_cmd(query, kind, limit, docs, project, source, namespace) -> None:
         nodes = ranked_search(
             _query(docs, project, source), namespace, query, kind=kind, limit=limit
         )
-    except (NamespaceNotFound, KeyError):
+    except NamespaceNotFound, KeyError:
         # Run-anywhere: no knowledge sources here is not an error.
         click.echo(
             "no knowledge sources — run `forktex knowledge init` or set $FORKTEX_DOCS"
@@ -216,8 +218,12 @@ async def neighbors_cmd(node_id, docs, project, source, namespace) -> None:
 @click.option("--kind", default="lesson", show_default=True, help="Node kind.")
 @click.option("--why", default=None, help="Why this matters (rationale).")
 @click.option("--how", "how_to_apply", default=None, help="The actionable rule.")
-@click.option("--ref", "references", multiple=True, help="Referenced node id (repeatable).")
-@click.option("--tag", "tags", multiple=True, help="Tag (repeatable); 'pinned' = always-inject.")
+@click.option(
+    "--ref", "references", multiple=True, help="Referenced node id (repeatable)."
+)
+@click.option(
+    "--tag", "tags", multiple=True, help="Tag (repeatable); 'pinned' = always-inject."
+)
 @click.option(
     "--replace-tags",
     is_flag=True,
@@ -231,8 +237,10 @@ async def neighbors_cmd(node_id, docs, project, source, namespace) -> None:
     help="Replace the existing node's references with --ref (default: union).",
 )
 @click.option(
-    "--project", "-d", default=None,
-    help="Project doc-space or repo root (else ./.forktex/knowledge)."
+    "--project",
+    "-d",
+    default=None,
+    help="Project doc-space or repo root (else ./.forktex/knowledge).",
 )
 @click.option(
     "--global",
@@ -287,15 +295,21 @@ async def recycle_cmd(
         replace_refs=replace_refs,
         agent="cli",
     )
-    click.echo(f"recycled {node.id} → {target}/nodes/{node.id}.md  (updated {node.updated_at})")
+    click.echo(
+        f"recycled {node.id} → {target}/nodes/{node.id}.md  (updated {node.updated_at})"
+    )
 
 
 @knowledge.command("retire")
 @click.argument("node_id")
-@click.option("--reason", default=None, help="Why this node is retired (recorded on the patch).")
 @click.option(
-    "--project", "-d", default=None,
-    help="Project doc-space or repo root (else ./.forktex/knowledge)."
+    "--reason", default=None, help="Why this node is retired (recorded on the patch)."
+)
+@click.option(
+    "--project",
+    "-d",
+    default=None,
+    help="Project doc-space or repo root (else ./.forktex/knowledge).",
 )
 async def retire_cmd(node_id, reason, project) -> None:
     """Mark NODE_ID retired — filtered from grounding + ranked_search by default.
@@ -316,11 +330,17 @@ async def retire_cmd(node_id, reason, project) -> None:
 
 @knowledge.command("rollup")
 @click.argument("parent_id")
-@click.option("--summary", default=None, help="Compact summary; auto-composed if omitted.")
-@click.option("--child", "child_ids", multiple=True, help="Explicit child id (repeatable).")
 @click.option(
-    "--project", "-d", default=None,
-    help="Project doc-space or repo root (else ./.forktex/knowledge)."
+    "--summary", default=None, help="Compact summary; auto-composed if omitted."
+)
+@click.option(
+    "--child", "child_ids", multiple=True, help="Explicit child id (repeatable)."
+)
+@click.option(
+    "--project",
+    "-d",
+    default=None,
+    help="Project doc-space or repo root (else ./.forktex/knowledge).",
 )
 async def rollup_cmd(parent_id, summary, child_ids, project) -> None:
     """Compact PARENT_ID's subtree into its summary and demote the children."""
@@ -360,7 +380,10 @@ async def list_cmd(kind, docs, project, source, namespace) -> None:
 
 @knowledge.command("init")
 @click.option(
-    "--no-readme", is_flag=True, default=False, help="Skip writing the .forktex/knowledge/README.md."
+    "--no-readme",
+    is_flag=True,
+    default=False,
+    help="Skip writing the .forktex/knowledge/README.md.",
 )
 @click.option(
     "--no-manifest",
@@ -394,7 +417,9 @@ async def init_cmd(no_readme, no_manifest) -> None:
     click.echo("")
     click.echo("Next:")
     click.echo('  forktex knowledge search "<topic>"   # query the composed view')
-    click.echo("  forktex knowledge recycle <id> --title ... --summary ... --tag pinned")
+    click.echo(
+        "  forktex knowledge recycle <id> --title ... --summary ... --tag pinned"
+    )
     click.echo("  forktex knowledge doctor             # check for drift")
     click.echo(
         "  claude mcp add forktex -- forktex knowledge mcp   # let agents use it too"
