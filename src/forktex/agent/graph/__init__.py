@@ -21,8 +21,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""``forktex graph`` Click subgroup."""
+"""``forktex arch`` Click subgroup (the merged graph + manual surface)."""
 
-from forktex.agent.graph.cli import graph
+from forktex.agent.graph.cli import arch
 
-__all__ = ["graph"]
+__all__ = ["arch"]

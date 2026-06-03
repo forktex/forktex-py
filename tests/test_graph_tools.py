@@ -109,7 +109,7 @@ async def test_fsd_status_tool(seeded_project):
 
 async def test_validate_path_tool(seeded_project):
     tools = create_graph_tools(seeded_project)
-    ok = await _by_name(tools, "validate_path").execute(rel_path="graph.json")
+    ok = await _by_name(tools, "validate_path").execute(rel_path="cache/graph.json")
     assert ok.data["ok"] is True
     bad = await _by_name(tools, "validate_path").execute(rel_path="rogue.bin")
     assert bad.data["ok"] is False
@@ -122,9 +122,9 @@ async def test_recent_writes_tool(seeded_project):
     assert "touches" in result.data
 
 
-async def test_ecosystem_matrix_tool(seeded_project):
+async def test_workspace_matrix_tool(seeded_project):
     tools = create_graph_tools(seeded_project)
-    result = await _by_name(tools, "ecosystem_matrix").execute()
+    result = await _by_name(tools, "workspace_matrix").execute()
     assert not result.is_error
     assert "rows" in result.data
 

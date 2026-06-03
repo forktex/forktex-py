@@ -37,7 +37,7 @@ from pathlib import Path
 import asyncclick as click
 from jinja2 import Environment, FileSystemLoader
 
-from forktex_cloud import paths as _cloud_paths
+from forktex.substrate import paths as _cloud_paths
 
 from forktex.core.paths import get_fsd_evidence_dir
 from forktex.fsd.evaluate import AtomStatus, evaluate
@@ -258,7 +258,7 @@ def _enrich_graph_with_fsd_level(project_root: Path, fsd_level: str) -> None:
     from forktex.graph.export.c4_html_writer import render_c4_html
     from forktex.graph.io_proxy import tracked_write
     from forktex.graph.scopes import ProjectScope
-    from forktex_cloud import paths as _cp
+    from forktex.substrate import paths as _cp
 
     try:
         graph = build_graph(ProjectScope(project_root))

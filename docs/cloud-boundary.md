@@ -402,28 +402,27 @@ distinct from the cloud-boundary conflicts above.
   recursive `rglob('*.py')` with `SKIP_DIRS` guard; dotted names
   rebuilt from the path-relative-to-`src_dir`. Battle-tested against
   intelligence: 180→277 nodes, 581→988 edges, ai/* modules 3→23.
-- **`forktex agents ground` has no refresh action**. Today the
-  command exposes only `repos` (list) and `status` (display) — no
-  way to actually regenerate AGENTS.md from the graph + manifest.
-  The Phase-1 audit described `--all` and `--status` flags but the
-  CLI surface ships neither write subcommand. **Open**: add
-  `forktex agents ground refresh` (or `apply`) that walks the
-  workspace, renders per-project AGENTS.md from the graph + the
-  project's `forktex.json`. Out of scope this slice.
+- **`agents ground` (per-repo AGENTS.md scaffolding) — retired in 0.8.0.**
+  The whole pre-0.7 `forktex agents` group was removed; `ground` was
+  unreachable dead scaffolding bound to a stale manifest shape (it wrote
+  AGENTS.md outside the substrate authority). Ecosystem-wide grounding now
+  lives in `forktex chat --ecosystem`, which reads the existing
+  `docs/AGENTS.md` + the cross-project knowledge graph rather than
+  generating per-repo briefings. See `lesson.transitional-commands-deleted`.
 
-### Loop 4 — agent-driven dev ops (graph CLI shortcuts)
+### Loop 4 — agent-driven dev ops (arch CLI shortcuts)
 
-All five graph CLI shortcuts verified against intelligence:
+All five arch CLI shortcuts verified against intelligence:
 
-- `forktex graph package <path>` — correct package metadata for
+- `forktex arch package <path>` — correct package metadata for
   `sdk-py`, `api`, `client`.
-- `forktex graph modules <pattern>` — finds nested modules
+- `forktex arch modules <pattern>` — finds nested modules
   (`orchestrator` resolves to `api/src/ai/chat/orchestrator.py`).
-- `forktex graph importers <target>` — `pydantic` resolves to 8
+- `forktex arch importers <target>` — `pydantic` resolves to 8
   importers across api + sdk-py; `httpx` to 1.
-- `forktex graph recent --hours N` — surfaces fsd evidence + instance
+- `forktex arch recent --hours N` — surfaces fsd evidence + instance
   registry writes.
-- `forktex graph ecosystem` — tree view of 12 registered projects.
+- `forktex arch ecosystem` — tree view of 12 registered projects.
 
 The remaining 7 graph tools (`graph_summary`, `list_packages`,
 `find_package`, `list_domains`, `list_modules_in_domain`,

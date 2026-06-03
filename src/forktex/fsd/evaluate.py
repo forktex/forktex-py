@@ -32,9 +32,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
+
 from forktex.fsd.models import Atom, FSDStandard
-from forktex.manifest.models import FSDConfig
 from forktex.fsd.profiles import resolve_applicable_atoms
+
+# ``forktex.manifest.models`` is type-only here — see the docstring in
+# ``forktex.fsd.loader`` for the cycle we're working around. ``FSDConfig`` is
+# only referenced in a function annotation; with ``from __future__ import
+# annotations`` it's a string at runtime, so the type-only import suffices.
+if TYPE_CHECKING:  # pragma: no cover
+    from forktex.manifest.models import FSDConfig
 
 
 class AtomStatus(str, Enum):

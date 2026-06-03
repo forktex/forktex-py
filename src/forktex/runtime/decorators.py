@@ -59,7 +59,7 @@ from typing import Any, Callable
 
 from forktex.graph.io_proxy import StructureViolation, _classify, tracked_write
 from forktex.graph.registry import record_touch
-from forktex.graph.structure import GLOBAL_SPEC, PROJECT_SPEC, Scope, validate_path
+from forktex.substrate.spec import GLOBAL_SPEC, PROJECT_SPEC, Scope, validate_path
 from forktex.runtime import instance as _instance
 from forktex.runtime import lifecycle as _lifecycle
 
@@ -97,7 +97,7 @@ def tracked_writer(
     if not _spec_known(scope, spec_pattern):
         raise ValueError(
             f"@tracked_writer references unknown {scope}-scope spec entry "
-            f"{spec_pattern!r}; add it to forktex.graph.structure first."
+            f"{spec_pattern!r}; add it to forktex.substrate.spec first."
         )
 
     def _decorate(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -225,7 +225,7 @@ def sdk_boundary(
 
 
 def _root_global_forktex_dir() -> Path:
-    from forktex_cloud import paths as _cloud_paths
+    from forktex.substrate import paths as _cloud_paths
 
     return _cloud_paths.global_dir()
 
@@ -265,27 +265,38 @@ def _resolve_project_required(hint: str | None) -> Path:
 # ── @needs_project ────────────────────────────────────────────────────────
 
 
-def needs_project(fn: Callable[..., Any]) -> Callable[..., Any]:
+def needs_project(
+    fn: Callable[..., Any] | None = None, *, soft: bool = False
+) -> Callable[..., Any]:
     """Auto-resolve a project root for a Click command.
 
-    Looks for a ``project`` keyword argument; falls back to cwd. Walks
-    upward via :func:`find_project_root`. Raises :class:`click.ClickException`
-    with a helpful message if no ``forktex.json`` is found.
+    Looks for a ``project`` keyword argument; falls back to cwd. Walks upward
+    via :func:`find_project_root`. The wrapped function receives the resolved
+    project root as ``project_root`` if its signature accepts it.
 
-    Calls :func:`lifecycle.ensure_runtime` and stores the resulting
-    ``InstanceRecord`` on the wrapped function's local context. The wrapped
-    function receives the resolved project root as ``project_root`` keyword
-    if its signature accepts it; otherwise it's only used internally.
+    By default (``soft=False``) raises :class:`click.ClickException` with a
+    helpful message when no ``forktex.json`` is found. With
+    ``@needs_project(soft=True)`` the command **runs anywhere**: a missing
+    project resolves to ``project_root=None`` and the command degrades (e.g.
+    host scope / cwd) instead of erroring — forktex's run-anywhere contract.
     """
+
+    if fn is None:
+        return functools.partial(needs_project, soft=soft)
 
     sig = inspect.signature(fn)
     accepts_project_root = "project_root" in sig.parameters
     is_async = inspect.iscoroutinefunction(fn)
 
+    def _resolve(hint: str | None) -> Path | None:
+        return _resolve_project(hint) if soft else _resolve_project_required(hint)
+
     def _maybe_register(root):
         # If an outer decorator (e.g. @long_running) already created an
         # instance record for this invocation, don't double-register.
         if _lifecycle._active_instances:
+            return None
+        if root is None:
             return None
         return _lifecycle.ensure_runtime(
             needs_project=True,
@@ -297,7 +308,7 @@ def needs_project(fn: Callable[..., Any]) -> Callable[..., Any]:
 
         @functools.wraps(fn)
         async def _async_wrapper(*args, **kwargs):
-            root = _resolve_project_required(kwargs.get("project"))
+            root = _resolve(kwargs.get("project"))
             rec = _maybe_register(root)
             try:
                 if accepts_project_root:
@@ -312,7 +323,7 @@ def needs_project(fn: Callable[..., Any]) -> Callable[..., Any]:
 
     @functools.wraps(fn)
     def _sync_wrapper(*args, **kwargs):
-        root = _resolve_project_required(kwargs.get("project"))
+        root = _resolve(kwargs.get("project"))
         rec = _maybe_register(root)
         try:
             if accepts_project_root:

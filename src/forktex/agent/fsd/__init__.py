@@ -34,7 +34,7 @@ from pathlib import Path
 import asyncclick as click
 
 from forktex.agent.fsd.check import check
-from forktex.agent.fsd.ecosystem_cmd import ecosystem
+from forktex.agent.fsd.workspace_cmd import workspace
 from forktex.agent.fsd.makefile_cli import makefile_group
 from forktex.agent.fsd.report import report
 
@@ -64,9 +64,9 @@ async def fsd(ctx, project_dir):
         start = Path.cwd().resolve()
     found = find_project_root(start)
     if found is None:
-        # Allow `fsd ecosystem` to override; otherwise hard fail at the
+        # Allow `fsd workspace` to override; otherwise hard fail at the
         # subcommand level so users get the canonical message.
-        if ctx.invoked_subcommand != "ecosystem":
+        if ctx.invoked_subcommand != "workspace":
             raise click.ClickException(
                 f"no forktex.json found at or above {start}.\n"
                 "Run from a project directory or pass --project-dir /path/to/project."
@@ -83,7 +83,7 @@ async def fsd(ctx, project_dir):
 fsd.add_command(check)
 fsd.add_command(report)
 fsd.add_command(makefile_group)
-fsd.add_command(ecosystem)
+fsd.add_command(workspace)
 
 
 __all__: list[str] = []

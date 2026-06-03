@@ -35,8 +35,9 @@ scaffolding at ``forktex.agent.manager`` to actually run the loop.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 
 if TYPE_CHECKING:
     from forktex.intelligence.protocol import Intelligence
@@ -194,17 +195,21 @@ async def spawn_sub_agent(
     spec: SubAgentSpec,
     *,
     parent_intelligence: "Intelligence",
-    parent_tool_server: Any,  # forktex.agent.intelligence.tool_server.ToolServer
+    parent_tool_server: Any,  # forktex.agent.tools.server.ToolServer
+    on_tool_event: Optional[Callable[[str, str, dict[str, Any]], None]] = None,
 ) -> SubAgentResult:
     """Spawn a sub-agent with the given spec, return its result.
 
-    Phase A delivers the **contract** — input validation, types, error
-    boundaries. Phase B wires the actual execution loop via
-    ``forktex.agent.manager.AgentManager``.
+    Validates the parent surfaces + the tool subset, then runs a bounded
+    ``AgentLoop`` (engine domain) over a tool server filtered to
+    ``spec.tool_subset``, wrapping the parent ``Intelligence`` in the engine's
+    ``LLMProvider`` port. The run is capped by ``spec.max_rounds`` and
+    ``spec.timeout_s``; the loop's ``AgentResponse`` is folded into a
+    ``SubAgentResult`` (the ``summary`` is what the parent reads back).
 
-    Raises ``NotImplementedError`` until Phase B lands, so any caller
-    accidentally invoking this in Phase A surfaces a clear failure
-    instead of silently no-op'ing.
+    ``on_tool_event`` (if given) receives the sub-agent's own tool events with
+    the tool name prefixed by the sub-agent's name (e.g. ``researcher▸read_file``)
+    so the parent UI can surface nested activity instead of a black-box summary.
     """
     # Validate the parent surfaces are present — fail fast in Phase A so
     # callers can't pass garbage and get a confusing error in Phase B.
@@ -221,11 +226,13 @@ async def spawn_sub_agent(
             f"sub-agent {spec.name!r} requests tools not on parent server: "
             f"{sorted(missing)}"
         )
-    raise NotImplementedError(
-        "spawn_sub_agent execution lands in Phase B via "
-        "forktex.agent.manager.AgentManager. The Phase A contract above "
-        "is the stable surface; an implementation can plug in without "
-        "API change."
+    from forktex.agent.intelligence.provider import IntelligenceProvider
+
+    return await _run_sub_agent(
+        spec,
+        IntelligenceProvider(parent_intelligence),
+        parent_tool_server,
+        on_tool_event=on_tool_event,
     )
 
 
@@ -241,4 +248,97 @@ def _available_tools(tool_server: Any) -> frozenset[str]:
         return frozenset()
     return frozenset(
         str(s["name"]) for s in schemas if isinstance(s, dict) and "name" in s
+    )
+
+
+class _FilteredToolServer:
+    """A read-through view of a parent tool server exposing only ``allowed``.
+
+    The sub-agent loop sees (and can call) only its declared ``tool_subset`` —
+    the parent's tool instances are reused (handlers stay bound), nothing is
+    mutated on the parent.
+    """
+
+    def __init__(self, parent: Any, allowed: frozenset[str]) -> None:
+        self._parent = parent
+        self._allowed = frozenset(allowed)
+
+    def get_schemas(self) -> list[dict[str, Any]]:
+        return [s for s in self._parent.get_schemas() if s.get("name") in self._allowed]
+
+    async def call(self, name: str, **kwargs: Any):
+        if name not in self._allowed:
+            from forktex.agent.tools.base import ToolResult
+
+            return ToolResult(
+                content=f"tool {name!r} is not permitted for this sub-agent",
+                is_error=True,
+            )
+        return await self._parent.call(name, **kwargs)
+
+
+async def _run_sub_agent(
+    spec: SubAgentSpec,
+    provider: Any,
+    tool_server: Any,
+    *,
+    on_tool_event: Optional[Callable[[str, str, dict[str, Any]], None]] = None,
+) -> SubAgentResult:
+    """Run a bounded sub-agent loop over ``provider`` + a tool-subset view.
+
+    Provider-injected (the engine ``LLMProvider`` port) so it's testable without
+    a live model; ``spawn_sub_agent`` supplies an ``IntelligenceProvider``.
+    """
+    from forktex.agent.engine import AgentLoop
+
+    system = (
+        "You are a focused sub-agent. Use only the provided tools and stay on "
+        "the task; finish with a short, load-bearing summary. "
+        + spec.system_prompt_addendum
+    ).strip()
+
+    nested_event = None
+    if on_tool_event is not None:
+
+        def nested_event(kind: str, name: str, data: dict[str, Any], _p=spec.name) -> None:
+            on_tool_event(kind, f"{_p}▸{name}" if name else _p, data)
+
+    loop = AgentLoop(
+        provider,
+        _FilteredToolServer(tool_server, spec.tool_subset),
+        system=system,
+        max_tool_rounds=spec.max_rounds,
+        on_tool_event=nested_event,
+    )
+
+    try:
+        resp = await asyncio.wait_for(loop.run_task(spec.intent), timeout=spec.timeout_s)
+    except asyncio.TimeoutError:
+        return SubAgentResult(
+            name=spec.name,
+            status="timeout",
+            summary="",
+            error=f"sub-agent timed out after {spec.timeout_s}s",
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # surface as a failed result, not a crash up the stack
+        return SubAgentResult(
+            name=spec.name, status="failed", summary="", error=str(exc)
+        )
+
+    summary = resp.text or (resp.error or "")
+    artifacts = (
+        (Artifact(kind="summary", summary=(resp.text or "")[:200], payload={"text": resp.text}),)
+        if resp.text
+        else ()
+    )
+    return SubAgentResult(
+        name=spec.name,
+        status="failed" if resp.error else "completed",
+        summary=summary,
+        artifacts=artifacts,
+        tokens_used=resp.input_tokens + resp.output_tokens,
+        rounds_used=len(resp.tool_calls_made),
+        error=resp.error,
     )

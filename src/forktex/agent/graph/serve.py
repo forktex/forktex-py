@@ -21,7 +21,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""``forktex graph serve`` — FastAPI server backed by the live graph.
+"""``forktex arch serve`` — FastAPI server backed by the live graph.
 
 Each request rebuilds the graph from disk, so changes are visible
 without restarting the server. The HTML page returned at ``/`` is the
@@ -46,43 +46,48 @@ def _build(scope: Scope, project_root: Path):
     return build_graph(ProjectScope(project_root))
 
 
-async def run_server(*, host: str, port: int, project_root: Path, scope: str) -> None:
-    """Run the FastAPI server until interrupted."""
+#: Tag for the human-facing viewer routes — excluded from the MCP surface (the
+#: agent has the structured POST `/arch/*` tool versions; these are HTML/JSON
+#: GETs for a browser), so mounting the viewer on the generic app adds no noise.
+VIEWER_TAG = "arch-viewer"
 
-    from fastapi import FastAPI, Response
+
+def build_arch_router(project_root: Path, *, default_scope: str = "project"):
+    """The graph-viewer routes as a router — the live dashboard + graph JSON.
+
+    Shared by the standalone ``forktex arch serve`` (mounted at ``/``) and the
+    generic tool API (mounted under ``/arch`` by ``forktex serve``), so there is
+    one viewer, not a per-command server.
+    """
+    from fastapi import APIRouter, Response
     from fastapi.responses import HTMLResponse, JSONResponse
-    import uvicorn
 
-    app = FastAPI(
-        title="ForkTex Graph",
-        description="Source-of-truth multi-edge graph for ForkTex projects.",
-    )
+    router = APIRouter(tags=[VIEWER_TAG])
 
     def _scope_for(req_scope: str | None) -> Scope:
-        s = (req_scope or scope or "project").lower()
+        s = (req_scope or default_scope or "project").lower()
         if s == "all":
             s = "project"
         return "os" if s == "os" else "project"
 
-    @app.get("/api/graph")
-    def api_graph(scope: str | None = None) -> Response:
+    @router.get("/api/graph")
+    def api_graph(scope: str | None = None):
         graph_obj = _build(_scope_for(scope), project_root)
-        body = render_json(graph_obj)
-        return Response(content=body, media_type="application/json")
+        return Response(content=render_json(graph_obj), media_type="application/json")
 
-    @app.get("/api/scopes")
-    def api_scopes() -> JSONResponse:
+    @router.get("/api/scopes")
+    def api_scopes():
         return JSONResponse(
             {
                 "available": ["project", "os"],
-                "default": _scope_for(scope),
+                "default": _scope_for(default_scope),
                 "project_root": str(project_root),
             }
         )
 
-    @app.get("/api/structure")
-    def api_structure(scope: str | None = None) -> JSONResponse:
-        from forktex.graph import structure as _structure
+    @router.get("/api/structure")
+    def api_structure(scope: str | None = None):
+        from forktex.substrate import spec as _structure
 
         s = _scope_for(scope)
         return JSONResponse(
@@ -102,29 +107,27 @@ async def run_server(*, host: str, port: int, project_root: Path, scope: str) ->
             }
         )
 
-    @app.get("/", response_class=HTMLResponse)
-    def index(scope: str | None = None) -> HTMLResponse:
+    @router.get("/", response_class=HTMLResponse)
+    def index(scope: str | None = None):
         graph_obj = _build(_scope_for(scope), project_root)
-        body = render_json(graph_obj)
-        # The HTML template embeds the JSON; live mode reuses it verbatim.
-        # Defuse any "</" against premature script-tag closing.
-        return HTMLResponse(render_html(graph_obj, body))
+        return HTMLResponse(render_html(graph_obj, render_json(graph_obj)))
 
-    @app.get("/c4", response_class=HTMLResponse)
-    def c4(scope: str | None = None) -> HTMLResponse:
+    @router.get("/c4", response_class=HTMLResponse)
+    def c4(scope: str | None = None):
         from forktex.graph.export.c4_html_writer import render_c4_html
 
         graph_obj = _build(_scope_for(scope), project_root)
         return HTMLResponse(render_c4_html(graph_obj))
 
-    @app.get("/healthz")
+    @router.get("/healthz")
     def healthz() -> dict:
         return {"ok": True}
 
-    @app.get("/api/instances")
-    def api_instances() -> JSONResponse:
-        from forktex.runtime import iter_running_instances
+    @router.get("/api/instances")
+    def api_instances():
         from dataclasses import asdict
+
+        from forktex.runtime import iter_running_instances
 
         return JSONResponse(
             {
@@ -135,6 +138,21 @@ async def run_server(*, host: str, port: int, project_root: Path, scope: str) ->
                 ]
             }
         )
+
+    return router
+
+
+async def run_server(*, host: str, port: int, project_root: Path, scope: str) -> None:
+    """Run the standalone graph viewer (``forktex arch serve``) until interrupted."""
+
+    from fastapi import FastAPI
+    import uvicorn
+
+    app = FastAPI(
+        title="ForkTex Graph",
+        description="Source-of-truth multi-edge graph for ForkTex projects.",
+    )
+    app.include_router(build_arch_router(project_root, default_scope=scope))
 
     _print_bind_banner(host=host, port=port, project_root=project_root, scope=scope)
 
@@ -159,4 +177,4 @@ def _print_bind_banner(*, host: str, port: int, project_root: Path, scope: str) 
     console.print("  [dim]Press Ctrl+C to stop.[/dim]")
 
 
-__all__ = ["run_server"]
+__all__ = ["run_server", "build_arch_router", "VIEWER_TAG"]

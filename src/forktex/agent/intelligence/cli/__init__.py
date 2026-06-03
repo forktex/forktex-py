@@ -29,7 +29,6 @@ All intelligence-driven verbs live under this group so the three services
 - ``intelligence ask <text>`` — single-shot question (scriptable).
 - ``intelligence run <task>`` — orchestrated task.
 - ``intelligence scrape <url>`` — agentic browser scraper.
-- ``intelligence index-ecosystem`` — knowledge ingestion.
 - ``intelligence status`` — API reachability + whoami.
 - ``intelligence connect`` / ``intelligence disconnect`` — credential management.
 
@@ -45,7 +44,6 @@ from forktex.agent.auth import (
     build_facet_commands,
     connect_intelligence as _connect_intelligence,
 )
-from forktex.agent.commands.index_ecosystem import index_ecosystem
 from forktex.agent.intelligence.cli.chat import ask
 from forktex.agent.intelligence.cli.run import run
 from forktex.agent.scraper.cli import scrape
@@ -111,7 +109,6 @@ _intel_connect, _intel_disconnect = build_facet_commands(
 intelligence.add_command(ask)
 intelligence.add_command(run)
 intelligence.add_command(scrape)
-intelligence.add_command(index_ecosystem)
 intelligence.add_command(_intel_connect)
 intelligence.add_command(_intel_disconnect)
 
@@ -120,7 +117,8 @@ def register_intelligence_commands(cli: click.Group) -> None:
     """Register the single ``intelligence`` group on the main CLI.
 
     Interactive chat is the bare ``forktex`` entry point; scriptable verbs
-    (``ask``, ``run``, ``scrape``, ``index-ecosystem``) live under this group.
+    (``ask``, ``run``, ``scrape``) live under this group. Knowledge ingestion
+    moved to ``forktex knowledge ingest`` in 0.8.0.
     """
     cli.add_command(intelligence)
 

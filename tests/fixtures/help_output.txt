@@ -1,0 +1,30 @@
+Usage: python -m forktex.agent.cli [OPTIONS] COMMAND [ARGS]...
+
+  ForkTex — software delivery toolkit CLI.
+
+  Plan, build, deploy, observe, and query your projects from one tool. Run
+  with no subcommand to open an interactive menu (and chat with an AI
+  assistant when one is configured).
+
+Options:
+  --version           Show the version and exit.
+  -d, --project TEXT  Project directory
+  --help              Show this message and exit.
+
+Core:
+  chat        Open the interactive chat REPL.
+  run         Run an orchestrated agentic task with tools.
+  plan        Craft a multi-agent plan and execute it.
+
+Grounding:
+  knowledge   Doctrine + project lessons (search, recycle, ingest, mcp, …).
+  arch        Structural authority — build · show · c4 · search · serve.
+
+Services:
+  cloud       Deploy, manage, observe your infrastructure.
+  fsd         Verify your project against the delivery standard.
+  auth        Sign-in state + credentials across services (default action: status).
+  serve       Serve the generic tool API — knowledge · arch · fsd over HTTP + MCP (/mcp).
+
+Housekeeping:
+  clean       Purge .forktex/ artefacts.

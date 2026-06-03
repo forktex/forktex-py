@@ -29,7 +29,7 @@ import sys
 
 import pytest
 
-from forktex.agent.state import AgentStateStore
+from forktex.agent.engine import AgentStateStore
 
 
 pytestmark = pytest.mark.usefixtures("isolated_home")

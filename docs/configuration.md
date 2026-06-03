@@ -11,9 +11,26 @@
 
 Settings are also read from `~/.forktex/` (global) and `<project>/.forktex/` (project-level) config files. Run `forktex <service> connect` to configure a service interactively.
 
-## On-disk layout
+## On-disk layout — `.forktex/`, bucketed by lifecycle
 
-The full layout — every file under `.forktex/` and `~/.forktex/`, what writes it, whether it's gitignored — is enforced by the structure spec at `forktex.graph.structure`. Path constants live in `forktex_cloud.paths` (the SDK) and are re-exported by `forktex.graph.io_proxy`.
+forktex-py is the **sole filesystem authority** — `forktex.substrate` owns every
+path under `.forktex/` and `~/.forktex/`; the SDKs (cloud/intelligence/network)
+deal in pure data and never touch disk. The layout is organized **by lifecycle,
+not by feature**, at both project and OS scope:
+
+| Bucket | Holds | Rule |
+| --- | --- | --- |
+| `knowledge/` | recycled lessons, notes | the only thing you commit |
+| `secrets/` | creds, vault, keys, `.env` | never commit, never share |
+| `cache/` | graph, c4, manual bundle, compose, fsd evidence | delete = rebuild |
+| `state/` | instances, locks | ephemeral |
+| `.version`, `.gitignore`, `config.json` | markers + config | — |
+
+Path factories live in `forktex.substrate.paths`; the full spec (every file,
+what writes it, whether it's gitignored) is the `EntrySpec` set in
+`forktex.substrate.spec`, audited by `forktex arch audit`. Writes go through
+`forktex.graph.io_proxy.tracked_write` so attribution + permissions are
+enforced. See `standard.forktex-fingerprint` + `standard.forktex-architecture`.
 
 ## Manifest — `forktex.json`
 
@@ -29,7 +46,7 @@ The manifest is the source of truth for project metadata, FSD profile, atom over
 | **intelligence** | LLM, embeddings, agentic runs | `forktex-intelligence` |
 | **network** | identity, projects, tasks, worklogs | `forktex-network` |
 
-Each SDK is independently versioned and published to PyPI. `forktex` re-exports the SDK surfaces under `forktex.cloud`, `forktex.intelligence`, and `forktex.network` as convenience shims so app code can `from forktex.intelligence import …` instead of pinning the SDK directly.
+Each SDK is independently versioned and published to PyPI. `forktex` re-exports the SDK surfaces under `forktex.cloud`, `forktex.intelligence`, and `forktex.network` — the load-bearing public import surface (auth flows, chat, and client factories all import through them), so app code can `from forktex.intelligence import …` instead of pinning the SDK directly.
 
 ## Brand assets
 

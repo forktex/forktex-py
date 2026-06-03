@@ -166,9 +166,9 @@ def test_fsd_level_default_l0(project_root):
 
 
 def test_validate_path_known(project_root):
-    m = validate_path("graph.json", scope="project")
+    m = validate_path("cache/graph.json", scope="project")
     assert m.ok
-    assert m.pattern == "graph.json"
+    assert m.pattern == "cache/graph.json"
 
 
 def test_validate_path_rejects_unknown():

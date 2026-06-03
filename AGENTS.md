@@ -17,11 +17,11 @@ Use the globally installed editable CLI whenever possible:
 
 ```bash
 forktex --version
-forktex fsd --project-dir . makefile sync
-forktex fsd --project-dir . check --json-output
-forktex fsd --project-dir . report
-forktex graph build --project .          # writes graph.{json,dsl,html}
-forktex graph c4 --format html --project .
+forktex fsd -d . makefile sync
+forktex fsd -d . check
+forktex fsd -d . report
+forktex arch build -d .                  # graph.{json,dsl,html} + manual_bundle.json
+forktex arch c4 --format html -d .
 ```
 
 Only fall back to direct module execution when the CLI surface does not exist yet.
@@ -34,11 +34,11 @@ From repo root:
 cd forktex-py
 make install-global
 forktex --version
-forktex fsd --project-dir . makefile sync
-forktex fsd --project-dir . check
-forktex fsd --project-dir . report
-forktex graph build --project .          # writes graph.{json,dsl,html}
-forktex graph c4 --format html --project .
+forktex fsd -d . makefile sync
+forktex fsd -d . check
+forktex fsd -d . report
+forktex arch build -d .                  # graph.{json,dsl,html} + manual_bundle.json
+forktex arch c4 --format html -d .
 ```
 
 Useful Make targets:
@@ -58,25 +58,18 @@ make build
 
 The repo currently self-assesses as:
 
-- release line: `forktex` 0.5.0 (co-cut with the v0.5 line across `core-py` / `intelligence` / `network` / `cloud`; see `CHANGELOG.md`)
+- release line: `forktex` 0.8.0 (substrate + bucketed `.forktex/` + run-anywhere + cloud SDK 2.0; see `CHANGELOG.md`)
 - FSD version: `1.3.0`
 - profile: `package/python-library`
 - achieved level: `L4`
 - architecture packages: `forktex` (single-package repo — the four ecosystem SDKs live in their own repos and are installed as ordinary dependencies)
-- key internal domains: `agent`, `architecture`, `cloud` (shim), `core`, `engineering`, `filesystem`, `fsd`, `intelligence` (shim), `manifest`, `models`
+- key internal domains: `agent`, `core`, `graph`, `manual`, `fsd`, `manifest`, `models`, `runtime`, `substrate`, `scraper`
+- `forktex.{cloud,intelligence,network}` are the **public re-export surface** for the SDKs (load-bearing — auth/chat/factories import through them), not thin shims
+- `forktex.substrate` is the **sole filesystem authority**; the SDKs deal in pure data
 
-Current proof failures from `forktex fsd report`:
-
-- formatting drift across many Python files
-- lint debt, especially unused imports in tests
-- `tests/test_cloud_client.py` depends on an external cloud API app import path and fails in this repo alone
-
-So:
-
-- `forktex fsd check` passes at `L3`
-- `forktex fsd report` still fails
-
-Do not confuse structural delivery capability with proof-clean execution.
+Test + quality state: **532 unit tests green**, lint clean. Do not confuse
+structural delivery capability with proof-clean execution — run
+`forktex fsd report` for the live evidence pack.
 
 ## When Editing The Delivery Surface
 
@@ -107,10 +100,11 @@ Backward compatibility still exists for older top-level cloud fields, but new wo
 
 ## Architecture Notes
 
-`forktex graph build` is the canonical way to refresh the project graph;
-`forktex graph c4` projects it onto the C4 model. The graph is the
-single source of truth — agent tools, the dashboard, and the C4 view
-all read from it, no duplicate filesystem walks.
+`forktex arch build` is the canonical way to refresh the project graph;
+`forktex arch c4` projects it onto the C4 model. The graph is the
+single source of truth — agent tools, the dashboard, the C4 view, and the
+agent-grounding `manual_bundle.json` all derive from one build, no duplicate
+filesystem walks (`graph` + `manual` merged into `arch` in 0.8.0).
 
 For `forktex-py`, the graph exposes both:
 
@@ -128,7 +122,7 @@ the C4 view reflects the latest evaluation.
 The `forktex-cloud` SDK and the `cloud/` repo layout both moved a step
 forward — relevant when this repo's CLI talks to the controller.
 
-### SDK: `Cloud` is the only client name (forktex-cloud >= 0.3.0)
+### SDK: `Cloud` is the only client name (forktex-cloud >= 2.0.0)
 
 ```python
 from forktex_cloud import Cloud
@@ -137,11 +131,10 @@ with Cloud("https://cloud.forktex.com", account_key="ftx-...") as cloud:
     cloud.list_projects()
 ```
 
-`Cloud` is the canonical (and only) SDK client class. The long-form
-`ForktexCloudClient` was retired in `forktex-cloud` 0.3.0; agent-CLI
-imports use `from forktex_cloud import Cloud` directly. The constructor
-signature is unchanged: `(base_url, account_key=None, *, access_token=None,
-org_id=None, timeout=30.0)`. `Cloud.from_context(ctx)` works the same.
+`Cloud` is the canonical (and only) SDK client class. forktex-cloud 2.0.0 is
+**filesystem-free** (its `paths.py` was deleted — forktex-py's `substrate`
+owns all on-disk layout; the SDK emits compose data). `Cloud.from_context(ctx)`
+works the same.
 
 ### Cloud repo: directory-per-VPS layout (in flight)
 
@@ -175,31 +168,32 @@ VPN currently lives inside the controller (`cloud/api/src/vpn/`); no
 VPS extraction planned yet — promote when there's a real reason to
 separate it.
 
-## Recall — graph + orchestra knowledge
+## Recall — ground before you build
 
-When you need to reorient inside this repo, prefer the project graph and
-the orchestra knowledge feed over re-reading code:
-
-```bash
-# project graph (built once via `forktex graph build --project .`)
-forktex graph query <topic>          # search nodes/edges by name or tag
-forktex graph c4 --format html       # C4 view of the same graph
-
-# orchestra knowledge — what peer agents observed about this repo
-forktex intelligence orchestra pull            # concerto + open directives + last 50 events
-forktex intelligence orchestra tail --since -  # event stream from cursor
-forktex intelligence orchestra status          # who's active/stale/gone
-```
-
-Push your own observations back so the next agent in this repo inherits
-them:
+When you need to reorient inside this repo, **ground via the knowledge base
+and the project graph before re-reading code** — and recycle non-obvious
+decisions back so the next session inherits them. This is the dogfood loop:
 
 ```bash
-forktex intelligence orchestra push "<finding>" --tag finding
+# knowledge base — pinned standards + recycled project lessons (the doctrine)
+forktex knowledge search "<topic>"     # search the composed fractal (docs ← global ← project)
+forktex knowledge show <node-id>       # read one node in full
+forktex knowledge doctor --composed    # cross-layer reference health
+
+# project graph / architecture (built once via `forktex arch build -d .`)
+forktex arch search "<topic>"          # ranked keyword search over nodes/edges
+forktex arch c4 --format html          # C4 view of the same graph
 ```
 
-Run `forktex intelligence orchestra --help` for the full verb list
-(`pull` / `push` / `beat` / `status` / `tail` / `directives` /
-`directive-done` + claim / barrier / lock / propose / vote / decisions /
-knowledge sync primitives). All commands consume the `OA_*` env vars
-exported by the bootstrap kit — source it in your shell before invoking.
+When you reach a non-obvious decision, **recycle it** so it compounds across
+sessions (this is how the knowledge base above stays useful):
+
+```bash
+forktex knowledge recycle <node-id> --title "…" --summary "…" --why "…" --how "…" [--tag pinned]
+forktex knowledge recycle <node-id> --global     # host-wide / cross-project lesson (~/.forktex/knowledge)
+```
+
+The composed knowledge layers are `docs` (the engineering corpus) ← `global`
+(`~/.forktex/knowledge`, cross-project) ← `project` (`<repo>/.forktex/knowledge`).
+Pinned nodes are always injected into the chat agent's system prompt; everything
+else is a pull-on-demand index. See `standard.knowledge-mechanism`.

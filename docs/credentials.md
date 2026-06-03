@@ -5,7 +5,7 @@ Every service understands the same verb pair (`connect` / `disconnect`) and the 
 ## One verb, three services
 
 ```bash
-forktex status                                              # aggregate table (all 3 services)
+forktex auth                                                # aggregate table (all 3 services)
 
 forktex cloud connect                                       # email/password + org select
 forktex cloud connect --api-key ftx-…                       # non-interactive

@@ -28,7 +28,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from forktex.graph import structure as _structure
+from forktex.substrate import spec as _structure
 from forktex.graph.registry import load as _load_registry
 from forktex.models.base import ForkTexModel
 
@@ -54,7 +54,7 @@ def validate_path(rel_path: str, scope: str = "project") -> StructureMatch:
     """Match *rel_path* (relative to ``.forktex/``) against the canonical
     structure spec and return a structured result.
 
-    Wraps ``forktex.graph.structure.validate_path`` to expose a JSON-friendly
+    Wraps ``forktex.substrate.spec.validate_path`` to expose a JSON-friendly
     result for tool callers.
     """
     result = _structure.validate_path(scope, rel_path)  # type: ignore[arg-type]

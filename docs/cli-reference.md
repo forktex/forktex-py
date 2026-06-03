@@ -1,6 +1,16 @@
 # CLI reference
 
-`forktex` is a single binary with three peer services — **intelligence**, **cloud**, **network** — plus built-in commands for project inspection (`graph`), the delivery-standard audit (`fsd`), and lifecycle helpers (`status`, `clean`, `serve`, `agents`). All three services share the same credential verbs (`connect` / `disconnect`).
+`forktex` is an **agent over one knowledge substrate**, exposed as eight
+top-level commands in four categories (the authoritative taxonomy lives in
+`forktex.agent.cli_help.CATEGORIES`):
+
+- **Core** — `chat`, `run` (talk to the agent / one orchestrated run)
+- **Grounding** — `knowledge`, `arch` (the substrate · the structural authority)
+- **Services** — `cloud`, `fsd`, `auth` (deploy & operate · delivery audit · credentials)
+- **Housekeeping** — `clean`
+
+FSD lifecycle verbs (`test`, `build`, `apply`, …) are **not** CLI commands —
+`make` owns lifecycle (the Makefile is generated from `forktex.json`).
 
 ## Built-in vs. platform
 
@@ -8,78 +18,89 @@ What works offline, what needs which platform connection:
 
 | Command group        | Needs no platform | Needs `intelligence` | Needs `cloud` | Needs `network` |
 |----------------------|:-----------------:|:--------------------:|:-------------:|:---------------:|
-| `forktex graph …`    | ✅                |                      |               |                 |
+| `forktex arch …`     | ✅                |                      |               |                 |
+| `forktex knowledge …`| ✅                |  (ingest --remote)   |               |                 |
 | `forktex fsd …`      | ✅                |                      |               |                 |
-| `forktex agents …`   | ✅                |                      |               |                 |
-| `forktex serve`      | ✅                |                      |               |                 |
+| `forktex auth …`     | ✅                |                      |               |                 |
 | `forktex clean`      | ✅                |                      |               |                 |
-| `forktex` (chat REPL)| menu only         | ✅ (chat upgrade)    |               |                 |
-| `forktex intelligence ask/run/scrape` | |     ✅                |               |                 |
-| `forktex cloud up/deploy/server/…`    | |                      | ✅            |                 |
-| `forktex network status`              | |                      |               | ✅              |
-
-`forktex status` works with or without a connection — it shows the project + environment + which services are signed in.
+| `forktex` / `chat`   | menu only         | ✅ (chat upgrade)    |               |                 |
+| `forktex run "…"`    |                   | ✅                   |               |                 |
+| `forktex cloud up/deploy/server/…` |    |                      | ✅            |                 |
 
 ```
 forktex                      Bare: menu-driven root loop (auto-upgrades to chat REPL)
 forktex --version            Print version
-forktex status               Project + environment + auth state across all services
+forktex auth                 Project + environment + auth state across all services
 ```
 
-## Services
+## Core — the agent
 
 ```
-forktex intelligence
-  connect / disconnect       Authenticate / remove credentials
-  status                     API health + whoami
-  ask "..."                  Single-shot question (scriptable)
-  run "..."                  Orchestrated task (multi-step, tool-using)
-  scrape <url>               Agentic browser scraper (Playwright)
-  index-ecosystem            Knowledge ingestion across sibling repos
-
-forktex cloud
-  connect / disconnect       Authenticate / remove credentials
-  init                       Scaffold forktex.json manifest
-  up / down                  Start / stop stack from manifest
-  deploy <server-id>         Blue-green deployment
-  server | project | vault   Per-resource subgroups
-  status / logs / events     Monitoring
-
-forktex network
-  connect / disconnect       Authenticate / remove credentials
-  status                     identity_me round-trip
+forktex chat                 Interactive chat REPL, grounded on the current project
+  --ecosystem                Ground on the whole workspace (parent docs/AGENTS.md + cross-project knowledge)
+  --desktop                  Enable observe-only desktop tools
+forktex run "<task>"         One orchestrated, tool-using agentic run (scriptable)
 ```
 
-## Cross-cutting groups
+## Grounding — the substrate + the structural authority
 
 ```
-forktex graph
-  build                      Refresh .forktex/graph.{json,dsl,html}
+forktex knowledge            The knowledge base (docs ← global ← project)
+  search "<query>"           Tokenised, ranked search over the composed graph
+  show <id>                  Print a node in full (frontmatter + body)
+  list                       List node summaries
+  neighbors <id>             A node's typed adjacency (in/out edges by kind)
+  recycle <id> [--global]    Capture a learning back (--global → ~/.forktex/knowledge)
+  retire <id>                Mark a node retired (filtered from grounding)
+  rollup <parent-id>         Compact a subtree into its parent summary
+  doctor [--composed]        Drift report — broken refs, cycles, retired-but-referenced
+  ingest [--remote]          Bulk-import a source (ecosystem AGENTS.md → remote vector store)
+  init                       Bootstrap <project>/.forktex/knowledge/
+  mcp                        Run an MCP server (stdio) exposing the knowledge tools
+
+forktex arch                 Structural authority — one graph build, two faces
+  build [--no-bundle]        graph.{json,dsl,html} + agent-grounding manual_bundle.json
   show                       Render as tree | json | dsl on stdout
   c4                         Per-platform C4 view (DSL or drill-down HTML)
-  audit                      Validate the .forktex/ footprint against the spec
-  ecosystem                  Walk every forktex.json under a parent dir
+  search "<kw>"              Ranked keyword search over graph nodes/edges
+  serve                      Live web dashboard at http://localhost:4444
   diff                       Compare two graph snapshots
   importers <target>         Modules that import a library / package / module
   package <rel-path>         Locate the package containing a path
   modules <pattern>          Glob over module names
   recent                     Files inside .forktex/ touched in the last N hours
+  ecosystem                  Walk every forktex.json under a parent dir
+  audit                      Validate the .forktex/ footprint against the spec
+```
 
-forktex fsd
+## Services
+
+```
+forktex cloud                Deploy & operate (connect / disconnect like every service)
+  init / new                 Scaffold a forktex.json manifest / project from a template
+  up [--env local] / down    Start (remote deploy or local stack) / tear down
+  deploy <server-id>         Push a new release (blue-green)
+  server | project | vault   Per-resource subgroups
+  status / logs / events     Monitoring + audit
+  inspect / tree / dns / ssl Resource inspection + edge config
+
+forktex fsd                  Delivery standard (pass `-d <dir>` at the group level)
   check [--recursive]        Verify FSD compliance; recurse into nested forktex.json
-  report                     Generate FSD evidence pack (JSON + HTML)
+  report                     Generate the FSD evidence pack (JSON + HTML)
   ecosystem                  FSD level matrix across every project under a parent dir
-  makefile sync              Regenerate Makefile from forktex.json atoms
+  makefile sync              Regenerate the Makefile from forktex.json atoms
 
-forktex agents
-  list                       Recent agent runs from history
-  show <id>                  Detail of one run
-  cancel <id>                Cancel a running agent
-  ground                     Regenerate AGENTS.md across sibling repos
-  root                       Start the persistent ecosystem-aware agent
+forktex auth                 Aggregate credential state (bare = status table)
+  status [--json]            Signed-in state + project + Python + platform
+  cloud | intelligence | network
+                             Per-service connect / disconnect
+```
 
-forktex serve                Live web dashboard (graph + C4 + structure spec)
-forktex clean                Remove generated artifacts; forget missing projects
+## Housekeeping
+
+```
+forktex clean                Remove generated .forktex/ artifacts; forget missing projects
+  --legacy-evidence          Also sweep historical timestamped FSD/arch outputs
 ```
 
 ## Slash commands (chat REPL)

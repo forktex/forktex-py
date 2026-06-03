@@ -143,7 +143,7 @@ def test_tracked_write_outside_forktex_passthrough(tmp_path):
 
 
 def test_tracked_append_appends_jsonl(project_root):
-    target = project_root / ".forktex" / "agents" / "history" / "abc.jsonl"
+    target = project_root / ".forktex" / "state" / "agents" / "history" / "abc.jsonl"
     io_proxy.tracked_append(
         target,
         '{"a":1}',
@@ -161,7 +161,7 @@ def test_tracked_append_appends_jsonl(project_root):
 
     reg = registry.load()
     touches = reg.projects[str(project_root)].touches
-    assert any(t.rel_path == "agents/history/abc.jsonl" for t in touches)
+    assert any(t.rel_path == "state/agents/history/abc.jsonl" for t in touches)
 
 
 def test_tracked_append_rejects_unspec_path(project_root):
@@ -174,7 +174,7 @@ def test_tracked_append_rejects_unspec_path(project_root):
 
 
 def test_global_writes_record_under_global_touches(isolated_home):
-    target = isolated_home / ".forktex" / "intelligence.json"
+    target = isolated_home / ".forktex" / "secrets" / "intelligence.json"
     io_proxy.tracked_write(
         target,
         "{}",
@@ -182,6 +182,6 @@ def test_global_writes_record_under_global_touches(isolated_home):
         writer="test.case",
     )
     reg = registry.load()
-    assert any(t.rel_path == "intelligence.json" for t in reg.global_touches)
+    assert any(t.rel_path == "secrets/intelligence.json" for t in reg.global_touches)
     # Importantly the registry's own write doesn't recursively record itself.
-    assert all(t.rel_path != registry.REGISTRY_FILENAME for t in reg.global_touches)
+    assert all(t.rel_path != registry.REGISTRY_REL_PATH for t in reg.global_touches)

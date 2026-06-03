@@ -44,11 +44,11 @@ from forktex.graph.query.deps import (
     list_libraries_for_package,
     packages_depending_on,
 )
-from forktex.graph.query.ecosystem import (
-    EcosystemRow,
+from forktex.graph.query.workspace import (
+    WorkspaceRow,
     ProjectDep,
     VersionRange,
-    ecosystem_fsd_matrix,
+    workspace_fsd_matrix,
     manifest_version_range,
     reverse_dependents,
 )
@@ -84,7 +84,7 @@ from forktex.graph.query.structure import (
 __all__ = [
     # Models
     "DomainSummary",
-    "EcosystemRow",
+    "WorkspaceRow",
     "FSDStatus",
     "ImportEdge",
     "LibrarySummary",
@@ -118,8 +118,8 @@ __all__ = [
     "files_touched_recently",
     "validate_path",
     "writers_for_path",
-    # Ecosystem
-    "ecosystem_fsd_matrix",
+    # Workspace
+    "workspace_fsd_matrix",
     "manifest_version_range",
     "reverse_dependents",
 ]

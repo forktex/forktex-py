@@ -107,21 +107,21 @@ def test_no_tmp_forktex_literals_outside_core_paths():
     )
 
 
-def test_ecosystem_root_walk_defined_only_in_core_paths():
-    """``find_ecosystem_root`` must live in exactly one place
+def test_workspace_root_walk_defined_only_in_core_paths():
+    """``find_workspace_root`` must live in exactly one place
     (``forktex.core.paths``). The walk-up-to-N-sibling-git-repos pattern
     was copy-pasted into three command modules before being centralized;
     catch the next attempt at duplication early.
     """
     definitions: list[str] = []
-    pattern = re.compile(r"^\s*def\s+(_?find_ecosystem_root)\s*\(", re.MULTILINE)
+    pattern = re.compile(r"^\s*def\s+(_?find_workspace_root)\s*\(", re.MULTILINE)
     for path in _iter_py_files():
         text = path.read_text()
         for match in pattern.finditer(text):
             rel = path.relative_to(REPO_ROOT)
             definitions.append(f"  {rel}: def {match.group(1)}(...)")
     assert len(definitions) == 1 and "core/paths.py" in definitions[0], (
-        "find_ecosystem_root must be defined exactly once, in "
+        "find_workspace_root must be defined exactly once, in "
         "src/forktex/core/paths.py. Current definitions:\n"
         + "\n".join(definitions or ["  (none — has it been removed by mistake?)"])
     )

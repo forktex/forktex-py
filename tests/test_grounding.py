@@ -43,7 +43,7 @@ def _write(p: Path, text: str) -> None:
 
 
 def _write_bundle(root: Path, payload: dict) -> None:
-    bundle = root / ".forktex" / "manual" / "manual_bundle.json"
+    bundle = root / ".forktex" / "cache" / "manual" / "manual_bundle.json"
     bundle.parent.mkdir(parents=True, exist_ok=True)
     bundle.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -54,8 +54,8 @@ def _write_bundle(root: Path, payload: dict) -> None:
 def test_empty_project_returns_default_base(tmp_path):
     prompt = build_system_prompt(tmp_path)
     assert DEFAULT_BASE in prompt
-    # No grounding sources → user gets a hint about `forktex manual build`.
-    assert "forktex manual build" in prompt
+    # No grounding sources → user gets a hint about `forktex arch build`.
+    assert "forktex arch build" in prompt
 
 
 def test_custom_base_overrides_default(tmp_path):
@@ -125,23 +125,23 @@ def test_cached_bundle_rules_and_concepts_are_injected(tmp_path):
     assert "## Common Tasks" in prompt
     assert "make gate" in prompt
     # Hint shouldn't appear when we have a real bundle.
-    assert "Run `forktex manual build`" not in prompt
+    assert "Run `forktex arch build`" not in prompt
 
 
 def test_missing_bundle_emits_hint(tmp_path):
-    """No bundle file → hint suggesting `forktex manual build`."""
+    """No bundle file → hint suggesting `forktex arch build`."""
     prompt = build_system_prompt(tmp_path)
-    assert "forktex manual build" in prompt
+    assert "forktex arch build" in prompt
 
 
 def test_malformed_bundle_is_ignored(tmp_path):
     """A bundle file with bad JSON shouldn't crash the chat boot."""
-    bundle = tmp_path / ".forktex" / "manual" / "manual_bundle.json"
+    bundle = tmp_path / ".forktex" / "cache" / "manual" / "manual_bundle.json"
     bundle.parent.mkdir(parents=True, exist_ok=True)
     bundle.write_text("{not json")
     prompt = build_system_prompt(tmp_path)
     # Falls through to "no bundle" path → hint appears.
-    assert "forktex manual build" in prompt
+    assert "forktex arch build" in prompt
 
 
 def test_bundle_without_rules_or_concepts_is_silent(tmp_path):
@@ -162,7 +162,7 @@ def test_bundle_without_rules_or_concepts_is_silent(tmp_path):
     assert "## Key Concepts" not in prompt
     assert "## Common Tasks" not in prompt
     # But because the bundle exists, the "missing-bundle" hint is suppressed.
-    assert "Run `forktex manual build`" not in prompt
+    assert "Run `forktex arch build`" not in prompt
 
 
 # ── caps ──────────────────────────────────────────────────────────────────
@@ -178,3 +178,19 @@ def test_truncation_marker_present_when_capped(tmp_path):
     _write(tmp_path / "AGENTS.md", "y" * 30_000)
     prompt = build_system_prompt(tmp_path, max_chars=2_000)
     assert "[truncated]" in prompt
+
+
+def test_workspace_section_lists_root_and_entries(tmp_path):
+    # Anchors the agent to its root + layout so it stops guessing paths like
+    # `docs/` when the root itself is the docs project.
+    (tmp_path / "README.md").write_text("hi", encoding="utf-8")
+    (tmp_path / "engineering").mkdir()
+    (tmp_path / ".hidden").write_text("x", encoding="utf-8")
+
+    prompt = build_system_prompt(tmp_path, base_prompt="BASE")
+
+    assert "## Workspace" in prompt
+    assert "README.md" in prompt
+    assert "engineering/" in prompt  # dirs get a trailing slash
+    assert ".hidden" not in prompt  # hidden entries are skipped
+    assert "relative to this root" in prompt

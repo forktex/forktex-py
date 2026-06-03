@@ -35,7 +35,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from forktex_cloud import paths as cloud_paths
+from forktex.substrate import paths as cloud_paths
 from forktex_cloud.config import CloudContext
 
 
@@ -56,7 +56,7 @@ def load_cloud_context(project_root: Path | None = None) -> CloudContext:
 
     # Project-level config (overrides global)
     if project_root:
-        project_path = cloud_paths.project_dir(project_root) / "cloud.json"
+        project_path = cloud_paths.project_cloud_file(project_root)
         if project_path.exists():
             try:
                 project_data = json.loads(project_path.read_text())
@@ -102,7 +102,7 @@ def save_cloud_context_global(ctx: CloudContext) -> None:
 def save_cloud_context_project(ctx: CloudContext, project_root: Path) -> None:
     """Persist project-specific cloud state to the project cloud config file."""
     cloud_paths.ensure_project_dirs(project_root)
-    path = cloud_paths.project_dir(project_root) / "cloud.json"
+    path = cloud_paths.project_cloud_file(project_root)
     data = {
         "current_project": ctx.current_project,
         "current_server": ctx.current_server,

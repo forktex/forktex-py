@@ -21,7 +21,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""``forktex serve`` — root-level FastAPI server backed by the live graph."""
+"""``forktex arch serve`` — FastAPI server backed by the live graph."""
 
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ async def serve_cmd(
         from forktex.agent.graph.serve import run_server
     except ModuleNotFoundError as exc:
         raise click.ClickException(
-            "`forktex serve` needs the optional 'web' extra: "
+            "`forktex arch serve` needs the optional 'web' extra: "
             f"pip install 'forktex[web]' ({exc.name} missing)"
         ) from exc
 

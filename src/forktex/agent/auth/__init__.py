@@ -21,17 +21,22 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Shared building blocks for per-service credential management.
+"""Cross-service credential management — the ``forktex auth`` group.
 
-The three services (cloud, intelligence, network) each register their own
-``connect`` / ``disconnect`` commands built by
-:func:`forktex.agent.auth.cli.build_facet_commands`. There is no standalone
-``forktex auth`` group — the verbs live inside each service for full parity.
-
-The top-level ``forktex status`` aggregator also lives here.
+Three services (cloud, intelligence, network) share a credential model: each
+has its own ``connect`` / ``disconnect`` flow built by
+:func:`forktex.agent.auth.cli.build_facet_commands`, and a single status
+aggregator (:data:`status_cmd`) reads all three. In 0.7.0 the top-level
+``forktex status`` was promoted to ``forktex auth`` (a group whose default
+action prints the same status) and the three per-service connect/disconnect
+verbs hang underneath as subgroups: ``forktex auth cloud connect``, etc.
+That replaces the prior ``forktex network`` top-level group and the
+``forktex intelligence connect / disconnect`` paths in one place.
 """
 
 from __future__ import annotations
+
+import asyncclick as click
 
 from forktex.agent.auth.cli import (
     build_facet_commands,
@@ -43,7 +48,42 @@ from forktex.agent.auth.cli import (
 from forktex.agent.auth.status import collect_auth_status
 from forktex.agent.auth.types import AuthKind, AuthState, Facet
 
+
+@click.group(name="auth", invoke_without_command=True)
+@click.pass_context
+async def auth(ctx: click.Context) -> None:
+    """Sign-in state + credentials across services.
+
+    Bare ``forktex auth`` prints the aggregated status across cloud,
+    intelligence, and network (the same surface that used to live at
+    ``forktex status``). Subgroups (``cloud`` / ``intelligence`` / ``network``)
+    expose per-service ``connect`` / ``disconnect``.
+    """
+    if ctx.invoked_subcommand is None:
+        await ctx.invoke(status_cmd)
+
+
+# Per-service subgroups. ``build_facet_commands`` returns the matched
+# ``(connect, disconnect)`` pair for one facet, so reuse the existing factory
+# rather than redeclaring eight options here.
+for _facet, _connect_impl in (
+    ("cloud", connect_cloud),
+    ("intelligence", connect_intelligence),
+    ("network", connect_network),
+):
+    _connect, _disconnect = build_facet_commands(_facet, _connect_impl)
+
+    @auth.group(name=_facet)
+    async def _facet_group() -> None:
+        """Per-service credential commands."""
+
+    _facet_group.add_command(_connect, name="connect")
+    _facet_group.add_command(_disconnect, name="disconnect")
+del _facet, _connect_impl, _connect, _disconnect, _facet_group
+
+
 __all__ = [
+    "auth",
     "build_facet_commands",
     "status_cmd",
     "connect_cloud",

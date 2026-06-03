@@ -25,7 +25,7 @@
 
 import pytest
 
-from forktex.agent.intelligence.tool_server import ToolServer
+from forktex.agent.tools.server import intelligence_tool_server as ToolServer
 
 
 pytestmark = pytest.mark.usefixtures("isolated_home")

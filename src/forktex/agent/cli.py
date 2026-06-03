@@ -24,14 +24,27 @@
 """
 forktex.agent.cli - CLI dispatcher for the ForkTex software delivery toolkit.
 
-Top-level shape (all three integrations are peers):
+Top-level shape (the agent-first surface; see ``cli_help.CATEGORIES``):
 
     forktex                          bare REPL / menu
-    forktex status                   aggregate credential state (all 3 services)
-    forktex cloud <…>                cloud operations + connect / disconnect
-    forktex intelligence <…>         intelligence operations + connect / disconnect
-    forktex network <…>              network operations + connect / disconnect
-    forktex fsd / arch / git / local / overview / present / agents / info
+    forktex chat / run               talk to the agent · orchestrated task
+    forktex knowledge <…>            the substrate — search · recycle · ingest · mcp
+    forktex arch <…>                 structural authority — build · show · c4 · search · serve
+    forktex cloud <…>                deploy & operate (+ connect / disconnect)
+    forktex fsd <…>                  delivery standard — check / report / makefile
+    forktex auth <…>                 aggregate credential state across services
+    forktex clean                    purge .forktex/ artefacts
+
+Loading model
+-------------
+
+Subcommand modules import **lazily** via :class:`AsyncLazyGroup` — the user
+only pays for what they invoke. ``forktex --help`` lists every command without
+importing any of them (the lazy entries declare a dotted-path spec; the leaf
+loads on first ``get_command``). Only the bits that need to run on every
+invocation stay eager here: the audit hook (graph io tracking) and FSD-atom
+registration (it reads the project manifest to add manifest-derived verbs to
+``--help``).
 """
 # ruff: noqa: E402
 
@@ -40,27 +53,16 @@ import sys
 
 import asyncclick as click
 
+from forktex.agent.lazy_group import AsyncLazyGroup
 from forktex.agent.ui.console import console
 from forktex.agent.ui.display import CLI_VERSION
-
-_CLOUD_IMPORT_ERROR: ModuleNotFoundError | None = None
-
-
-def _require_cloud_support() -> None:
-    if _CLOUD_IMPORT_ERROR is None:
-        return
-    raise click.ClickException(
-        "Cloud commands are unavailable because the optional "
-        f"dependency {_CLOUD_IMPORT_ERROR.name!r} is not installed."
-    )
-
 
 # =============================================================================
 # CLI Root
 # =============================================================================
 
 
-@click.group(invoke_without_command=True)
+@click.group(cls=AsyncLazyGroup, invoke_without_command=True)
 @click.version_option(version=CLI_VERSION, prog_name="forktex")
 @click.option("--project", "-d", default=None, help="Project directory")
 @click.pass_context
@@ -91,107 +93,100 @@ async def cli(ctx, project):
 
 
 # =============================================================================
-# Core Commands
+# Audit hook — must run before any file-mutating command, so eager.
 # =============================================================================
 
-
-# =============================================================================
-# Top-level `forktex status` — project + environment + auth at a glance
-# =============================================================================
-
-from forktex.agent.auth import status_cmd as _status_cmd
-
-cli.add_command(_status_cmd)
-
-
-# =============================================================================
-# Intelligence service (chat, ask, run, scrape, index-ecosystem, sync, disconnect, status)
-# =============================================================================
-
-from forktex.agent.intelligence.cli import register_intelligence_commands
-
-register_intelligence_commands(cli)
-
-
-# =============================================================================
-# Cloud service
-# =============================================================================
-
-try:
-    from forktex.agent.cloud import cloud
-except ModuleNotFoundError as exc:
-    _CLOUD_IMPORT_ERROR = exc
-else:
-    cli.add_command(cloud)
-
-
-# =============================================================================
-# Network service
-# =============================================================================
-
-from forktex.agent.network import network as network_group
-
-cli.add_command(network_group)
-
-
-# =============================================================================
-# Cross-cutting groups (agents, fsd, arch, overview, present, git, local)
-# =============================================================================
-
-from forktex.agent.commands.agents import agents
-from forktex.agent.commands.ground import ground
-from forktex.agent.commands.root_agent import root_agent
-
-agents.add_command(ground)
-agents.add_command(root_agent)
-cli.add_command(agents)
-
-from forktex.agent.fsd import fsd
-
-cli.add_command(fsd)
-
-from forktex.agent.graph import graph as graph_group
-from forktex.agent.manual import manual as manual_group
-from forktex.agent.purge import clean_cmd
-from forktex.agent.serve import serve_cmd
 from forktex.graph.io_proxy import install_audit_hook
 
 install_audit_hook()
-cli.add_command(graph_group)
-cli.add_command(manual_group)
-cli.add_command(serve_cmd)
-cli.add_command(clean_cmd)
 
 
 # =============================================================================
-# Catalog atoms as first-class CLI commands
+# Lazy subcommand registrations — the final v0.7.0 root taxonomy.
 # =============================================================================
-# Every FSD atom from the bundled standard becomes a top-level
-# `forktex <atom>` command (1:1 with the catalog). Bare `forktex`
-# stays the runtime agent (chat REPL) — this only adds new verbs.
-# Atoms whose IDs collide with an existing command/group are skipped
-# (the existing surface owns the name); for `manual`, the group's
-# `invoke_without_command=True` body owns the no-subverb dispatch.
+# 10 deliberate keys, no FSD-atom mirroring: forktex is the agentic CLI; ``make``
+# owns the lifecycle. The grouping below mirrors the categories rendered by
+# ``forktex --help`` (see :mod:`forktex.agent.cli_help`).
+#
+# Bare ``forktex`` (above) still opens the chat REPL. ``forktex chat`` is the
+# explicit alias; ``forktex run`` is the orchestrated agentic task. The
+# ``intelligence`` / ``agents`` / ``network`` groups and the ``mcp`` / ``serve``
+# / ``status`` leaf commands no longer exist at root — see the BREAKING CHANGES
+# section of forktex-py/CHANGELOG.md (0.7.0) for the per-command migration.
 
-from forktex.agent.atoms import register_atom_commands as _register_atom_commands
-from forktex.fsd.loader import load_standard as _load_standard
+# Core (the agentic identity).
+cli.add_lazy_command(
+    "chat",
+    "forktex.agent.intelligence.cli.chat:chat",
+    short_help="Open the interactive chat REPL.",
+)
+cli.add_lazy_command(
+    "run",
+    "forktex.agent.intelligence.cli.run:run",
+    short_help="Run an orchestrated agentic task with tools.",
+)
+cli.add_lazy_command(
+    "plan",
+    "forktex.agent.workflow.cli:plan",
+    short_help="Craft a multi-agent plan and execute it.",
+)
 
-try:
-    _atom_manifest = None
-    try:
-        from forktex.core.paths import find_project_root as _find_root
-        from forktex.manifest.models import ForktexManifest as _ForktexManifest
+# Grounding (the substrate the agent reads).
+cli.add_lazy_command(
+    "knowledge",
+    "forktex.agent.knowledge.cli:knowledge",
+    short_help="Doctrine + project lessons (search, recycle, ingest, mcp, …).",
+    optional=True,
+    install_hint="pip install 'forktex-core[fractal]'",
+)
+cli.add_lazy_command(
+    "arch",
+    "forktex.agent.graph:arch",
+    short_help="Structural authority — build · show · c4 · search · serve.",
+)
 
-        _root = _find_root(__import__("pathlib").Path.cwd())
-        if _root is not None:
-            _atom_manifest = _ForktexManifest.load(_root / "forktex.json")
-    except Exception:
-        # Manifest is optional for atom registration — variant axes
-        # just stay empty when there's no manifest in scope.
-        _atom_manifest = None
-    _register_atom_commands(cli, standard=_load_standard(), manifest=_atom_manifest)
-except Exception as exc:  # pragma: no cover — defensive
-    console.print(f"[yellow]warn:[/yellow] atom CLI registration failed: {exc}")
+# Services.
+cli.add_lazy_command(
+    "cloud",
+    "forktex.agent.cloud:cloud",
+    short_help="Deploy, manage, observe your infrastructure.",
+    optional=True,
+    install_hint="pip install 'forktex[cloud]'  # or fix the import error in forktex.agent.cloud",
+)
+cli.add_lazy_command(
+    "fsd",
+    "forktex.agent.fsd:fsd",
+    short_help="Verify your project against the delivery standard.",
+)
+cli.add_lazy_command(
+    "auth",
+    "forktex.agent.auth:auth",
+    short_help="Sign-in state + credentials across services (default action: status).",
+)
+cli.add_lazy_command(
+    "serve",
+    "forktex.api.serve:serve_cmd",
+    short_help="Serve the generic tool API — knowledge · arch · fsd over HTTP + MCP (/mcp).",
+    optional=True,
+    install_hint="pip install 'forktex-py[mcp]'",
+)
+
+# Housekeeping.
+cli.add_lazy_command(
+    "clean",
+    "forktex.agent.purge:clean_cmd",
+    short_help="Purge .forktex/ artefacts.",
+)
+
+
+# FSD atom mirroring (``forktex test`` / ``build`` / ``lint`` / …) was removed
+# in 0.7.0 — ``make`` owns lifecycle. The dispatcher in ``forktex.agent.atoms``
+# stays importable for any downstream tooling that needs to construct atom
+# ``Make`` targets programmatically; only the CLI registration is gone.
+# ``forktex fsd check`` continues to work (it reads the static Makefile and
+# never depended on atom dispatch). See ``forktex-py/CHANGELOG.md`` (0.7.0
+# BREAKING CHANGES) and the ``convention.root-taxonomy`` knowledge lesson for
+# the rationale.
 
 
 # =============================================================================

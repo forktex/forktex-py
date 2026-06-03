@@ -35,13 +35,16 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional
 
 from forktex_intelligence import Intelligence
-from forktex.agent.types import AgentType, get_agent_type_registry
-from forktex.agent.process import AgentProcess
-from forktex.agent.session import Session
-from forktex.agent.state import AgentStateStore
-from forktex.agent.intelligence.agent import LocalAgentLoop
-from forktex.agent.intelligence.tool_server import ToolServer as IntelligenceToolServer
-from forktex.agent.tools.server import ToolServer as FullToolServer
+from forktex.agent.engine import (
+    AgentLoop,
+    AgentProcess,
+    AgentStateStore,
+    AgentType,
+    Session,
+    get_agent_type_registry,
+)
+from forktex.agent.intelligence.provider import IntelligenceProvider
+from forktex.agent.tools.server import ToolServer, intelligence_tool_server
 
 # Max nesting depth for hierarchical agent spawning
 MAX_SPAWN_DEPTH = 3
@@ -78,8 +81,8 @@ class AgentManager:
         self._state_store = AgentStateStore(project_root)
         self._type_registry = get_agent_type_registry(project_root)
 
-    def _build_tool_server(self, agent_type: AgentType) -> IntelligenceToolServer:
-        """Build a tool server filtered by agent type permissions."""
+    def _build_tool_server(self, agent_type: AgentType) -> ToolServer:
+        """Build a tool server, then prune it to the agent type's whitelist."""
         # Inject scraper tools if browser is available and agent is a scraper
         extra_tools = None
         if (
@@ -93,31 +96,107 @@ class AgentManager:
                 self._browser, self._truths_store, self.project_root
             )
 
-        full_server = FullToolServer(
+        server = intelligence_tool_server(
             self.project_root,
-            enable_web=True,
+            extra_tools,
+            enable_bash="bash_execute" in agent_type.allowed_tools,
             enable_desktop=self._enable_desktop,
         )
+        server.keep_only(agent_type.allows_tool)
+        # Spawning agents get a runtime-bound delegate tool, registered AFTER
+        # the whitelist prune so it can't be filtered out. Gated on can_spawn —
+        # the natural authority boundary (only developer / assistant today).
+        if agent_type.can_spawn:
+            self._register_spawn_tool(server)
+        return server
 
-        # Register extra tools on the full server so they participate in filtering
-        if extra_tools:
-            for tool in extra_tools:
-                full_server.registry.register(tool)
+    def _register_spawn_tool(self, server: ToolServer) -> None:
+        """Register the ``spawn_sub_agent`` delegate tool on ``server``.
 
-        filtered = IntelligenceToolServer.__new__(IntelligenceToolServer)
-        filtered.project_root = self.project_root
-        filtered.bash_enabled = "bash_execute" in agent_type.allowed_tools
-        filtered.desktop_enabled = self._enable_desktop
+        The tool is runtime-bound — it needs the live ``Intelligence`` client and
+        the very tool server it lives on — so it's built here (where both exist)
+        rather than in the static catalog. The sub-agent runs over a filtered
+        view of ``server``; the requested role subset is intersected with the
+        tools the parent actually exposes, so delegating from a narrow parent
+        (e.g. ``developer``) degrades to the read tools it has instead of failing.
+        """
+        from dataclasses import replace
 
-        from forktex.agent.tools.base import ToolRegistry
+        from forktex.agent.tools.base import Tool, ToolResult
+        from forktex.agent.workflow.sub_agent import SubAgentSpec, spawn_sub_agent
 
-        filtered.registry = ToolRegistry()
+        async def _spawn(
+            role: str,
+            intent: str,
+            max_rounds: int = 5,
+            timeout_s: float = 60.0,
+        ) -> ToolResult:
+            try:
+                spec = SubAgentSpec.for_role(
+                    role, intent, max_rounds=max_rounds, timeout_s=timeout_s
+                )
+            except ValueError as exc:
+                return ToolResult(content=str(exc), is_error=True)
 
-        for tool in full_server.registry.list_tools():
-            if agent_type.allows_tool(tool.name):
-                filtered.registry.register(tool)
+            available = {s["name"] for s in server.get_schemas()}
+            granted = frozenset(spec.tool_subset) & available
+            spec = replace(spec, tool_subset=granted)
 
-        return filtered
+            result = await spawn_sub_agent(
+                spec,
+                parent_intelligence=self._client,
+                parent_tool_server=server,
+                on_tool_event=self._on_tool_event,
+            )
+            return ToolResult(
+                content=f"[{result.name}/{result.status}] {result.summary}",
+                is_error=result.status != "completed",
+                data={
+                    "granted_tools": sorted(granted),
+                    "tokens": result.tokens_used,
+                    "rounds": result.rounds_used,
+                    "error": result.error,
+                },
+            )
+
+        server.registry.register(
+            Tool(
+                name="spawn_sub_agent",
+                description=(
+                    "Delegate a focused, bounded subtask to a specialist sub-agent "
+                    "and get back a short summary. Use this to parallelize or isolate "
+                    "work: a 'researcher' (read-only investigation), an 'editor' "
+                    "(make file changes), or an 'auditor' (review/inspect). The "
+                    "sub-agent runs with a curated tool subset and a turn/time budget; "
+                    "it cannot itself spawn. Prefer it for self-contained sub-tasks "
+                    "whose result you'll fold into your own answer."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "role": {
+                            "type": "string",
+                            "enum": ["researcher", "editor", "auditor"],
+                            "description": "Specialist role; selects the tool subset.",
+                        },
+                        "intent": {
+                            "type": "string",
+                            "description": "The self-contained task for the sub-agent.",
+                        },
+                        "max_rounds": {
+                            "type": "integer",
+                            "description": "Max tool-use rounds (default 5).",
+                        },
+                        "timeout_s": {
+                            "type": "number",
+                            "description": "Wall-clock budget in seconds (default 60).",
+                        },
+                    },
+                    "required": ["role", "intent"],
+                },
+                handler=_spawn,
+            )
+        )
 
     def create_session(self) -> Session:
         """Create a new session."""
@@ -148,8 +227,8 @@ class AgentManager:
         tool_server = self._build_tool_server(agent_type)
         system = system_prompt or agent_type.system_prompt
 
-        loop = LocalAgentLoop(
-            self._client,
+        loop = AgentLoop(
+            IntelligenceProvider(self._client),
             tool_server,
             system=system,
             on_tool_event=self._on_tool_event,

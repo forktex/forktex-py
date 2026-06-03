@@ -245,19 +245,17 @@ def build_app(
             return False
 
         # Regular chat turn — stream through the agent loop.
-        from forktex_intelligence import SSEEventType
+        from forktex.agent.engine.streaming import stream_agent_output
 
         emit_markup("[bold green]assistant:[/bold green] ")
         try:
-            async for event in agent_loop.chat_stream(line):
-                if event.event == SSEEventType.DELTA:
-                    emit(event.delta_text)
-                elif event.event == SSEEventType.ERROR:
-                    emit_markup(f"\n[red]error:[/red] {event.error_message}\n")
-                elif event.event == SSEEventType.DONE:
-                    pass
+            await stream_agent_output(
+                agent_loop.chat_stream(line),
+                on_delta=emit,
+                on_error=lambda msg: emit_markup(f"\n[red]error:[/red] {msg}\n"),
+            )
         except Exception as exc:
-            from forktex.agent.root_loop._stream_errors import classify
+            from forktex.agent.engine.stream_errors import classify
 
             emit_markup(classify(exc).markup)
         emit("\n")

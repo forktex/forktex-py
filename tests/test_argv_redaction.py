@@ -72,8 +72,8 @@ pytestmark = pytest.mark.usefixtures("isolated_home")
         ),
         # Non-matching flags pass through
         (
-            ["forktex", "graph", "build", "--scope=all"],
-            ["forktex", "graph", "build", "--scope=all"],
+            ["forktex", "arch", "build", "--scope=all"],
+            ["forktex", "arch", "build", "--scope=all"],
         ),
         # Empty list
         ([], []),

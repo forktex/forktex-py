@@ -186,16 +186,20 @@ playwright install</pre>
   <h2>Command Tree</h2>
   <div class="tree">
     <span class="cmd">forktex</span> <span class="desc">Interactive AI chat (default)</span><br>
-    <span class="cmd">forktex intelligence ask</span> <span class="desc">"..." — single question</span><br>
-    <span class="cmd">forktex intelligence run</span> <span class="desc">"..." — multi-step workflow</span><br>
-    <span class="cmd">forktex status</span> <span class="desc">Project + sign-in state</span><br>
-    <span class="cmd">forktex graph</span> <span class="desc">Inspect project as a graph</span><br>
-    <span class="cmd">forktex serve</span> <span class="desc">Live web dashboard</span><br>
+    <span class="cmd">forktex chat --ecosystem</span> <span class="desc">Chat grounded on the whole workspace</span><br>
+    <span class="cmd">forktex run</span> <span class="desc">"..." — one orchestrated agentic run</span><br>
+    <span class="cmd">forktex auth</span> <span class="desc">Project + sign-in state (all services)</span><br>
     <span class="cmd">forktex clean</span> <span class="desc">Remove generated artifacts</span><br>
     <br>
-    <span class="cmd">forktex intelligence</span><br>
-    &nbsp;&nbsp;<span class="cmd">init</span> <span class="desc">Setup wizard</span><br>
-    &nbsp;&nbsp;<span class="cmd">status</span> <span class="desc">Check connection</span><br>
+    <span class="cmd">forktex knowledge</span><br>
+    &nbsp;&nbsp;<span class="cmd">search / show</span> <span class="desc">Query the knowledge base</span><br>
+    &nbsp;&nbsp;<span class="cmd">recycle</span> <span class="desc">Capture a learning back</span><br>
+    &nbsp;&nbsp;<span class="cmd">ingest / mcp</span> <span class="desc">Bulk import · MCP server</span><br>
+    <br>
+    <span class="cmd">forktex arch</span> <span class="desc">Structural authority (graph + manual)</span><br>
+    &nbsp;&nbsp;<span class="cmd">build</span> <span class="desc">graph.{json,dsl,html} + manual_bundle.json</span><br>
+    &nbsp;&nbsp;<span class="cmd">c4 / show / search</span> <span class="desc">C4 view · tree · keyword search</span><br>
+    &nbsp;&nbsp;<span class="cmd">serve</span> <span class="desc">Live web dashboard</span><br>
     <br>
     <span class="cmd">forktex cloud</span><br>
     &nbsp;&nbsp;<span class="cmd">login</span> <span class="desc">Configure controller</span>
@@ -215,13 +219,11 @@ playwright install</pre>
     &nbsp;&nbsp;<span class="cmd">check</span> <span class="desc">Verify FSD compliance (atoms, levels, ISO)</span><br>
     &nbsp;&nbsp;<span class="cmd">report</span> <span class="desc">Run gates, generate ISO evidence (JSON + HTML)</span><br>
     <br>
-    <span class="cmd">forktex git</span><br>
-    &nbsp;&nbsp;<span class="cmd">status-all</span> <span class="desc">Status across repos</span><br>
-    &nbsp;&nbsp;<span class="cmd">branch-all</span> <span class="desc">Create branch across repos</span><br>
-    &nbsp;&nbsp;<span class="cmd">checkout-all</span> <span class="desc">Switch branch across repos</span><br>
+    <span class="cmd">forktex auth</span><br>
+    &nbsp;&nbsp;<span class="cmd">status</span> <span class="desc">Aggregate credential state</span><br>
+    &nbsp;&nbsp;<span class="cmd">cloud / intelligence / network</span> <span class="desc">Per-service connect / disconnect</span><br>
     <br>
-    <span class="cmd">forktex scrape</span> <span class="desc">&lt;url&gt; --goal "..." — AI-driven web scraping</span><br>
-    <span class="cmd">forktex agents</span> <span class="desc">Manage agent processes</span>
+    <span class="cmd">forktex intelligence</span> <span class="desc">ask · run · scrape (needs connection)</span>
   </div>
 </section>
 
@@ -271,17 +273,17 @@ forktex fsd report                   # Run gates, generate evidence</pre>
 <section id="graph">
   <h2>Graph (Project + Architecture)</h2>
   <p>Inspect your project as a typed multi-edge graph; project the same data onto a C4 architecture view.</p>
-  <pre>forktex graph build              # Refresh .forktex/graph.{json,dsl,html}
-forktex graph c4 --format html   # Drill-down C4 view
-forktex graph importers httpx    # Who imports this library?
-forktex graph ecosystem -b ../   # Walk every project under a parent dir</pre>
+  <pre>forktex arch build              # Refresh .forktex/graph.{json,dsl,html}
+forktex arch c4 --format html   # Drill-down C4 view
+forktex arch importers httpx    # Who imports this library?
+forktex arch ecosystem -b ../   # Walk every project under a parent dir</pre>
 </section>
 
 <!-- Scrape -->
 <section id="scrape">
   <h2>Scrape (Web)</h2>
   <p>Persistent Playwright browser + AI agent. Navigates, extracts data, remembers selectors via "truths".</p>
-  <pre>forktex scrape "https://example.com" --goal "Extract products"</pre>
+  <pre>forktex intelligence scrape "https://example.com" --goal "Extract products"</pre>
 </section>
 
 <!-- Interaction Patterns -->
@@ -309,7 +311,7 @@ forktex cloud logs &lt;server&gt;</pre>
     <h4>Multi-project Compliance</h4>
     <pre>forktex fsd ecosystem --base-dir ~/Desktop/forktex
 # FSD level matrix across every project
-forktex graph ecosystem --base-dir ~/Desktop/forktex --render c4 --per-project
+forktex arch ecosystem --base-dir ~/Desktop/forktex --render c4 --per-project
 # C4 architecture per project + a unified host view</pre>
   </div>
 </section>

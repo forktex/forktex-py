@@ -29,7 +29,7 @@ the UX of the legacy ``forktex arch`` HTML reports without the legacy
 template plumbing.
 
 The ``Workspace`` payload is embedded as ``window.__C4__`` so the page
-works under ``file://`` (no server needed). ``forktex serve`` exposes
+works under ``file://`` (no server needed). ``forktex arch serve`` exposes
 the same template at ``/c4`` with a freshly built workspace per request.
 """
 

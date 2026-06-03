@@ -44,6 +44,7 @@ from typing import Any, Iterable, Literal
 from pydantic import Field, PrivateAttr
 
 from forktex.models.base import ForkTexModel
+from forktex.substrate.spec import Scope
 
 
 # ── Type aliases ──────────────────────────────────────────────────────────
@@ -74,8 +75,6 @@ EdgeKind = Literal[
     "owns",
     "publishes",
 ]
-
-Scope = Literal["project", "os"]
 
 NODE_KINDS: tuple[str, ...] = (
     "project_root",

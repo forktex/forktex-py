@@ -151,14 +151,21 @@ async def test_spawn_gates_unavailable_tools():
         )
 
 
-async def test_spawn_raises_not_implemented_on_happy_path():
-    """Phase A: with valid inputs + tool set, spawn raises NotImplementedError."""
+async def test_spawn_executes_and_returns_result():
+    """Phase B: valid inputs → spawn runs the loop and returns a SubAgentResult.
+
+    A non-functional fake Intelligence makes the run fail *gracefully* (a
+    ``failed`` result), not raise — the boundary is a result, never a crash.
+    """
+    from forktex.agent.workflow.sub_agent import SubAgentResult
+
     spec = SubAgentSpec.for_role("researcher", intent="find todos")
-    # Parent has ALL researcher tools.
     parent_server = _FakeToolServer(list(spec.tool_subset))
-    with pytest.raises(NotImplementedError, match="Phase B"):
-        await spawn_sub_agent(
-            spec,
-            parent_intelligence=_FAKE_INTELLIGENCE,
-            parent_tool_server=parent_server,
-        )
+    res = await spawn_sub_agent(
+        spec,
+        parent_intelligence=_FAKE_INTELLIGENCE,
+        parent_tool_server=parent_server,
+    )
+    assert isinstance(res, SubAgentResult)
+    assert res.name == "researcher"
+    assert res.status in ("completed", "failed", "timeout")

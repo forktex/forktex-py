@@ -112,8 +112,7 @@ def register_atom_commands(
 
     Atoms whose IDs collide with a Click group declared with
     ``invoke_without_command=True`` are *not* registered separately —
-    the group's body owns the no-subverb fallback (see
-    ``forktex.agent.manual.cli.manual``).
+    the group's body owns the no-subverb fallback.
     """
     services, envs = _project_axes(manifest)
     registered: list[str] = []

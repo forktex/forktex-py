@@ -62,18 +62,19 @@ def _build_intelligence_client(project_root: Optional[str] = None):
 
 
 def _build_tool_server(project_root: str, *, enable_desktop: bool = False):
-    """Create the local tool server for tool intercepts."""
-    from forktex.agent.intelligence.tool_server import ToolServer
+    """Create the intelligence-loop tool server for tool intercepts."""
+    from forktex.agent.tools.server import intelligence_tool_server
 
-    return ToolServer(project_root, enable_desktop=enable_desktop)
+    return intelligence_tool_server(project_root, enable_desktop=enable_desktop)
 
 
 def _build_agent_loop(client, tool_server, system=None, on_tool_event=None):
-    """Create the local agent loop with client-side conversation management."""
-    from forktex.agent.intelligence.agent import LocalAgentLoop
+    """Create the agent loop with client-side conversation management."""
+    from forktex.agent.engine import AgentLoop
+    from forktex.agent.intelligence.provider import IntelligenceProvider
 
-    return LocalAgentLoop(
-        client,
+    return AgentLoop(
+        IntelligenceProvider(client),
         tool_server,
         system=system,
         on_tool_event=on_tool_event,
@@ -87,20 +88,64 @@ def _build_agent_loop(client, tool_server, system=None, on_tool_event=None):
     is_flag=True,
     help="Enable observe-only desktop tools for the local agent loop.",
 )
-async def chat(project, desktop):
+@click.option(
+    "--workspace",
+    is_flag=True,
+    help="Ground on the whole workspace: resolve the workspace root (the "
+    "parent dir holding your repos) so the agent loads its `docs/AGENTS.md` "
+    "+ the cross-project knowledge graph, for cross-cutting questions.",
+)
+async def chat(project, desktop, workspace):
     """Start an interactive chat session via the Intelligence API.
 
     Layout is driven by `prompt_toolkit`: input pinned at the bottom, slash
     commands autocomplete on Tab, service cards toggle with `Ctrl+K`.
     See `forktex/agent/root_loop/chat_app.py` for the layout code.
+
+    With ``--workspace`` the agent grounds on the workspace root instead of
+    the current project — best for "how does X flow across the platforms?".
     """
-    await start_chat_session(project=project, desktop=desktop)
+    await start_chat_session(project=project, desktop=desktop, workspace=workspace)
+
+
+def _resolve_chat_root(project: Optional[str], workspace: bool) -> str:
+    """Resolve the project root to ground on (workspace root when ``workspace``)."""
+    if project or not workspace:
+        return project or _get_project_root()
+
+    from forktex.core.paths import find_workspace_root
+
+    eco_root = find_workspace_root(Path.cwd())
+    if eco_root:
+        info(f"Workspace grounding: [cyan]{eco_root}[/cyan]")
+        return str(eco_root)
+    error("No workspace root found above cwd — grounding on the project.")
+    return _get_project_root()
+
+
+def _build_chat_runtime(project_root: str, *, desktop: bool = False):
+    """Wire the client, tool server, and grounded agent loop for a chat session."""
+    from forktex.agent.ui.display import handle_tool_event
+    from forktex.agent.intelligence.grounding import build_system_prompt
+
+    client = _build_intelligence_client(project_root)
+    tool_server = _build_tool_server(project_root, enable_desktop=desktop)
+    # Grounded system prompt: persona + AGENTS.md + cached manual@agents bundle
+    # (if `forktex arch build` has run); falls back to the persona alone.
+    agent_loop = _build_agent_loop(
+        client,
+        tool_server,
+        system=build_system_prompt(project_root),
+        on_tool_event=handle_tool_event,
+    )
+    return client, tool_server, agent_loop
 
 
 async def start_chat_session(
     *,
     project: Optional[str] = None,
     desktop: bool = False,
+    workspace: bool = False,
     initial_message: Optional[str] = None,
 ) -> None:
     """Build the chat app and run it.
@@ -110,26 +155,15 @@ async def start_chat_session(
     arg (when set) is auto-submitted as the first user turn — that's
     how typing free-form text at the menu becomes the opening turn of
     a chat session.
+
+    ``workspace=True`` (no explicit ``project``) resolves the workspace
+    root via :func:`find_workspace_root` and grounds there — the existing
+    grounding then injects the workspace ``docs/AGENTS.md`` + the composed
+    cross-project knowledge graph (this is what the retired ``agents root``
+    command did, minus its dead architecture-snapshot loaders).
     """
-    project_root = project or _get_project_root()
-
-    client = _build_intelligence_client(project_root)
-    tool_server = _build_tool_server(project_root, enable_desktop=desktop)
-
-    from forktex.agent.ui.display import handle_tool_event
-
-    from forktex.agent.intelligence.grounding import build_system_prompt
-
-    agent_loop = _build_agent_loop(
-        client,
-        tool_server,
-        # Compose a grounded system prompt: persona + AGENTS.md +
-        # cached manual@agents bundle (if `forktex manual build` has
-        # been run). Falls back to the persona alone when nothing's
-        # available.
-        system=build_system_prompt(project_root),
-        on_tool_event=handle_tool_event,
-    )
+    project_root = _resolve_chat_root(project, workspace)
+    client, tool_server, agent_loop = _build_chat_runtime(project_root, desktop=desktop)
 
     # Auto-resolve org from API key (network-bound; do it before entering the app).
     if not client.org_id:

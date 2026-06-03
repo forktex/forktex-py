@@ -306,10 +306,15 @@ class TestCLIBattle:
         assert main is not None
 
     def test_package_exports(self):
-        from forktex import (
-            StateManager,
-            Settings,
-        )
+        """Canonical submodule imports — top-level re-exports were dropped in CP1/CP2.
+
+        The historical ``from forktex import StateManager, Settings`` form pulled
+        ``forktex_cloud`` (~1.9 s) into every ``forktex --help``; nothing in the
+        repo actually used the re-exports. Direct-submodule access is the
+        supported API.
+        """
+        from forktex.core.state import StateManager
+        from forktex.config import Settings
 
         assert StateManager is not None
         assert Settings is not None

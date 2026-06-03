@@ -31,6 +31,12 @@ from __future__ import annotations
 
 import asyncclick as click
 from forktex.agent.cloud.errors import translate_cloud_errors
+from forktex.substrate import paths as _sub
+
+
+def _vault_root(project_root):
+    """The vault root forktex-py hands the SDK (it appends ``<env>/secrets.enc``)."""
+    return _sub.secrets_dir(project_root) / "vault"
 
 
 @click.group()
@@ -114,7 +120,7 @@ async def vault_set(ctx, key, value, env):
         project_root = ctx.obj["project_root"]
         from forktex_cloud.secrets.factory import get_secrets_provider
 
-        provider = get_secrets_provider(project_root=project_root)
+        provider = get_secrets_provider(vault_root=_vault_root(project_root))
         provider.set(key, value, env or "default")
 
     env_label = env or "(global)"
@@ -143,7 +149,7 @@ async def vault_get(ctx, key, env):
         from forktex_cloud.secrets.factory import get_secrets_provider
 
         try:
-            provider = get_secrets_provider(project_root=project_root)
+            provider = get_secrets_provider(vault_root=_vault_root(project_root))
             click.echo(provider.get(key, env or "default"))
         except KeyError as e:
             raise click.ClickException(str(e))
@@ -168,7 +174,7 @@ async def vault_list(ctx, env):
         project_root = ctx.obj["project_root"]
         from forktex_cloud.secrets.factory import get_secrets_provider
 
-        provider = get_secrets_provider(project_root=project_root)
+        provider = get_secrets_provider(vault_root=_vault_root(project_root))
         keys = provider.list_keys(env or "default")
 
     if not keys:
@@ -197,7 +203,7 @@ async def vault_delete(ctx, key, env):
         project_root = ctx.obj["project_root"]
         from forktex_cloud.secrets.factory import get_secrets_provider
 
-        provider = get_secrets_provider(project_root=project_root)
+        provider = get_secrets_provider(vault_root=_vault_root(project_root))
         provider.delete(key, env or "default")
 
     click.echo(f"  ✓  deleted {key}")
