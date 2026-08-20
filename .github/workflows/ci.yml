@@ -49,11 +49,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "poetry"
 
+      # --all-extras: the vault/storage/queue/vector/store suites need their
+      # third-party deps installed to run at all.
       - name: Install dependencies
-        run: poetry install --with dev
+        run: poetry install --with dev --all-extras
 
+      # `make ci` is the whole gate: format-check · lint · license-check ·
+      # typecheck · audit · test · build · smoke. The final `smoke` step
+      # installs the built wheel into throwaway venvs and imports every extra,
+      # which is what replaced the old CLI-oriented `make acceptance`.
       - name: Run pre-merge gate (make ci)
         run: poetry run make ci
-
-      - name: Battle-test the published surface (make acceptance)
-        run: poetry run make acceptance

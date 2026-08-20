@@ -21,165 +21,109 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Test fixtures."""
+"""Top-level session-scoped testcontainer fixtures for the full core-py suite.
 
-import tempfile
-import shutil
-from pathlib import Path
+All containers are started once per pytest session and shared across test
+modules to avoid Docker pull + startup overhead on every file. Per-test
+isolation is achieved at the schema/key/collection level, not the container.
+
+Container bring-up lives in :mod:`tests._containers` so the example
+sandbox (``scripts/run_examples.py``) can boot the same set without
+duplicating logic. Pytest fixtures here are thin wrappers.
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import AsyncIterator, Iterator
 
 import pytest
+import pytest_asyncio
+from sqlalchemy.engine import URL
+
+from tests._containers import (
+    ensure_minio_bucket,
+    start_minio,
+    start_mongo,
+    start_postgres,
+    start_qdrant,
+    start_redis,
+)
 
 
-@pytest.fixture
-def temp_dir():
-    """Create a temporary directory."""
-    d = tempfile.mkdtemp()
-    yield d
-    shutil.rmtree(d, ignore_errors=True)
+@pytest.fixture(scope="session")
+def postgres_url() -> Iterator[URL]:
+    """Session-scoped Postgres testcontainer, shared by every DB-backed suite.
 
+    A real Postgres, always: these suites exercise JSONB operators,
+    ``FOR UPDATE SKIP LOCKED``, advisory locks, partial/GIN indexes,
+    ``schema_translate_map`` and SQLSTATE codes. None of that can be faked, and
+    none of it can run on SQLite — which is why there are no mocks here.
 
-@pytest.fixture
-def temp_dir_with_files(temp_dir):
-    """Create a temporary directory with sample files."""
-    # Create some files
-    (Path(temp_dir) / "main.py").write_text("print('hello')\n")
-    (Path(temp_dir) / "utils.py").write_text("def add(a, b):\n    return a + b\n")
-    (Path(temp_dir) / "README.md").write_text("# Test Project\n")
-    sub = Path(temp_dir) / "src"
-    sub.mkdir()
-    (sub / "app.py").write_text("from utils import add\n")
-    (sub / "__init__.py").write_text("")
-    return temp_dir
-
-
-@pytest.fixture
-def temp_git_repo(temp_dir):
-    """Create a temporary git repository."""
-    import subprocess
-
-    subprocess.run(["git", "init"], cwd=temp_dir, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=temp_dir,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"], cwd=temp_dir, capture_output=True
-    )
-    (Path(temp_dir) / "file.txt").write_text("hello\n")
-    subprocess.run(["git", "add", "."], cwd=temp_dir, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "initial"], cwd=temp_dir, capture_output=True
-    )
-    return temp_dir
-
-
-# ── Isolation fixtures for the OS fingerprint surface ─────────────────────
-
-
-@pytest.fixture(autouse=True)
-def isolated_home(tmp_path, monkeypatch, request):
-    """Redirect ``Path.home()`` (and therefore ``forktex.substrate.paths.global_dir``)
-    to a tmp directory so the real ``~/.forktex/`` is never touched.
-
-    Autouse so every test in the suite is sandboxed by default — pre-existing
-    tests that exercise ``tracked_write`` (cloud/intelligence/network settings,
-    state writes) no longer leak into the production registry.
-
-    Tests that genuinely need the real HOME (e.g., would re-read live cloud
-    creds) can opt out with ``@pytest.mark.real_home``.
-
-    Drains ``forktex.runtime.lifecycle._active_instances`` at teardown — any
-    instance the test created would otherwise have its close record written
-    by the process-wide ``atexit`` handler AFTER ``monkeypatch`` restored
-    ``HOME``, leaking into the production registry.
+    One container on one version, deliberately. There used to be an opt-in
+    ``GRID_EMBEDDED_PG=1`` path (an embedded server via the ``pgserver`` wheel)
+    for machines without a container runtime, but it was never complete —
+    ``tests/test_flow`` spun up its own container regardless — so it only ever
+    half-worked, while adding a second code path and a dev dependency.
     """
-    if "real_home" in request.keywords:
-        yield None
-        return
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("APPDATA", str(home))
-    monkeypatch.delenv("FORKTEX_STRUCTURE_LENIENT", raising=False)
+    container, url = start_postgres()
+    yield url
+    container.stop()
+
+
+@pytest.fixture(scope="session")
+def postgres_url_str(postgres_url: URL) -> str:
+    """A pure string rendering of the session-scoped ``postgres_url`` — no
+    per-test state, so it's session-scoped too (a session-scoped fixture,
+    e.g. ``tests/test_grid/conftest.py``'s ``grid_db_url``, can't depend on
+    a function-scoped one)."""
+    return postgres_url.render_as_string(hide_password=False)
+
+
+@pytest_asyncio.fixture
+async def fresh_schema(postgres_url_str: str) -> AsyncIterator[str]:
+    """Unique schema per test, dropped on teardown."""
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    schema = "forktex_test_" + uuid.uuid4().hex[:12]
+    yield schema
+    engine = create_async_engine(postgres_url_str)
     try:
-        yield home
+        async with engine.begin() as conn:
+            await conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
     finally:
-        try:
-            from forktex.runtime import lifecycle as _lifecycle
-
-            _lifecycle._active_instances.clear()
-        except Exception:
-            pass
+        await engine.dispose()
 
 
-@pytest.fixture
-def project_root(tmp_path):
-    """Create a minimal project tree with ``forktex.json`` and an empty
-    ``.forktex/`` directory."""
-    root = tmp_path / "proj"
-    root.mkdir()
-    (root / "forktex.json").write_text(
-        '{"manifestVersion":"1.0.0","name":"proj","version":"0.0.1"}\n'
-    )
-    (root / ".forktex").mkdir()
-    (root / ".forktex" / ".version").write_text("1\n")
-    return root
+@pytest_asyncio.fixture(scope="session")
+async def redis_url() -> AsyncIterator[str]:
+    """Session-scoped Redis 7 container."""
+    container, url = start_redis()
+    yield url
+    container.stop()
 
 
-@pytest.fixture
-def monorepo_root(tmp_path):
-    """Create a monorepo with nested ``forktex.json`` files and ``.forktex``
-    directories at multiple depths.
-
-    Layout::
-
-        repo/
-        ├── forktex.json
-        ├── .forktex/.version
-        ├── packages/api/forktex.json
-        ├── packages/api/.forktex/.version
-        └── packages/web/forktex.json
-    """
-    root = tmp_path / "repo"
-    root.mkdir()
-    (root / "forktex.json").write_text(
-        '{"manifestVersion":"1.0.0","name":"repo","version":"0.0.1"}\n'
-    )
-    (root / ".forktex").mkdir()
-    (root / ".forktex" / ".version").write_text("1\n")
-
-    api = root / "packages" / "api"
-    api.mkdir(parents=True)
-    (api / "forktex.json").write_text(
-        '{"manifestVersion":"1.0.0","name":"api","version":"0.0.1"}\n'
-    )
-    (api / ".forktex").mkdir()
-    (api / ".forktex" / ".version").write_text("1\n")
-
-    web = root / "packages" / "web"
-    web.mkdir(parents=True)
-    (web / "forktex.json").write_text(
-        '{"manifestVersion":"1.0.0","name":"web","version":"0.0.1"}\n'
-    )
-    return root
+@pytest_asyncio.fixture(scope="session")
+async def minio_config() -> AsyncIterator[dict]:
+    """Session-scoped MinIO container with ``test-bucket`` pre-created."""
+    container, config = start_minio()
+    await ensure_minio_bucket(config)
+    yield config
+    container.stop()
 
 
-@pytest.fixture
-def orphan_dir(tmp_path):
-    """A directory with no forktex.json anywhere above it."""
-    d = tmp_path / "orphan"
-    d.mkdir()
-    return d
+@pytest_asyncio.fixture(scope="session")
+async def qdrant_url() -> AsyncIterator[str]:
+    """Session-scoped Qdrant container."""
+    container, url = start_qdrant()
+    yield url
+    container.stop()
 
 
-@pytest.fixture
-def reset_audit_hook():
-    """Reset the io_proxy audit-hook installation flag so a test can verify
-    its installation in isolation. Idempotent: only flips it for the test."""
-    from forktex.graph import io_proxy
-
-    original = io_proxy._AUDIT_INSTALLED
-    io_proxy._AUDIT_INSTALLED = False
-    yield
-    io_proxy._AUDIT_INSTALLED = original
+@pytest_asyncio.fixture(scope="session")
+async def mongo_url() -> AsyncIterator[str]:
+    """Session-scoped MongoDB container."""
+    container, url = start_mongo()
+    yield url
+    container.stop()

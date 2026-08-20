@@ -14,12 +14,7 @@ htmlcov/
 # local Claude Code state (per-user)
 .claude/
 
-# forktex — only .forktex/knowledge and .version are committed
-.forktex/**
-!.forktex/.version
-!.forktex/knowledge/
-!.forktex/knowledge/**
-
-# forktex — generated + secrets (keep .forktex/.version committed)
-.forktex/**
-!.forktex/.version
+# forktex CLI runtime workspace — nothing in this repo creates or reads it now
+# (the CLI is in backlog/py/), but ignore it so a globally-installed `forktex`
+# run from this directory cannot commit its state or secrets.
+.forktex/

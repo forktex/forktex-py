@@ -69,6 +69,10 @@ SKIP_DIRS = {
     "api_client", ".next", "dist", "build", ".mypy_cache",
     "redis-data", "network-db-data", "minio-data",
     ".forktex",
+    # Not shipped and not linted — see backlog/README.md. Its headers are
+    # whatever they were when the code was set aside; rewriting them would
+    # churn 36k LOC that no build or CI gate reads.
+    "backlog",
 }
 
 

@@ -21,47 +21,44 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+
+"""ForkTex — the shared Python substrate for ForkTex services.
+
+Twelve modules, one library, one set of opinions. Import only what you need;
+each module's third-party dependency is an optional extra.
+
+Primitives — always available, no extra required:
+
+    log      — structured JSON logging (Loki-ready), trace_id contextvar
+    error    — AppError hierarchy + ErrorEnvelope
+    types    — base Pydantic models, frozen value objects
+    iso      — canonical ISO-8601 date/time formatting and parsing
+
+Role facades — one per piece of infrastructure:
+
+    database — async Postgres engine, session, ORM bases, CRUD, advisory locks
+    cache    — async Redis client, @cached, namespaced keys
+    queue    — arq background-job queue                      [queue]
+    storage  — S3/MinIO object storage (aioboto3)            [storage]
+    store    — schemaless document records (pymongo)         [store]
+    vector   — Qdrant vector search                          [vector]
+    vault    — Fernet encryption, EncryptedJSON column type  [vault]
+    graph    — typed multi-edge in-memory graph algebra
+
+A module whose extra is missing raises ``ImportError`` naming it, e.g.
+``Install 'forktex[vector]' (qdrant-client) to use forktex.vector``.
 """
-Forktex - Python SDK
 
-pip install forktex
-
-Includes:
-- Core: state management, utilities, config
-- Intelligence: agentic AI via Intelligence API (also available standalone: pip install forktex-intelligence)
-- Cloud: infrastructure management
-- Agent: CLI and interactive tools
-
-Quick Start:
-    from forktex.core.state import StateManager
-    from forktex_intelligence import Intelligence
-    from forktex_cloud import Cloud
-
-CLI:
-    forktex chat
-"""
-
-from importlib.metadata import PackageNotFoundError, version as _pkg_version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 
 try:
     __version__ = _pkg_version("forktex")
-except PackageNotFoundError:
+except PackageNotFoundError:  # running from a source tree with no install
     __version__ = "0.0.0+unknown"
 
-__author__ = "Forktex Team"
-
-# Public re-exports are deliberately minimal — only ``__version__`` belongs at
-# the top level. The historical re-exports (``StateManager``, ``Settings``,
-# ``get_settings``, the ``forktex.core.paths`` helpers, the ``forktex.core.utils``
-# helpers) were dead weight: a codebase-wide grep shows zero callers, yet they
-# each transitively pulled ``forktex_cloud`` / ``pydantic_settings`` / etc.,
-# adding ~700 ms to every ``import forktex`` — including ``forktex --help``.
-#
-# Callers import from the canonical submodule:
-#
-#     from forktex.core.state import StateManager
-#     from forktex.config import Settings, get_settings
-#     from forktex.core.paths import find_project_root, get_global_config_dir, ...
-#     from forktex.core.utils import generate_id, current_timestamp
+# Nothing is re-exported here on purpose: importing the root must stay cheap.
+# Reach for the module you need — ``from forktex import database`` — so a
+# service that only wants ``log`` never pays for sqlalchemy or redis.
 
 __all__ = ["__version__"]

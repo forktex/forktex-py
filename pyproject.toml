@@ -21,93 +21,156 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+
 [project]
 name = "forktex"
-version = "0.8.1"
-description = "Agentic software-delivery CLI + builtin knowledge base for any software project — chat, ground, recycle, deploy."
+version = "0.9.0"
+description = "The shared Python substrate for ForkTex services — logging, errors, types, and one facade per piece of infrastructure."
 authors = [
     {name = "FORKTEX",email = "info@forktex.com"}
 ]
 readme = "README.md"
 # Dual-licensed: AGPL-3.0-or-later for OSS use; a proprietary commercial
 # license is also available (see LICENSE + NOTICE; info@forktex.com).
-license = "AGPL-3.0-or-later"
+license = "AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.14,<4.0"
+# 4 - Beta, not 5 - Production/Stable: 0.9.0 is a brand-new public surface
+# under this distribution name (it previously shipped an agent CLI). The code
+# is mature, the *contract under this name* is not yet field-proven.
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Environment :: Console",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.14",
+    "Topic :: Database",
     "Topic :: Software Development",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: System :: Distributed Computing",
-    "Topic :: System :: Systems Administration",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Logging",
     "Typing :: Typed",
 ]
 dependencies = [
-    "forktex-intelligence (>=1.5.0,<2.0.0)",
-    "forktex-cloud (>=2.1.0,<3.0.0)",
-    "forktex-network (>=0.2.3,<0.3.0)",
-    "pydantic (>=2.11.10,<3.0.0)",
-    "httpx (>=0.27.0,<1.0.0)",
-    "aiofiles (>=24.1.0,<25.0.0)",
-    "anyio (>=4.11.0,<5.0.0)",
-    "httpx-sse (>=0.4.0,<1.0.0)",
-    "pyyaml>=6.0",
-    "cryptography (>=46.0.6,<47.0.0)",
-    "asyncclick (>=8.3.0.4,<9.0.0.0)",
-    "rich (>=14.1.0,<15.0.0)",
-    "prompt_toolkit (>=3.0,<4.0)",
-    "playwright (>=1.40.0,<2.0.0)",
-    "jinja2 (>=3.1.0,<4.0.0)",
-    "forktex-core[fractal] (>=2.4.0,<3.0.0)",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    "redis[hiredis]>=5.0",
+    "pydantic>=2.0",
 ]
 
 [project.optional-dependencies]
-web = ["fastapi>=0.115.0", "uvicorn[standard]>=0.30.0"]
-# MCP is an adapter on the knowledge API, not core. One extra: fastapi-mcp
-# mounts MCP-over-HTTP on the FastAPI app AND pulls the `mcp` protocol lib
-# transitively (so the stdio `forktex knowledge mcp` entry works too).
-mcp = ["fastapi-mcp>=0.3.0,<1.0.0", "fastapi>=0.115.0", "uvicorn[standard]>=0.30.0"]
+# Every shipped module is a valid install target, so `forktex[x]` always
+# resolves. Several are intentionally empty: their module runs on the core
+# dependencies, and the extra exists so `[x]` documents intent rather than
+# failing as an unknown extra (pip only *warns* on those, which is how a
+# documented-but-undeclared extra once shipped with nothing behind it).
+log      = []                          # primitive — always bundled
+error    = []                          # primitive — always bundled
+types    = []                          # primitive — always bundled
+iso      = []                          # primitive — always bundled
+cache    = []                          # redis is a core dep
+database = []                          # sqlalchemy/asyncpg are core deps
+graph    = []                          # pure in-memory algebra, no extra deps
+vault    = ["cryptography>=42.0"]
+storage  = ["aioboto3>=13.0"]
+queue    = ["arq>=0.26"]
+vector   = ["qdrant-client>=1.9"]
+store    = ["pymongo>=4.9"]
+all = [
+    "cryptography>=42.0",
+    "aioboto3>=13.0",
+    "arq>=0.26",
+    "qdrant-client>=1.9",
+    "pymongo>=4.9",
+]
 
-[project.scripts]
-forktex = "forktex.agent.cli:main"
+# No [project.scripts]: this distribution is a library. The `forktex` console
+# script belonged to the agent CLI, which now lives in backlog/py/agent/.
 
 [project.urls]
 "Homepage" = "https://forktex.com"
-"Repository" = "https://github.com/forktex/forktex-python"
-"Bug Tracker" = "https://github.com/forktex/forktex-python/issues"
+"Repository" = "https://github.com/forktex/forktex-py"
+"Documentation" = "https://github.com/forktex/forktex-py/tree/master/docs"
+"Changelog" = "https://github.com/forktex/forktex-py/blob/master/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/forktex/forktex-py/issues"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.poetry]
+packages = [{ include = "forktex", from = "src" }]
+include = [{ path = "src/forktex/py.typed", format = ["sdist", "wheel"] }]
+# backlog/ is not under src/, so it is already out of the wheel; this keeps it
+# out of the sdist too (poetry-core otherwise includes git-tracked files).
+exclude = ["backlog/**"]
+
 [dependency-groups]
 dev = [
-    "pytest (>=9.0.3,<10.0.0)",
-    "pytest-asyncio (>=1.2.0,<2.0.0)",
-    "ruff (>=0.8.0)",
-    "respx (>=0.21.0)",
-    "pyright (>=1.1.350)",
-    "pip-audit (>=2.7.0)",
-    "pygments (>=2.20.0)",
-    "build (>=1.2.0,<2.0.0)",
-    "twine (>=5.0.0,<7.0.0)",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8.0",
+    "pyright>=1.1.350",
+    "pip-audit>=2.7.0",
+    "build>=1.2.0",
+    "twine>=5.0.0",
+    "testcontainers>=4.0",
+    "testcontainers[redis]>=4.0",
+    "testcontainers[mongodb]>=4.0",
+    # Optional extras — installed so every suite can run
+    "cryptography>=42.0",
+    "aioboto3>=13.0",
+    "arq>=0.26",
+    "qdrant-client>=1.9",
+    "pymongo>=4.9",
+    # Not a runtime dep: `database` ships no web framework. Needed only so the
+    # test suite can prove `Depends(session_scope)` injects a real AsyncSession
+    # (the contract consumers most often get wrong — see docs/database.md).
+    "fastapi>=0.115",
 ]
 
 [tool.ruff]
-# Pin the formatter/linter target to py313. ruff's py314 handling has a bug
-# where it strips the required parentheses from a multi-exception
-# `except (A, B):` clause (turning it into the Python-2 `except A, B:` —
-# invalid in any Python 3). requires-python is still >=3.14; this only fixes
-# how ruff formats, and py313 output is identical except for that bug.
-target-version = "py313"
+# py314, matching requires-python. The old CLI pinned py313 to dodge a ruff
+# formatter bug, but that pin makes ruff reject code this project legitimately
+# uses: it reads PEP 758 `except A, B:` as a syntax error and PEP 695 generic
+# self-references (`def m[U](...) -> PageResponse[U]` inside PageResponse) as
+# F821 undefined-name — 5 false positives across src/ and tests/, all clean
+# under py314.
+target-version = "py314"
+line-length = 120
+exclude = ["backlog"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+# `src/` carries NO exemptions — every module passes the full strict set,
+# `ANN401` included. Keep it that way: a new `Any` in a signature is a prompt to
+# name the type (`JsonValue` for a JSON boundary, `object` for a value only
+# passed through, the real class under `TYPE_CHECKING` for an import cycle),
+# not to add a line here.
+# Tests: baseline only (test code isn't held to the annotation/strict set).
+"tests/**" = ["E1", "E2", "E5", "I", "UP", "B", "SIM", "RUF", "ANN"]
+
+[tool.pyright]
+include = ["src"]
+exclude = ["backlog", "**/__pycache__"]
+pythonVersion = "3.14"
+typeCheckingMode = "basic"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# norecursedirs, not just testpaths: testpaths is overridable on the CLI.
+norecursedirs = ["backlog", ".venv", "dist", "build"]
+log_cli = false
+log_level = "WARNING"
+markers = [
+    "perf: opt-in performance/limits tests; excluded from `make test` and `make ci`",
+]
+addopts = "-m 'not perf'"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
