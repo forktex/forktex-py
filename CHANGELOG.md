@@ -5,6 +5,28 @@ All notable changes to `forktex` are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+
+- **UUIDv7 everywhere, with no exemptions.** `src/` already minted v7 (`log`'s trace and
+  run ids, the `database` model docstrings); the worked examples did not. Test models
+  declared `default=uuid.uuid4` primary keys, `docs/vault.md` showed a PK with no default
+  at all, and `docs/development.md` told consumers to use `str(uuid.uuid4())` for Qdrant
+  point ids — three places a reader copies from that taught the opposite of the rule.
+- **Test-suite names are full-length v7 too.** The unique-per-run Postgres schema, MinIO
+  bucket, Qdrant collection, Mongo database and arq queue names were built from a
+  *truncated* v4 (`uuid4().hex[:8]`). They now take the full `uuid.uuid7().hex`. The
+  truncation could not simply carry over: v7 front-loads a millisecond timestamp, so
+  `uuid7().hex[:8]` yields one distinct value across 1000 mints where `uuid4().hex[:8]`
+  yields 1000 — slicing would have collapsed per-run schema isolation into a shared
+  schema. Full hex is 45 chars for a schema and 53 for a bucket, both inside the 63-byte
+  caps; verified against real containers.
+- **`test_conventions.py` enforces both halves**, unconditionally and with no allowlist:
+  no non-v7 UUID constructor anywhere in `src/` or `tests/`, and no slice applied to any
+  uuid-derived value.
+- `test_key_from_uuid_folds_128_bits_into_signed_64` now folds two uuid7s rather than two
+  uuid4s: same-millisecond v7 ids share their top 48 bits, so the assertion only passes
+  if the fold actually mixes the low half in.
+
 ## [0.10.0] — 2026-08-21
 
 Ships the two level-3 "bootstrap" modules — the process-level hosts — and makes them

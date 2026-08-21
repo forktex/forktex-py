@@ -216,7 +216,7 @@ async def test_ensure_bucket_creates_when_absent(minio_config: dict):
 
     from forktex.storage import StorageClient, StorageConfig
 
-    fresh_bucket = f"ensure-bucket-test-{uuid.uuid4().hex[:8]}"
+    fresh_bucket = f"ensure-bucket-test-{uuid.uuid7().hex}"
     c = StorageClient(
         StorageConfig(
             url=minio_config["url"],
@@ -243,7 +243,7 @@ async def test_ensure_bucket_public_read_sets_policy(minio_config: dict):
 
     from forktex.storage import StorageClient, StorageConfig
 
-    fresh_bucket = f"ensure-bucket-public-{uuid.uuid4().hex[:8]}"
+    fresh_bucket = f"ensure-bucket-public-{uuid.uuid7().hex}"
     c = StorageClient(
         StorageConfig(
             url=minio_config["url"],

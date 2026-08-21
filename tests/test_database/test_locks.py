@@ -177,7 +177,10 @@ def test_key_from_uuid_folds_128_bits_into_signed_64():
     k = key_from_uuid(u)
     assert k == key_from_uuid(u)  # deterministic
     assert -(2**63) <= k < 2**63
-    assert key_from_uuid(_uuid.uuid4()) != key_from_uuid(_uuid.uuid4())
+    # uuid7, not uuid4: two ids minted in the same millisecond share their top 48
+    # bits, so this only passes if the fold actually mixes the low half in rather
+    # than letting the timestamp prefix reach the key unchanged.
+    assert key_from_uuid(_uuid.uuid7()) != key_from_uuid(_uuid.uuid7())
 
 
 def test_key_from_uuid_rejects_non_uuid():
@@ -201,7 +204,7 @@ async def test_xact_lock_is_released_at_transaction_end(postgres_url_str: str):
 
     from forktex.database.locks import advisory_key, xact_lock
 
-    key = advisory_key("test", "xact", uuid.uuid4().hex)
+    key = advisory_key("test", "xact", uuid.uuid7().hex)
     engine = create_async_engine(postgres_url_str)
     maker = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
     try:

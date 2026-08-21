@@ -86,7 +86,7 @@ async def fresh_schema(postgres_url_str: str) -> AsyncIterator[str]:
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    schema = "forktex_test_" + uuid.uuid4().hex[:12]
+    schema = "forktex_test_" + uuid.uuid7().hex
     yield schema
     engine = create_async_engine(postgres_url_str)
     try:

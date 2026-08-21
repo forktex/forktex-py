@@ -42,7 +42,7 @@ from forktex.store import (
 
 @pytest_asyncio.fixture
 async def client(mongo_url: str) -> StoreClient:
-    c = register("test", url=mongo_url, database=f"testdb_{uuid.uuid4().hex[:8]}")
+    c = register("test", url=mongo_url, database=f"testdb_{uuid.uuid7().hex}")
     yield c
     await c.close()
 
@@ -77,7 +77,7 @@ async def test_insert_without_id_assigns_a_real_object_id(client: StoreClient):
 
 @pytest.mark.asyncio
 async def test_insert_with_caller_supplied_id(client: StoreClient):
-    custom_id = str(uuid.uuid4())
+    custom_id = str(uuid.uuid7())
     doc_id = await client.insert_one("widgets", {"name": "beta"}, id=custom_id)
     assert doc_id == custom_id
 
@@ -88,7 +88,7 @@ async def test_insert_with_caller_supplied_id(client: StoreClient):
 
 @pytest.mark.asyncio
 async def test_find_one_missing_returns_none(client: StoreClient):
-    result = await client.find_one("widgets", {"_id": str(uuid.uuid4())})
+    result = await client.find_one("widgets", {"_id": str(uuid.uuid7())})
     assert result is None
 
 
@@ -116,13 +116,13 @@ async def test_update_one_modifies_existing(client: StoreClient):
 
 @pytest.mark.asyncio
 async def test_update_one_no_match_without_upsert_returns_false(client: StoreClient):
-    updated = await client.update_one("widgets", {"_id": str(uuid.uuid4())}, {"score": 1})
+    updated = await client.update_one("widgets", {"_id": str(uuid.uuid7())}, {"score": 1})
     assert updated is False
 
 
 @pytest.mark.asyncio
 async def test_update_one_upsert_inserts_new_document(client: StoreClient):
-    new_id = str(uuid.uuid4())
+    new_id = str(uuid.uuid7())
     updated = await client.update_one("widgets", {"_id": new_id}, {"score": 5}, upsert=True)
     assert updated is True
 
@@ -141,13 +141,13 @@ async def test_delete_one(client: StoreClient):
 
 @pytest.mark.asyncio
 async def test_delete_one_missing_returns_false(client: StoreClient):
-    deleted = await client.delete_one("widgets", {"_id": str(uuid.uuid4())})
+    deleted = await client.delete_one("widgets", {"_id": str(uuid.uuid7())})
     assert deleted is False
 
 
 @pytest.mark.asyncio
 async def test_count(client: StoreClient):
-    suffix = uuid.uuid4().hex[:6]
+    suffix = uuid.uuid7().hex
     for i in range(4):
         await client.insert_one("counted", {"batch": suffix, "n": i})
 
@@ -176,7 +176,7 @@ async def test_get_unregistered_client_raises():
 async def test_module_level_convenience_functions(mongo_url: str):
     import forktex.store as store
 
-    await store.init(url=mongo_url, database=f"convenience_{uuid.uuid4().hex[:8]}")
+    await store.init(url=mongo_url, database=f"convenience_{uuid.uuid7().hex}")
     try:
         doc_id = await store.insert_one("notes", {"text": "hello"})
         found = await store.find_one("notes", {"_id": doc_id})

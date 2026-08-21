@@ -300,7 +300,7 @@ async def test_worker_health_counts_pending_on_a_custom_queue(redis_url: str):
     key with the wrong type and reported 0 pending for every queue, default
     or not.
     """
-    custom = f"health-q-{uuid.uuid4().hex[:8]}"
+    custom = f"health-q-{uuid.uuid7().hex}"
     await enqueue(simple_task, "hq-1", _queue_name=custom)
     await enqueue(simple_task, "hq-2", _queue_name=custom)
 

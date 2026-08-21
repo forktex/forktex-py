@@ -50,6 +50,28 @@ migration. Consumers that cannot create schemas route them to public with
 
 **`ContextVar` defaults must be immutable.** A mutable default (e.g. `ContextVar("x", default={})`) creates one shared dict for all coroutines that never set the var — mutations leak across task boundaries. Pattern: `ContextVar("x", default=None)` + factory in getter.
 
+**Identifiers are UUIDv7.** Every id this library mints — a surrogate primary key, a
+trace id, a run id, a Mongo `_id`, a Qdrant point id — is a `uuid.uuid7()`. Version 7
+puts a millisecond timestamp in the leading 48 bits, so ids sort by creation time: a
+primary-key b-tree appends instead of writing into a random leaf, and `ORDER BY id` is a
+usable chronological order without a second column. A v4 id mixed into the same column
+gives up both for entropy no key needs. Declare it as the column default, not at the
+call site, so a row minted by a raw `INSERT` gets the same shape:
+
+```python
+id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
+```
+
+There are no exceptions — the unique-per-run schema, bucket, collection, database and
+queue names in the test suite take a full `uuid.uuid7().hex` too. **Never slice one.**
+v7 front-loads the millisecond timestamp, so a prefix keeps the clock and throws away the
+entropy: `uuid7().hex[:8]` yields *one* distinct value across 1000 mints where
+`uuid4().hex[:8]` yields 1000, which would silently collapse a per-run test schema into a
+shared one. The full 32-char hex costs nothing — the longest name this produces is a
+53-char S3 bucket, inside the 63-byte cap. `tests/test_architecture/test_conventions.py`
+enforces both halves: no non-v7 constructor anywhere in `src/` or `tests/`, and no slice
+applied to a uuid-derived value.
+
 **Tenant isolation is via `namespace`, not FK.** The Grid module and any other generic data path uses a `namespace: str` column (typically set to `str(org_id)` by the consumer) rather than an FK to an org table — the library takes no position on what the tenant table is called. `NamespacedMixin` is the only tenant-scoping primitive in `database`. Consumers that want a DB-level FK to their own tenant table declare that mixin locally in their service.
 
 **Internal modules use `forktex.log.get_logger(__name__)`, never bare `logging.getLogger()` or module-level `logging.info()`/`logging.warning()` calls.** The library dogfoods its own logging primitive: consumers reading forktex's source see the exact pattern it tells them to use, `record.logger` is always the real qualified module path (not `"root"`), and a consumer's `setup_logging(quiet=["forktex.database"])` can selectively quiet just one internal module — none of which work if a module logs via the bare `logging` API. See `docs/log.md`'s "Interaction with forktex's own internals" for why this never conflicts with a consumer's own `setup_logging()` call — forktex never calls it itself, only the consumer does.
@@ -163,7 +185,7 @@ def test_something():
 
 ### Qdrant: point IDs
 
-Point IDs must be unsigned integers or UUID strings. Arbitrary strings (e.g. `"doc-1"`, `"p1"`) → 400 Bad Request. Always use `int` or `str(uuid.uuid4())`.
+Point IDs must be unsigned integers or UUID strings. Arbitrary strings (e.g. `"doc-1"`, `"p1"`) → 400 Bad Request. Always use `int` or `str(uuid.uuid7())` — uuid7 everywhere an id is minted, same as every other identifier in this library (see **Identifiers are UUIDv7** under [Design principles](#design-principles)).
 
 ### Qdrant: `AsyncQdrantClient` has no `async with`
 

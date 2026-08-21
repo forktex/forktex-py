@@ -29,6 +29,7 @@ them.
 
 ```python
 import os
+import uuid
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
@@ -41,7 +42,7 @@ vault = Vault(kek=os.environ["FORKTEX_KEK"])
 
 class Provider(BaseDBModel):
     __tablename__ = "provider"
-    id: Mapped[sa.Uuid] = mapped_column(sa.Uuid, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid7)
     credentials: Mapped[dict | None] = mapped_column(EncryptedJSON(vault), nullable=True)
 ```
 

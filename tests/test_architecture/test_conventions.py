@@ -171,3 +171,75 @@ def test_the_stdlib_raise_exemption_is_still_real():
         "iso no longer raises stdlib errors — drop it from _STDLIB_RAISE_EXEMPT"
     )
     assert "deliberate, recorded exception" in source, "the iso exemption lost its written rationale"
+
+
+# ---------------------------------------------------------------------------
+# Identifiers: uuid7, everywhere one is minted.
+# ---------------------------------------------------------------------------
+
+REPO = SRC.parents[1]
+
+_WRONG_VERSIONS = {"uuid1", "uuid3", "uuid4", "uuid5"}
+
+
+def _uuid_calls(path: pathlib.Path) -> list[tuple[int, str]]:
+    """Every `uuid.uuidN()` / `uuidN()` call in a file, as (lineno, name)."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    found: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
+        if name in _WRONG_VERSIONS:
+            found.append((node.lineno, name))
+    return found
+
+
+@pytest.mark.parametrize("tree", ["src", "tests"])
+def test_only_uuid7_is_ever_minted(tree: str):
+    """No non-v7 UUID constructor is called anywhere, with no exemptions.
+
+    v7's leading 48 bits are a millisecond timestamp, so ids sort by creation
+    time: a primary-key b-tree appends instead of writing into a random leaf, and
+    `ORDER BY id` is a real chronological order without a second column. A v4 id
+    mixed into the same column silently sorts to a random position and gives up
+    both properties for entropy no key needs.
+
+    `tests/` is held to the same rule as `src/`, not a looser one: a test model's
+    `default=` is the worked example a consumer copies, so a v4 there teaches the
+    opposite of what the library does.
+    """
+    offenders = [
+        f"{path.relative_to(REPO)}:{lineno} calls {name}()"
+        for path in sorted((REPO / tree).rglob("*.py"))
+        for lineno, name in _uuid_calls(path)
+    ]
+    assert offenders == [], f"{tree}/ must mint uuid7 only: {offenders}"
+
+
+@pytest.mark.parametrize("tree", ["src", "tests"])
+def test_no_uuid_is_truncated(tree: str):
+    """A sliced `uuid7()` is the one way to hold v7 and still be wrong.
+
+    v7 front-loads a millisecond timestamp, so a prefix slice keeps the clock and
+    discards the entropy: `uuid7().hex[:8]` returned ONE distinct value across
+    1000 mints in this repo, where `uuid4().hex[:8]` returned 1000. The unique
+    per-run schema, bucket, collection, database and queue names in this suite all
+    used such a slice, and all now take the full `.hex` — a Postgres schema at 45
+    chars and an S3 bucket at 53 are still well inside their 63-byte caps.
+
+    Catches `uuid.uuid7().hex[:8]`, `str(uuid7())[:8]` and `uuid7().hex[2:10]`
+    alike: any subscript with a slice applied directly to a uuid-derived value.
+    """
+    offenders: list[str] = []
+    for path in sorted((REPO / tree).rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        if "uuid" not in source:
+            continue
+        for node in ast.walk(ast.parse(source, filename=str(path))):
+            if not isinstance(node, ast.Subscript) or not isinstance(node.slice, ast.Slice):
+                continue
+            if "uuid" in ast.unparse(node.value):
+                offenders.append(f"{path.relative_to(REPO)}:{node.lineno} slices `{ast.unparse(node)}`")
+    assert offenders == [], f"a truncated uuid7 keeps the clock and drops the entropy: {offenders}"

@@ -48,7 +48,7 @@ class _VaultSecret(BaseDBModel, TimestampMixin):
 
     __tablename__ = "vault_secret_test"
 
-    id: Mapped[uuid.UUID] = mapped_column(sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid7)
     payload: Mapped[bytes | None] = mapped_column(EncryptedJSON(_vault_for_model), nullable=True)
 
 

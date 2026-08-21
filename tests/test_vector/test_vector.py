@@ -24,7 +24,7 @@
 """Integration tests for forktex.vector — requires Qdrant container.
 
 Note: Qdrant point IDs must be unsigned integers or valid UUIDs — not arbitrary
-strings. Tests use integers or uuid.uuid4() strings.
+strings. Tests use integers or uuid.uuid7() strings.
 Collection names cannot contain ':' — use '--' as tenant separator instead.
 """
 
@@ -61,7 +61,7 @@ async def vector(qdrant_url: str) -> Vector:
 
 @pytest_asyncio.fixture
 async def collection_name() -> str:
-    return f"{COLLECTION_PREFIX}{uuid.uuid4().hex[:8]}"
+    return f"{COLLECTION_PREFIX}{uuid.uuid7().hex}"
 
 
 @pytest_asyncio.fixture
@@ -103,7 +103,7 @@ async def test_upsert_and_search_dense(coll):
 
 @pytest.mark.asyncio
 async def test_upsert_with_uuid_ids(coll):
-    uid = str(uuid.uuid4())
+    uid = str(uuid.uuid7())
     await coll.upsert([VectorPoint(id=uid, vector=_vec([1, 0, 0, 0]))])
     hits = await coll.search(SearchQuery(vector=_vec([1, 0, 0, 0])).limit(1))
     assert len(hits) == 1
@@ -157,7 +157,7 @@ async def test_list_collections_with_prefix(vector: Vector, collection_name: str
 async def test_search_across(vector: Vector):
     names = []
     for i in range(2):
-        name = f"{COLLECTION_PREFIX}cross--{uuid.uuid4().hex[:6]}"
+        name = f"{COLLECTION_PREFIX}cross--{uuid.uuid7().hex}"
         h = vector.collection(name)
         await h.create(dim=DIM)
         await h.upsert([VectorPoint(id=i + 1, vector=_vec([float(i + 1), 0, 0, 0]), payload={"i": i})])
@@ -194,7 +194,7 @@ async def test_rerank_returns_top_k(coll):
 
 @pytest.mark.asyncio
 async def test_multimodal_collection(vector: Vector):
-    name = f"{COLLECTION_PREFIX}mm--{uuid.uuid4().hex[:6]}"
+    name = f"{COLLECTION_PREFIX}mm--{uuid.uuid7().hex}"
     h = vector.collection(name)
     await h.create(dim=DIM, multimodal_dim=DIM)
     try:
@@ -215,7 +215,7 @@ async def test_multimodal_collection(vector: Vector):
 
 @pytest.mark.asyncio
 async def test_sparse_vector_upsert_and_hybrid_search(vector: Vector):
-    name = f"{COLLECTION_PREFIX}sparse--{uuid.uuid4().hex[:6]}"
+    name = f"{COLLECTION_PREFIX}sparse--{uuid.uuid7().hex}"
     h = vector.collection(name)
     await h.create(dim=DIM, sparse=True)
     try:
@@ -270,7 +270,7 @@ async def test_sparse_strategy_searches_the_sparse_space_not_the_dense_one(vecto
     the two rankings disagree: point 1 is the *worst* dense match for the query
     vector but the only point carrying the queried sparse terms.
     """
-    name = f"{COLLECTION_PREFIX}sparse-only--{uuid.uuid4().hex[:6]}"
+    name = f"{COLLECTION_PREFIX}sparse-only--{uuid.uuid7().hex}"
     h = vector.collection(name)
     await h.create(dim=DIM, sparse=True)
     try:

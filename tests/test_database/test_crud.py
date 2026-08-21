@@ -49,7 +49,7 @@ from forktex.database import (
 
 class _CrudItem(BaseDBModel, TimestampMixin):
     __tablename__ = "crud_item_test"
-    id: Mapped[uuid.UUID] = mapped_column(sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid7)
     name: Mapped[str] = mapped_column(sa.String(100), nullable=False, unique=True)
     score: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
 
@@ -88,7 +88,7 @@ async def test_create_and_get(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_get_missing_returns_none(db_session: AsyncSession):
-    result = await get(db_session, _CrudItem, uuid.uuid4())
+    result = await get(db_session, _CrudItem, uuid.uuid7())
     assert result is None
 
 
@@ -139,7 +139,7 @@ async def test_duplicate_name_raises_already_exists(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_list_all(db_session: AsyncSession):
     for i in range(3):
-        await create(db_session, _CrudItem, name=f"list-{i}-{uuid.uuid4().hex[:6]}")
+        await create(db_session, _CrudItem, name=f"list-{i}-{uuid.uuid7().hex}")
     await db_session.commit()
     items = await list_all(db_session, _CrudItem)
     assert len(items) >= 3
@@ -147,7 +147,7 @@ async def test_list_all(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_paginate_splits_correctly(db_session: AsyncSession):
-    suffix = uuid.uuid4().hex[:6]
+    suffix = uuid.uuid7().hex
     for i in range(5):
         await create(db_session, _CrudItem, name=f"page-{i}-{suffix}", score=i)
     await db_session.commit()
@@ -166,7 +166,7 @@ async def test_paginate_splits_correctly(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_paginate_scroll_has_more(db_session: AsyncSession):
-    suffix = uuid.uuid4().hex[:6]
+    suffix = uuid.uuid7().hex
     for i in range(4):
         await create(db_session, _CrudItem, name=f"scroll-{i}-{suffix}")
     await db_session.commit()
@@ -179,7 +179,7 @@ async def test_paginate_scroll_has_more(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_paginate_scroll_no_more_when_exhausted(db_session: AsyncSession):
-    suffix = uuid.uuid4().hex[:6]
+    suffix = uuid.uuid7().hex
     for i in range(2):
         await create(db_session, _CrudItem, name=f"exhaust-{i}-{suffix}")
     await db_session.commit()
@@ -192,7 +192,7 @@ async def test_paginate_scroll_no_more_when_exhausted(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_paginate_clamps_invalid_page_and_page_size(db_session: AsyncSession):
-    suffix = uuid.uuid4().hex[:6]
+    suffix = uuid.uuid7().hex
     for i in range(3):
         await create(db_session, _CrudItem, name=f"clamp-{i}-{suffix}")
     await db_session.commit()
@@ -206,7 +206,7 @@ async def test_paginate_clamps_invalid_page_and_page_size(db_session: AsyncSessi
 
 @pytest.mark.asyncio
 async def test_paginate_scroll_clamps_invalid_limit(db_session: AsyncSession):
-    suffix = uuid.uuid4().hex[:6]
+    suffix = uuid.uuid7().hex
     for i in range(3):
         await create(db_session, _CrudItem, name=f"scroll-clamp-{i}-{suffix}")
     await db_session.commit()
@@ -224,7 +224,7 @@ async def test_paginate_scroll_can_actually_advance_past_page_one(db_session: As
     `paginate_scroll` was described as cursor-based but accepted no cursor and
     never populated `next_cursor`, so every call returned the same first page.
     """
-    suffix = uuid.uuid4().hex[:6]
+    suffix = uuid.uuid7().hex
     for i in range(5):
         await create(db_session, _CrudItem, name=f"seek-{i}-{suffix}", score=i)
     await db_session.commit()
@@ -279,7 +279,7 @@ async def test_paginate_scroll_without_keyset_still_returns_a_first_page(
     db_session: AsyncSession,
 ):
     """Back-compat: the old signature had no keyset, and must keep working."""
-    suffix = uuid.uuid4().hex[:6]
+    suffix = uuid.uuid7().hex
     for i in range(3):
         await create(db_session, _CrudItem, name=f"nokeyset-{i}-{suffix}")
     await db_session.commit()

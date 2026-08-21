@@ -58,6 +58,13 @@ testcontainers — **Docker must be running**. There are no mocks for these.
   extra's package at module scope.
 - **`src/` carries no lint exemptions,** `ANN401` included. A new `Any` in a signature
   is a prompt to name the type, not to add a per-file ignore.
+- **Identifiers are UUIDv7, and never sliced.** Every minted value — primary key, trace
+  id, run id, Mongo `_id`, Qdrant point id, and the per-run schema/bucket/collection
+  names in tests — is a full `uuid.uuid7()`, declared as the column `default=` rather
+  than called at the site. Time-ordered ids keep a PK index appending instead of writing
+  into random leaves. Do not truncate: v7 front-loads the timestamp, so `hex[:8]` gives
+  one distinct value per millisecond, not 4 billion. `test_conventions.py` enforces both
+  halves — no non-v7 constructor, no slice on a uuid-derived value.
 - **Comments explain *why*.** A comment restating *what* the line does is a missing
   name; extract or rename instead.
 

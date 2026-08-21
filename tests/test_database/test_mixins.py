@@ -57,7 +57,7 @@ class _Audited(BaseDBModel, AuditMixin):
     __tablename__ = "mixin_audited"
     unique_fields = ("slug",)
 
-    id: Mapped[uuid.UUID] = mapped_column(sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid7)
     slug: Mapped[str] = mapped_column(sa.String(100), nullable=False)
 
 
@@ -73,7 +73,7 @@ class _Namespaced(BaseDBModel, NamespacedMixin, TimestampMixin):
     """Model using NamespacedMixin (no FK — plain string tenant key)."""
 
     __tablename__ = "mixin_namespaced"
-    id: Mapped[uuid.UUID] = mapped_column(sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid7)
     name: Mapped[str] = mapped_column(sa.String(100))
 
 
@@ -150,7 +150,7 @@ async def test_audit_mixin_defaults(session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_audit_mixin_with_actor_ids(session: AsyncSession):
-    actor = uuid.uuid4()
+    actor = uuid.uuid7()
     row = _Audited(slug="beta", created_by_id=actor, updated_by_id=actor)
     session.add(row)
     await session.flush()
