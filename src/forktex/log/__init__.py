@@ -89,10 +89,13 @@ from typing import Any
 from forktex.log._context import (
     async_log_context,
     async_trace_context,
+    bind_current_context,
     get_extra_fields,
     get_root_trace_id,
+    get_run_id,
     get_trace_id,
     log_context,
+    reset_run_id,
     set_trace_id,
     trace_context,
 )
@@ -118,9 +121,31 @@ _TRACE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 #: both are process-global, so the listener has to be too.
 _queue_listener: logging.handlers.QueueListener | None = None
 
+# Python's convention for libraries: attach a no-op handler to our own namespace so
+# a consumer who never configured logging gets silence from us, instead of our
+# records escaping to `logging.lastResort` as unformatted stderr lines. It does not
+# touch the root logger — `setup_logging` is the only thing that does, and only when
+# a consumer asks for it.
+logging.getLogger("forktex").addHandler(logging.NullHandler())
 
-class _ContextFilter(logging.Filter):
-    """Injects contextvar state into every LogRecord before formatting."""
+
+class ContextFilter(logging.Filter):
+    """Injects contextvar state onto every ``LogRecord`` before formatting.
+
+    ``setup_logging`` attaches this for you. Attach it yourself when you own the
+    handlers and do not want ``setup_logging`` (which clears ``root.handlers``) —
+    an application embedding this library, or a test capturing records::
+
+        handler.addFilter(ContextFilter(service="orders"))
+
+    It is what actually sets ``trace_id``, ``root_trace_id``, ``run_id`` and
+    ``service`` on the record. Without it those fields are simply absent, so a
+    formatter referencing ``%(trace_id)s`` raises rather than printing nothing.
+
+    Must run on the *emitting* side. With ``setup_logging(queue=True)`` it is
+    attached to the ``QueueHandler``, not the listener's handlers, because the
+    contextvars only exist in the context that logged the record.
+    """
 
     def __init__(self, service: str | None = None) -> None:
         super().__init__()
@@ -129,9 +154,16 @@ class _ContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.trace_id = get_trace_id()
         record.root_trace_id = get_root_trace_id()
+        # Always present, so every line is attributable to a process invocation
+        # even when no trace scope was open. See `get_run_id`.
+        record.run_id = get_run_id()
         record.service = self._service
         record._forktex_extra = get_extra_fields()
         return True
+
+
+#: Kept as a private alias: the class was private through 0.10.0.
+_ContextFilter = ContextFilter
 
 
 class _InProcessQueueHandler(logging.handlers.QueueHandler):
@@ -229,6 +261,10 @@ def setup_logging(
 
     effective_json = (not debug) if json is None else json
 
+    # A new configuration is a new run: re-mint so restarts are distinguishable
+    # in a long-lived process that reconfigures (tests, a supervisor re-init).
+    reset_run_id()
+
     root = logging.getLogger()
     global _queue_listener
 
@@ -251,14 +287,14 @@ def setup_logging(
         log_queue: SimpleQueue[logging.LogRecord] = SimpleQueue()
         queue_handler = _InProcessQueueHandler(log_queue)
         queue_handler.setLevel(level)
-        queue_handler.addFilter(_ContextFilter(service=service))
+        queue_handler.addFilter(ContextFilter(service=service))
         root.addHandler(queue_handler)
 
         _queue_listener = logging.handlers.QueueListener(log_queue, *target_handlers, respect_handler_level=True)
         _queue_listener.start()
     else:
         for h in target_handlers:
-            h.addFilter(_ContextFilter(service=service))
+            h.addFilter(ContextFilter(service=service))
             root.addHandler(h)
 
     quiet_names = (DEFAULT_QUIET_LOGGERS if quiet_defaults else []) + (quiet or [])
@@ -334,12 +370,15 @@ class TraceIDMiddleware:
 
 __all__ = [
     "DEFAULT_QUIET_LOGGERS",
+    "ContextFilter",
     "TraceIDMiddleware",
     "async_log_context",
     "async_trace_context",
+    "bind_current_context",
     "get_extra_fields",
     "get_logger",
     "get_root_trace_id",
+    "get_run_id",
     "get_trace_id",
     "log_context",
     "set_trace_id",

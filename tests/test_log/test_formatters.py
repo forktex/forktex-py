@@ -126,3 +126,53 @@ def test_human_formatter_does_not_mutate_shared_record():
     record.trace_id = "req-abc"
     formatter.format(record)
     assert record.msg == "hi"  # not permanently mutated to "[req-abc] hi"
+
+
+def test_human_formatter_escapes_control_characters_in_the_trace_id():
+    """`HumanFormatter` writes trace_id into a raw single-line record, so a newline in
+    it splices a forged log line into the stream. `TraceIDMiddleware` screens inbound
+    headers, but a trace id can also arrive from `trace_context()`, a CLI argument, or a
+    queue job payload — none of which it sees — so the sink has to defend itself."""
+    formatter = HumanFormatter()
+    record = logging.LogRecord("d", logging.INFO, __file__, 1, "real message", None, None)
+    record.trace_id = "x\n2026-01-01 00:00:00 | CRITICAL | audit | payment approved"
+    record.root_trace_id = None
+    record.service = None
+    record._forktex_extra = {}
+
+    line = formatter.format(record)
+
+    assert "\n" not in line, "a forged newline reached the output stream"
+    assert "CRITICAL" in line, "the text is kept, only the control character is neutralised"
+    assert "real message" in line
+
+
+def test_human_formatter_leaves_a_legitimate_trace_id_intact():
+    formatter = HumanFormatter()
+    record = logging.LogRecord("d", logging.INFO, __file__, 1, "msg", None, None)
+    record.trace_id = "req-abc_123.4"
+    record.root_trace_id = None
+    record.service = None
+    record._forktex_extra = {}
+
+    assert "[req-abc_123.4]" in formatter.format(record)
+
+
+def test_json_always_carries_run_id_even_with_no_trace(capture_json):
+    """`run_id` is the attributability field: 100% of records have it, so every line
+    can be tied to a process invocation even when no trace scope was open."""
+    log, captured = capture_json()
+    log.info("unscoped")
+
+    assert captured[0]["run_id"]
+    assert "trace_id" not in captured[0], "an unscoped line must not claim a trace"
+
+
+def test_json_run_id_appears_alongside_a_trace_not_instead_of_it(capture_json):
+    log, captured = capture_json()
+    with trace_context("R-1"):
+        log.info("scoped")
+
+    assert captured[0]["trace_id"] == "R-1"
+    assert captured[0]["run_id"]
+    assert captured[0]["run_id"] != "R-1", "run_id must be a separate identity"

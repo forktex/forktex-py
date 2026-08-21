@@ -45,11 +45,10 @@ def reset_trace_id():
 def capture_json():
     """Factory fixture: build an isolated logger + JSON-capturing handler.
 
-    ``handler.addFilter(_ContextFilter(...))`` is required manually here —
-    it's what ``setup_logging()`` wires onto the root handler in production,
-    and it's what actually sets ``record.trace_id``/``root_trace_id``/
-    ``service``/``_forktex_extra`` from the current contextvars (see
-    docs/development.md's "log._ContextFilter" note).
+    ``handler.addFilter(ContextFilter(...))`` is required manually here — it's what
+    ``setup_logging()`` wires onto the root handler in production, and it's what
+    actually sets ``record.trace_id``/``root_trace_id``/``run_id``/``service``/
+    ``_forktex_extra`` from the current contextvars.
 
         def test_x(capture_json):
             log, captured = capture_json(service="svc1")
@@ -58,7 +57,7 @@ def capture_json():
     """
 
     def _factory(service: str = "test") -> tuple[logging.Logger, list[dict]]:
-        from forktex.log import _ContextFilter  # type: ignore[attr-defined]
+        from forktex.log import ContextFilter
 
         captured: list[dict] = []
 
@@ -68,7 +67,7 @@ def capture_json():
 
         handler = CaptureHandler()
         handler.setFormatter(JsonFormatter())  # service is injected onto the record by _ContextFilter
-        handler.addFilter(_ContextFilter(service=service))
+        handler.addFilter(ContextFilter(service=service))
 
         log = get_logger(f"test.module.{service}")
         log.handlers.clear()

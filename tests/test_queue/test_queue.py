@@ -25,6 +25,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import asyncio
 import uuid
 
@@ -68,10 +69,24 @@ async def retryable_task(ctx: JobCtx) -> str:
     return "ok"
 
 
+#: Trace context observed *inside* the job body, for the propagation tests.
+_traces: list[tuple[str | None, str | None]] = []
+
+
+@task
+async def trace_probe_task(ctx: JobCtx, value: str) -> str:
+    from forktex.log import get_root_trace_id, get_trace_id
+
+    _traces.append((get_trace_id(), get_root_trace_id()))
+    _results.append(value)
+    return "traced"
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def queue_init(redis_url: str):
     await q.init(redis_url)
     _results.clear()
+    _traces.clear()
     yield
     # Close the cached pool inside this test's own event loop — pytest-asyncio
     # gives each test function its own loop, and closing a pool from a
@@ -315,3 +330,118 @@ def test_task_timeout_and_retries_reach_the_arq_worker(redis_url: str):
     assert by_name["retryable_task"].timeout_s == 30
     # retries=1 means one extra attempt -> arq max_tries=2
     assert by_name["retryable_task"].max_tries == 2
+
+
+# ---------------------------------------------------------------------------
+# trace propagation across the Redis hop (api → queue → worker)
+# ---------------------------------------------------------------------------
+
+
+async def _drain_one(redis_url: str) -> None:
+    """Run a burst-mode worker until the queue is empty."""
+    worker = make_worker(redis_url, max_jobs=1)
+    worker.poll_delay_s = 0.05
+    try:
+        await asyncio.wait_for(worker.async_run(), timeout=10)
+    except asyncio.TimeoutError, SystemExit:
+        pass
+    finally:
+        with contextlib.suppress(Exception):
+            await worker.close()
+
+
+@pytest.mark.asyncio
+async def test_enqueue_carries_the_root_trace_id_into_the_job(redis_url: str):
+    """The api → worker correlation contract: a job's logs must be tied back to the
+    request that enqueued it. `root_trace_id` is the id `forktex.log` documents as
+    stable across a request → job chain, so that is what crosses Redis."""
+    from forktex.log import trace_context
+
+    with trace_context("req-trace-42"):
+        await enqueue(trace_probe_task, "payload")
+
+    await _drain_one(redis_url)
+
+    # Membership, not equality: a deferred job left by an earlier test can be drained
+    # by the same burst worker, so `_results` is not exclusively ours. `_traces` is,
+    # because only `trace_probe_task` writes to it.
+    assert "payload" in _results
+    assert len(_traces) == 1
+    job_trace, job_root = _traces[0]
+    assert job_root == "req-trace-42", "the enqueuing request's root trace did not survive Redis"
+    # The job adopts the request's id as its own `trace_id` too, rather than minting a
+    # fresh one under the inherited root: one id greps across both tiers, and "which
+    # job" is already answerable from arq's `ctx["job_id"]`.
+    assert job_trace == "req-trace-42"
+
+
+@pytest.mark.asyncio
+async def test_a_job_enqueued_with_no_trace_context_still_gets_one(redis_url: str):
+    """A cron tick or operator script has no inbound trace. The job must still be
+    correlatable with itself, so the worker mints one rather than logging None."""
+    await enqueue(trace_probe_task, "no-trace")
+    await _drain_one(redis_url)
+
+    job_trace, job_root = _traces[0]
+    assert job_trace is not None
+    assert job_root is not None
+
+
+@pytest.mark.asyncio
+async def test_the_reserved_trace_kwarg_never_reaches_the_task_signature(redis_url: str):
+    """`trace_probe_task` takes only `value`. If the wrapper failed to strip the
+    reserved kwarg, arq would call it with an unexpected keyword and the job would
+    fail rather than run."""
+    from forktex.log import trace_context
+
+    with trace_context("req-strip"):
+        await enqueue(trace_probe_task, "stripped")
+    await _drain_one(redis_url)
+
+    assert "stripped" in _results, "job did not complete — the reserved kwarg leaked through"
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_trace_kwarg_is_not_overwritten(redis_url: str):
+    from forktex.log import trace_context
+
+    with trace_context("ambient"):
+        await enqueue(trace_probe_task, "explicit", **{q.TRACE_KWARG: "caller-wins"})
+    await _drain_one(redis_url)
+
+    assert _traces[0][1] == "caller-wins"
+
+
+def test_drain_timeout_selects_arqs_waiting_shutdown_handler(redis_url: str):
+    """Regression guard for a silent job-killer: arq installs its immediate-cancel
+    signal handler unless `job_completion_wait` is non-zero, so a worker built
+    without a drain timeout loses in-flight jobs on every SIGTERM."""
+    assert make_worker(redis_url)._job_completion_wait == 0
+    assert make_worker(redis_url, drain_timeout=25)._job_completion_wait == 25
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_inbound_trace_id_is_discarded_not_adopted(redis_url: str):
+    """A trace id arriving over Redis is untrusted: the producer is another process, and
+    in any system that accepts user-supplied identifiers the job payload is
+    attacker-influenced. Adopting it unscreened lets a crafted job forge log lines, which
+    is the exact hole `log.TraceIDMiddleware` screens inbound headers to close."""
+    forged = "x\n2026-01-01 00:00:00 | CRITICAL | audit | payment approved"
+    await enqueue(trace_probe_task, "screened", **{q.TRACE_KWARG: forged})
+    await _drain_one(redis_url)
+
+    job_trace, job_root = _traces[0]
+    assert job_trace != forged
+    assert "\n" not in (job_trace or "")
+    # Treated as absent, so the job still gets a usable id of its own.
+    assert job_trace is not None
+    assert job_root is not None
+
+
+@pytest.mark.asyncio
+async def test_an_over_long_inbound_trace_id_is_rejected(redis_url: str):
+    """The 128-char bound matters because trace ids land in log lines and index keys."""
+    await enqueue(trace_probe_task, "toolong", **{q.TRACE_KWARG: "a" * 129})
+    await _drain_one(redis_url)
+
+    assert _traces[0][0] != "a" * 129

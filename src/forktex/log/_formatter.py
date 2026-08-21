@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -60,10 +61,16 @@ _SKIP_FIELDS = frozenset(
         "taskName",
         "trace_id",
         "root_trace_id",
+        "run_id",
         "service",
         "_forktex_extra",
     }
 )
+
+
+#: Anything that could break a single-line text record: newlines, carriage
+#: returns, tabs, and the rest of the C0/C1 control range.
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 class JsonFormatter(logging.Formatter):
@@ -108,6 +115,12 @@ class JsonFormatter(logging.Formatter):
 
         doc["message"] = record.getMessage()
 
+        # Always emitted when the filter ran: this is the field that makes every
+        # line attributable, including lines logged outside any trace scope.
+        run_id = getattr(record, "run_id", None)
+        if run_id:
+            doc["run_id"] = run_id
+
         trace_id = getattr(record, "trace_id", None)
         if trace_id:
             doc["trace_id"] = trace_id
@@ -148,6 +161,12 @@ class HumanFormatter(logging.Formatter):
         trace_id = getattr(record, "trace_id", None)
         if not trace_id:
             return super().format(record)
+        # Escape before interpolating: this formatter writes trace_id into a raw
+        # text line, so a newline in it splices a forged record into the stream.
+        # `TraceIDMiddleware` screens inbound headers, but a trace id can also come
+        # from `trace_context()`, a CLI argument, or a queue job's payload — none of
+        # which it sees. Defending at the sink covers every source.
+        trace_id = _CONTROL_CHARS.sub("?", str(trace_id))
         # Prefix the trace id without permanently mutating the shared record
         # (a record may be handled by multiple handlers).
         original = record.msg

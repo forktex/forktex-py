@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-ForkTex-Commercial
 #
-# This file is part of forktex-core.
+# This file is part of ForkTex Python.
 #
 # For commercial licensing -- including use in proprietary products, SaaS
 # deployments, or any context where AGPL obligations cannot be met -- you
@@ -20,4 +20,5 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 

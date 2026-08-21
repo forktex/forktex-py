@@ -59,11 +59,13 @@ Requires: pip install forktex[queue]  (arq)
 
 from __future__ import annotations
 
+import functools
+import re
 from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
-from forktex.log import get_logger
+from forktex.log import get_logger, get_root_trace_id, get_trace_id, trace_context
 from forktex.queue.errors import QueueError
 
 if TYPE_CHECKING:
@@ -73,6 +75,19 @@ if TYPE_CHECKING:
     from arq.worker import Worker
 
 logger = get_logger(__name__)
+
+#: Reserved job kwarg carrying the producer's ``root_trace_id`` across Redis, so a
+#: job's logs correlate with the HTTP request (or parent job) that enqueued it.
+#: Stripped by the worker before the task body is called, so it never appears in a
+#: task signature. Underscore-prefixed to stay out of any real parameter name.
+TRACE_KWARG = "_forktex_root_trace_id"
+
+#: A trace id arriving over Redis is untrusted input — the producer may be another
+#: service, and the job body is attacker-influenced in any system that accepts
+#: user-supplied identifiers. Screen it with the same charset
+#: ``log.TraceIDMiddleware`` applies to an inbound ``X-Request-ID`` rather than
+#: adopting it blindly.
+_TRACE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 _registry: dict[str, Callable] = {}
 _redis_url: str | None = None
@@ -215,10 +230,34 @@ async def close() -> None:
     _redis_url = None
 
 
+def _with_trace(kwargs: dict[str, object]) -> dict[str, object]:
+    """Attach the caller's root trace id so the job can be correlated with it.
+
+    Uses ``root_trace_id`` rather than ``trace_id``: per ``forktex.log``, the root
+    is the id stable across a whole chain (request → job → child job), which is
+    exactly what has to survive the Redis hop. Falls back to ``trace_id`` for a
+    caller that set one without a surrounding ``trace_context``. A caller with no
+    trace context at all adds nothing, and the worker mints a fresh id.
+
+    An explicit value the caller passed wins — never silently overwritten.
+    """
+    trace = get_root_trace_id() or get_trace_id()
+    if trace is None or TRACE_KWARG in kwargs:
+        return kwargs
+    return {**kwargs, TRACE_KWARG: trace}
+
+
 async def enqueue(fn: Callable, *args: object, _queue_name: str | None = None, **kwargs: object) -> str:
-    """Enqueue ``fn`` for immediate execution. Returns the arq job ID."""
+    """Enqueue ``fn`` for immediate execution. Returns the arq job ID.
+
+    Attaches the caller's ``root_trace_id`` (see :data:`TRACE_KWARG`) so the job's
+    logs correlate with the request or parent job that dispatched it. Pass
+    ``TRACE_KWARG`` explicitly to override, or call from outside any trace scope to
+    let the worker mint the job its own id.
+    """
     pool = await _get_pool()
     queue_name = _queue_name or _task_queue_name(fn)
+    kwargs = _with_trace(kwargs)
     # arq's enqueue_job stub declares named types for its reserved _job_id/
     # _defer_until/_defer_by/_expires/_job_try kwargs; kwargs here is the
     # caller's arbitrary job-function arguments (deliberately object-typed —
@@ -238,9 +277,15 @@ async def enqueue_at(
     _queue_name: str | None = None,
     **kwargs: object,
 ) -> str:
-    """Enqueue ``fn`` to run at ``eta`` (must be timezone-aware). Returns job ID."""
+    """Enqueue ``fn`` to run at ``eta`` (must be timezone-aware). Returns job ID.
+
+    Carries the caller's trace context the same way :func:`enqueue` does. Note the
+    id is captured at *enqueue* time, not at ``eta`` — a deferred job correlates
+    with whatever scheduled it.
+    """
     pool = await _get_pool()
     queue_name = _queue_name or _task_queue_name(fn)
+    kwargs = _with_trace(kwargs)
     job = await pool.enqueue_job(
         fn.__name__,
         *args,
@@ -443,6 +488,7 @@ def make_worker(
     max_jobs: int = 10,
     job_timeout: int = 300,
     handle_signals: bool = True,
+    drain_timeout: int = 0,
 ) -> Worker:
     """Build an arq ``Worker`` configured with all ``@task`` functions.
 
@@ -470,6 +516,14 @@ def make_worker(
 
     To embed the consumer in a host that already handles signals (a FastAPI
     lifespan, a process supervisor), pass ``handle_signals=False``.
+
+    ``drain_timeout`` is seconds to let in-flight jobs finish on shutdown, and it
+    defaults to ``0`` only because that is arq's own default. **Leave it at 0 and a
+    SIGTERM cancels running jobs outright**: arq installs its immediate-cancel
+    handler unless the wait is non-zero, so a rolling deploy kills work in
+    progress. Set it to slightly less than your orchestrator's grace period
+    (Kubernetes: `terminationGracePeriodSeconds`) so the drain finishes first.
+    ``forktex.worker`` sets it from its own ``drain_timeout`` for you.
     """
     arq = _get_arq()
     return arq.Worker(
@@ -484,6 +538,9 @@ def make_worker(
         # a supervisor's child) must turn it off or arq's handlers fight the
         # host's own shutdown path.
         handle_signals=handle_signals,
+        # Non-zero swaps arq's immediate-cancel signal handler for the one that
+        # stops picking new jobs and waits for in-flight ones. See the docstring.
+        job_completion_wait=drain_timeout,
     )
 
 
@@ -496,21 +553,52 @@ def _as_arq_function(fn: Callable) -> object:
 
     arq's ``max_tries`` counts *total* attempts, so ``retries`` (additional
     attempts) maps to ``retries + 1``.
+
+    The wrapper also binds the trace context: it strips :data:`TRACE_KWARG` from the
+    job kwargs and runs the body inside ``trace_context``, so the job logs under the
+    ``root_trace_id`` of whatever enqueued it and the task signature never sees the
+    reserved kwarg. Wrapping happens here, at worker-construction time, rather than
+    in ``@task`` — which stays a pure registration side-effect that leaves the
+    decorated function untouched.
     """
     from arq.worker import func
 
     timeout = getattr(fn, _JOB_TIMEOUT_ATTR, None)
     retries = getattr(fn, _JOB_RETRIES_ATTR, None)
     return func(
-        fn,
+        _traced(fn),
         name=fn.__name__,
         timeout=timeout,
         max_tries=None if retries is None else retries + 1,
     )
 
 
+def _traced(fn: Callable) -> Callable:
+    """Wrap a task body so it runs under the producer's root trace id.
+
+    A job enqueued with no trace context (a cron tick, an operator script) gets a
+    freshly minted one — ``trace_context(None)`` mints a uuid7 — so every job's log
+    lines carry *some* trace id and are correlatable among themselves.
+    """
+
+    @functools.wraps(fn)
+    async def _run(ctx: JobCtx, *args: object, **kwargs: object) -> object:
+        inbound = kwargs.pop(TRACE_KWARG, None)
+        trace = inbound if isinstance(inbound, str) and _TRACE_ID_RE.match(inbound) else None
+        if inbound is not None and trace is None:
+            logger.warning(
+                "queue: discarding a malformed inbound trace id",
+                extra={"job": fn.__name__},
+            )
+        with trace_context(trace):
+            return await fn(ctx, *args, **kwargs)
+
+    return _run
+
+
 __all__ = [
     "DEFAULT_QUEUE",
+    "TRACE_KWARG",
     "JobCtx",
     "QueueError",
     "cancel_job",

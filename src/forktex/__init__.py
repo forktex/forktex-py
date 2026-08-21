@@ -24,7 +24,7 @@
 
 """ForkTex — the shared Python substrate for ForkTex services.
 
-Twelve modules, one library, one set of opinions. Import only what you need;
+Fourteen modules, one library, one set of opinions. Import only what you need;
 each module's third-party dependency is an optional extra.
 
 Primitives — always available, no extra required:
@@ -44,6 +44,11 @@ Role facades — one per piece of infrastructure:
     vector   — Qdrant vector search                          [vector]
     vault    — Fernet encryption, EncryptedJSON column type  [vault]
     graph    — typed multi-edge in-memory graph algebra
+
+Bootstrap — process-level wiring:
+
+    api      — FastAPI app factory: middleware, error envelope, health   [api]
+    worker   — queue-consumer hosts: standalone, embedded, process pool [worker]
 
 A module whose extra is missing raises ``ImportError`` naming it, e.g.
 ``Install 'forktex[vector]' (qdrant-client) to use forktex.vector``.

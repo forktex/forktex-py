@@ -49,6 +49,7 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "forktex"
 #: `test_every_package_has_a_declared_extra`), not something a generated
 #: manifest quietly grants.
 PACKAGES = [
+    "api",
     "cache",
     "database",
     "error",
@@ -61,6 +62,7 @@ PACKAGES = [
     "types",
     "vault",
     "vector",
+    "worker",
 ]
 
 #: Packages whose import pulls a third-party dependency from an extra, mapped to every
@@ -69,10 +71,12 @@ PACKAGES = [
 #: can prove nothing when the module actually imports a transitive one (`storage`
 #: declares `aioboto3` but reaches `botocore` directly), so every root is listed.
 _EXTRA_BACKED = {
+    "api": ("fastapi", "starlette"),
     "vault": ("cryptography",),
     "storage": ("aioboto3", "botocore"),
     "queue": ("arq",),
     "vector": ("qdrant_client",),
+    "worker": ("arq",),
     "store": ("pymongo",),
 }
 

@@ -27,7 +27,7 @@ typecheck: ## Static type system verifies interface correctness (pyright)
 	poetry run python3 -m pyright src/
 
 test: ## Automated tests verify behaviour, with a coverage floor
-	@# The floor ratchets: it is the measured figure (95.22%) floored, so coverage
+	@# The floor ratchets: it is the measured figure (95.54%) floored, so coverage
 	@# cannot silently drop. Raise it when a pass adds real coverage; never lower
 	@# it to make a change pass.
 	@# Note: pytest-cov compares the ROUNDED percentage, so 93.6% still satisfies
@@ -76,7 +76,7 @@ smoke: ## Install the BUILT wheel into a throwaway venv and import every extra
 		$$TMP/base/bin/python -c "import forktex.$$m" || { echo "  ✗ base import forktex.$$m"; exit 1; }; \
 	done; \
 	echo "  base modules import"; \
-	for x in vault storage queue vector store; do \
+	for x in vault storage queue vector store api worker; do \
 		$$PY -m venv $$TMP/$$x >/dev/null; \
 		$$TMP/$$x/bin/pip install -q "$$WHL[$$x]" 2>&1 | tee $$TMP/$$x.log; \
 		if grep -q "does not provide the extra" $$TMP/$$x.log; then echo "  ✗ [$$x] undeclared"; exit 1; fi; \

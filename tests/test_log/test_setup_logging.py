@@ -224,3 +224,56 @@ def test_shutdown_logging_is_idempotent_and_safe_without_queue_mode():
     setup_logging(service="test")  # no queue
     shutdown_logging()
     shutdown_logging()
+
+
+# ---------------------------------------------------------------------------
+# library hygiene: what a consumer who configured nothing sees
+# ---------------------------------------------------------------------------
+
+
+def test_the_forktex_logger_carries_a_null_handler():
+    """Python's convention for libraries. Without it, a consumer who never called
+    `setup_logging` gets our own records on stderr via `logging.lastResort` —
+    unformatted, and un-suppressible without reconfiguring the root logger."""
+    handlers = logging.getLogger("forktex").handlers
+    assert any(isinstance(h, logging.NullHandler) for h in handlers)
+
+
+def test_importing_the_library_does_not_touch_the_root_logger():
+    """A library must never seize the root logger. Only `setup_logging` may, and only
+    because the consumer asked for it."""
+    import importlib
+
+    root = logging.getLogger()
+    root.handlers.clear()
+    importlib.reload(importlib.import_module("forktex.log"))
+    assert root.handlers == []
+
+
+def test_context_filter_is_public_and_populates_records_without_setup_logging():
+    """An application that owns its handlers cannot call `setup_logging` (it clears
+    `root.handlers`), so the filter has to be reachable on its own — otherwise the
+    trace mechanism is unusable to an embedder."""
+    from forktex.log import ContextFilter, trace_context
+
+    records: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    handler = _Capture()
+    handler.addFilter(ContextFilter(service="embedded"))
+    logger = logging.getLogger("embedder.test")
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    try:
+        with trace_context("EMB-1"):
+            logger.info("hello")
+    finally:
+        logger.removeHandler(handler)
+
+    assert records[0].trace_id == "EMB-1"
+    assert records[0].service == "embedded"
+    assert records[0].run_id

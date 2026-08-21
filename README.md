@@ -6,7 +6,7 @@
 
 <p align="center"><em>The shared Python substrate for ForkTex services.</em></p>
 
-Twelve modules, one library, one set of opinions. Import only what you need — each
+Fourteen modules, one library, one set of opinions. Import only what you need — each
 module's third-party dependency is an optional extra, so a service that wants
 structured logging never pays for Qdrant.
 
@@ -41,6 +41,13 @@ pip install forktex
 | [`store`](docs/store.md) | `[store]` | Schemaless documents (MongoDB) |
 | [`vector`](docs/vector.md) | `[vector]` | Qdrant vector search: collections, hybrid/dense/sparse |
 | [`vault`](docs/vault.md) | `[vault]` | Fernet encryption at rest, `EncryptedJSON` column type |
+
+**Bootstrap** — process-level wiring:
+
+| Module | Extra | What it is |
+| --- | --- | --- |
+| [`api`](docs/api.md) | `[api]` | FastAPI app factory: middleware stack, error envelope, health probes |
+| [`worker`](docs/worker.md) | `[worker]` | Queue-consumer hosts: standalone process, embedded in a lifespan, process pool |
 
 Install extras as needed — `pip install "forktex[storage,vector]"`, or
 `pip install "forktex[all]"` for everything.

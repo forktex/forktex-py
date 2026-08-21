@@ -102,7 +102,7 @@ if __name__ == "__main__":
 | `cancel_job(job_id, *, queue_name="default") -> bool` | Signal abort, wait up to 1s for confirmation. |
 | `list_jobs(queue_name="default", *, status=None) -> list[dict]` | Jobs still in the queue's sorted set (queued or deferred), in `inspect_job` shape. |
 | `worker_health(redis_url=None, *, queue_name="default") -> dict[str, int]` | `{"pending", "in_flight", "failed"}`. |
-| `make_worker(redis_url, *, queue_name="default", max_jobs=10, job_timeout=300, handle_signals=True) -> arq.Worker` | Build a worker over every registered `@task`, with `allow_abort_jobs=True`. |
+| `make_worker(redis_url, *, queue_name="default", max_jobs=10, job_timeout=300, handle_signals=True, drain_timeout=0) -> arq.Worker` | Build a worker over every registered `@task`, with `allow_abort_jobs=True`. `drain_timeout` reaches arq as `job_completion_wait` — see the gotcha below. |
 | `QueueError` | See below. |
 
 ## Errors
@@ -115,8 +115,40 @@ if __name__ == "__main__":
 
 `QueueError` subclasses **both** `AppError` (so it carries `code = AppErrorCode.INTERNAL` and renders through an `AppError` handler instead of a masked 500) and `RuntimeError` (so pre-existing `except RuntimeError` sites keep working).
 
+## Trace correlation across the Redis hop
+
+`enqueue`/`enqueue_at` attach the caller's `root_trace_id` to the job, and the worker
+re-establishes it before the task body runs. An HTTP request that enqueues work therefore shares
+one id with the job it caused, so both tiers are a single log search:
+
+```python
+from forktex.log import get_trace_id
+
+# In a request under X-Request-ID: req-abc
+await enqueue(reindex, order_id)
+
+# Inside the job body, in the worker process:
+get_trace_id()        # -> "req-abc"
+```
+
+A job enqueued with no trace context (a cron tick, an operator script) gets a freshly minted id
+rather than `None`, so its own log lines are still correlatable. The carrier is a reserved job
+kwarg (`queue.TRACE_KWARG`) that the worker strips before calling your function, so it never
+appears in a task signature.
+
+Two consequences worth knowing:
+
+- The stripping happens in the wrapper `make_worker` builds. A **plain arq worker** not built by
+  `make_worker` would pass the reserved kwarg straight to your function as an unexpected keyword.
+- **Upgrade consumers before producers.** A worker from before this feature does not strip the
+  kwarg, so jobs enqueued by a newer producer would fail on it.
+
 ## Gotchas
 
+- **`drain_timeout=0` (the default) kills in-flight jobs on SIGTERM.** It is 0 because that is
+  arq's own default, and arq installs its immediate-cancel signal handler unless the value is
+  non-zero. Any worker meant to survive a rolling deploy needs a real value — set it below your
+  orchestrator's grace period. [`forktex.worker`](worker.md) defaults it to 30 s for you.
 - **`make_worker()` at module level breaks.** Construct it inside the running loop; a module-level instance binds arq's Redis objects to the import-time loop and fails with "attached to a different loop".
 - **Registration is import-side-effect only.** If the worker entrypoint does not import the task modules, the worker starts with an empty function list and jobs sit in Redis forever. Keep the `# noqa: F401` import.
 - **Registries are per-process.** `storage`, `cache`, and `vector` clients registered in the API process do not exist in the worker; re-register them before consuming.

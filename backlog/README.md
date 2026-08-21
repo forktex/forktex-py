@@ -12,11 +12,11 @@ It is expected to return, package by package, in later cycles.
 | Path | What | Why it is here |
 | --- | --- | --- |
 | `py/` | The `forktex` agent CLI — `agent/` (21.7k LOC), `fsd/`, `graph/` (C4), `grid/`, `substrate/`, `runtime/`, `manual/`, `manifest/`, `core/`, `api/`, `models/`, `filesystem/`, `architecture/`, `engineering/`, `cloud/`, `network/`, `data/`, `intelligence/`, `config.py` | The `forktex` distribution was repurposed to publish the primitives library. The CLI needs its own name before it can ship again. |
-| `core/` | `grid/`, `flow/`, `space/`, `api/`, `worker/`, `catalog/`, `alembic.py` | Levels 2–3 of the old `forktex-core`. Deliberately out of scope for 0.9.0, which ships only primitives + role facades. |
+| `core/` | `grid/`, `flow/`, `space/`, `catalog/`, `alembic.py` | Level 2 of the old `forktex-core`, plus the catalog. Out of scope for 0.9.0, which shipped primitives + role facades. (Level 3 — `api/` and `worker/` — has since been promoted; see below.) |
 | `tests/py/` | The CLI's 76 test entries | Follow their code. |
-| `tests/core/` | `test_grid`, `test_flow`, `test_space`, `test_api`, `test_worker`, `test_catalog`, `test_stories`, `test_architecture` (the level-DAG guards), plus two files split out of surviving suites (see below) | Follow their code. |
+| `tests/core/` | `test_grid`, `test_flow`, `test_space`, `test_catalog`, `test_stories`, `test_architecture` (the level-DAG guards), plus two files split out of surviving suites (see below) | Follow their code. |
 | `client/`, `codegen/` | React Grid Studio UI + its API-client generator | Belong to `core/grid/`. |
-| `docs/` | `api.md`, `flow.md`, `grid.md`, `grid-binding-design.md`, `space.md`, `worker.md`, and the CLI's own docs | Follow their code. |
+| `docs/` | `flow.md`, `grid.md`, `grid-binding-design.md`, `space.md`, and the CLI's own docs | Follow their code. |
 | `README-agent-cli.md`, `CHANGELOG-agent-cli.md` | The CLI's README and changelog | Preserved verbatim; the repo root now documents the library. |
 
 ## Landmines — read before reviving anything
@@ -54,7 +54,23 @@ were carved out of `tests/test_database/test_temporal_standard.py` and
 into their original suites (or into grid's own) when grid returns; do not restore them
 as standalone files.
 
-**6. `tests/core/test_architecture/` enforces a 4-level model that no longer exists.**
+**6. Level 3 has been promoted — do not restore it from git history.** `core/api/`,
+`core/worker/`, their tests and their docs were deleted here and now live under
+`src/forktex/{api,worker}/`, `tests/test_{api,worker}/` and `docs/{api,worker}.md`. Neither is
+a straight copy, and reviving the old files would undo real fixes:
+
+- `api`'s middleware is pure ASGI instead of `BaseHTTPMiddleware` subclasses, so
+  `import forktex.api` needs no FastAPI; readiness probes now run concurrently under a
+  per-probe timeout.
+- `worker.Worker.stop()` now calls arq's `handle_sig_wait_for_completion`, not `handle_sig`.
+  The old code's comment claimed `handle_sig(SIGUSR1)` was arq's drain path; it is arq's
+  *immediate-cancel* path, so a graceful stop silently killed in-flight jobs.
+- `background()` no longer re-raises arq's own drain cancellation, which used to make a
+  FastAPI lifespan's shutdown look cancelled.
+
+Only `grid/`, `flow/`, `space/` and `catalog/` remain out of the box.
+
+**7. `tests/core/test_architecture/` enforces a 4-level model that no longer exists.**
 `test_level_dag.py` reads levels from `core/catalog/catalog.json`, and
 `test_substrate_convergence.py` keys on `levels[...] == 1`. Only
 `test_public_surface.py` was kept (at `tests/test_architecture/`), rewritten to source

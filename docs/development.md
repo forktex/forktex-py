@@ -199,9 +199,9 @@ except Exception as exc:
     raise StorageError(str(exc)) from exc
 ```
 
-### `log._ContextFilter` — not auto-added to custom handlers
+### `log.ContextFilter` — not auto-added to custom handlers
 
-`_ContextFilter` is added to the root handler by `setup_logging()`. If you create a custom `logging.Handler` in tests (e.g. to capture output), you must add the filter manually — it's what actually sets `record.trace_id`, `record.root_trace_id`, `record.service`, and `record._forktex_extra` from the current contextvars; without it those fields are simply absent from captured records, not merely empty:
+`ContextFilter` is added to the root handler by `setup_logging()`. If you create a custom `logging.Handler` in tests (e.g. to capture output), you must add the filter manually — it's what actually sets `record.trace_id`, `record.root_trace_id`, `record.run_id`, `record.service`, and `record._forktex_extra` from the current contextvars; without it those fields are simply absent from captured records, not merely empty:
 
 ```python
 from forktex.log import _ContextFilter

@@ -1,6 +1,6 @@
 # AGENTS.md — working in this repo
 
-`forktex` is a **library**: the shared Python substrate for ForkTex services. Twelve
+`forktex` is a **library**: the shared Python substrate for ForkTex services. Fourteen
 modules, no CLI, no console script, no filesystem authority. If you are looking for the
 agentic CLI that this distribution shipped through 0.8.1, it is in
 [`backlog/py/`](backlog/) and is not built or tested here — see
@@ -13,6 +13,7 @@ src/forktex/
   log/ error/ types/ iso/                        primitives — no extra required
   database/ cache/ queue/ storage/ store/
     vector/ vault/ graph/                        role facades — one per infrastructure
+  api/ worker/                                   bootstraps — FastAPI app, queue consumer
 tests/                                           mirrors src/, one test_<pkg>/ per module
 docs/                                            one page per module + development.md
 backlog/                                         set aside, not built (see its README)
