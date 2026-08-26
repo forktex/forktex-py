@@ -5,6 +5,28 @@ All notable changes to `forktex` are documented here. This project follows
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-08-26
+
+### Added
+
+- **`AppConfig` rejects unknown fields.** Pydantic's default is `extra="ignore"`, so a
+  service written against a newer `forktex` and deployed against an older one had its
+  setting dropped in silence and served a route table nobody asked for — `corporate` set
+  `api_prefix="/api"` against 0.10.0 and got `/health` instead of `/api/health`, with no
+  error anywhere. `extra="forbid"` names the offending field at config time instead.
+
+- **`AppConfig.api_prefix`** — mounts everything `create_app` owns (the `/health` +
+  `/health/ready` probes, `/docs`, `/redoc`, `/openapi.json`) under a prefix, so a service
+  behind a gateway that routes `/api/*` *without stripping the prefix* is reachable in
+  production. Previously those routes were root-only: `corporate` had to re-register the
+  health endpoints, reassign `app.docs_url`/`redoc_url`/`openapi_url`, filter
+  `app.router.routes` and re-run `app.setup()` by hand — roughly 30 lines of route-table
+  surgery per service, and it left the probes published at two paths. FastAPI builds its
+  doc routes during `__init__`, which is why this has to be a factory input rather than
+  something a consumer can adjust afterwards. Defaults to `""` (root), so existing
+  services are unaffected. A malformed value (`"api"`, `"/api/"`, `"/"`) is rejected by a
+  field validator at config time rather than surfacing later as an unexplainable 404.
+
 ### Changed
 
 - **UUIDv7 everywhere, with no exemptions.** `src/` already minted v7 (`log`'s trace and

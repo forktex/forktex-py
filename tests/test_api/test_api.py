@@ -36,6 +36,7 @@ from __future__ import annotations
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from forktex.api import AppConfig, SecurityHeadersMiddleware, create_app
 from forktex.api.middleware import ExceptionEnvelopeMiddleware, _http_status_for
@@ -528,3 +529,51 @@ def test_a_slow_probe_does_not_mask_a_healthy_one():
 
     assert response.status_code == 503
     assert response.json()["checks"] == {"cache": True, "db": False}
+
+
+# --------------------------------------------------------------------------- #
+# api_prefix                                                                    #
+# --------------------------------------------------------------------------- #
+
+
+def test_by_default_everything_mounts_at_the_root():
+    client = TestClient(create_app())
+
+    assert client.get("/health").status_code == 200
+    assert client.get("/openapi.json").status_code == 200
+
+
+def test_api_prefix_moves_health_and_docs_together():
+    """A gateway that routes /api/* without stripping it can reach the lot."""
+    client = TestClient(create_app(AppConfig(api_prefix="/api")))
+
+    for path in ("/api/health", "/api/health/ready", "/api/docs", "/api/openapi.json"):
+        assert client.get(path).status_code == 200, path
+
+    # And nothing is left behind at the root to be routed to the wrong service.
+    for path in ("/health", "/docs", "/openapi.json", "/docs/oauth2-redirect"):
+        assert client.get(path).status_code == 404, path
+
+
+def test_api_prefix_is_reflected_in_the_contract():
+    app = create_app(AppConfig(api_prefix="/api"))
+
+    assert sorted(app.openapi()["paths"]) == ["/api/health", "/api/health/ready"]
+
+
+@pytest.mark.parametrize("bad", ["api", "/api/", "/"])
+def test_a_malformed_prefix_is_rejected_at_config_time(bad: str):
+    """Fail where the mistake is, not with a 404 nobody can explain."""
+    with pytest.raises(ValidationError):
+        AppConfig(api_prefix=bad)
+
+
+def test_an_unknown_config_field_is_rejected_rather_than_ignored():
+    """Version skew must not degrade into a silently different app.
+
+    A service written against a newer forktex and run against an older one used
+    to have its setting dropped by pydantic's default `extra="ignore"`, mounting
+    routes at paths the service never asked for.
+    """
+    with pytest.raises(ValidationError, match="not_a_real_setting"):
+        AppConfig(not_a_real_setting="/api")

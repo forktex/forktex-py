@@ -24,7 +24,7 @@
 
 [project]
 name = "forktex"
-version = "0.10.0"
+version = "0.11.0"
 description = "The shared Python substrate for ForkTex services — logging, errors, types, and one facade per piece of infrastructure."
 authors = [
     {name = "FORKTEX",email = "info@forktex.com"}

@@ -36,7 +36,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from forktex.api.middleware import ExceptionEnvelopeMiddleware, SecurityHeadersMiddleware
 from forktex.log import TraceIDMiddleware, get_logger
@@ -79,12 +79,34 @@ class AppConfig(BaseModel):
     Every capability is opt-in/opt-out so a service takes only what it needs
     (e.g. a purely API-key API leaves ``cors_origins`` unset and gets no CORS).
     Consumers can still attach further routers/middleware to the returned app.
+
+    Unknown fields are rejected. Pydantic's default is to drop them silently,
+    which turns a version skew into a wrong app rather than an error: a service
+    written against a newer forktex and deployed against an older one had its
+    setting quietly ignored and served a route table nobody asked for. Failing
+    at config time names the field and the version mismatch immediately.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     title: str = "ForkTex Service"
     version: str = "1.0.0"
     description: str = ""
     debug: bool = False
+
+    #: Mount everything this factory owns — health probes, docs, OpenAPI — under
+    #: a prefix. For a service behind a gateway that routes ``/api/*`` to it
+    #: *without stripping the prefix*, the root-mounted defaults are unreachable
+    #: in production; the alternative is each service re-registering the routes
+    #: and re-running ``app.setup()`` by hand. Empty means mount at the root.
+    api_prefix: str = ""
+
+    @field_validator("api_prefix")
+    @classmethod
+    def _check_api_prefix(cls, value: str) -> str:
+        if value and (not value.startswith("/") or value.endswith("/")):
+            raise ValueError("api_prefix must start with '/' and not end with one, e.g. '/api'")
+        return value
 
     # Middleware toggles.
     enable_trace_id: bool = True  # wire forktex.log.TraceIDMiddleware
@@ -130,12 +152,23 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     cfg = config or AppConfig()
 
+    prefix = cfg.api_prefix
+
     app = FastAPI(
         title=cfg.title,
         version=cfg.version,
         description=cfg.description,
         debug=cfg.debug,
         lifespan=cfg.lifespan,
+        # FastAPI builds its doc routes during __init__, so the prefix has to be
+        # applied here — a consumer cannot move them afterwards without editing
+        # `app.router.routes` and calling `setup()` again.
+        docs_url=f"{prefix}/docs",
+        redoc_url=f"{prefix}/redoc",
+        openapi_url=f"{prefix}/openapi.json",
+        # Not derived from docs_url by FastAPI, so it needs the prefix too —
+        # otherwise one route stays at the root and the gateway cannot reach it.
+        swagger_ui_oauth2_redirect_url=f"{prefix}/docs/oauth2-redirect",
     )
 
     # add_middleware applies in REVERSE (last added = outermost). Target stack,
@@ -162,14 +195,14 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     if cfg.enable_security_headers:
         app.add_middleware(SecurityHeadersMiddleware)
 
-    @app.get("/health", tags=["health"])
+    @app.get(f"{prefix}/health", tags=["health"])
     async def _liveness() -> LivenessResponse:
         return LivenessResponse()
 
     # `response_model=None` keeps the `-> JSONResponse` annotation (for typing)
     # from being turned into an OpenAPI response schema, which pydantic cannot
     # build for a Response type.
-    @app.get("/health/ready", tags=["health"], response_model=None)
+    @app.get(f"{prefix}/health/ready", tags=["health"], response_model=None)
     async def _readiness() -> JSONResponse:
         async def _check(name: str, probe: HealthProbe) -> bool:
             try:
