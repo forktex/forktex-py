@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
 from forktex.database import (
     BaseDBModel,
+    Database,
     DatabaseNotInitializedError,
     TimestampMixin,
     TransactionBoundaryError,
@@ -469,3 +470,38 @@ async def test_a_caught_constraint_violation_needs_a_savepoint(engine_and_sessio
     async with unmanaged_session() as session:
         slugs = set((await session.execute(sa.select(_ConnTestUnique.slug))).scalars())
     assert slugs == {"taken", "next"}
+
+
+@pytest.mark.asyncio
+async def test_the_session_parameter_may_be_named_something_else(engine_and_session: None) -> None:
+    @with_transactional_session(param="db")
+    async def add_under_another_name(db: AsyncSession, *, name: str) -> None:
+        db.add(_ConnTestWidget(name=name))
+
+    await add_under_another_name(name="renamed")
+    assert await _widget_names() == {"renamed"}
+
+    async with get_session() as session:
+        await add_under_another_name(db=session, name="joined")
+        assert await _widget_names() == {"renamed"}
+    assert await _widget_names() == {"renamed", "joined"}
+
+
+def test_a_renamed_session_parameter_must_still_exist() -> None:
+    with pytest.raises(TypeError, match="has no 'db' parameter"):
+
+        @with_transactional_session(param="db")
+        async def no_such_parameter(session: AsyncSession) -> None: ...
+
+
+@pytest.mark.asyncio
+async def test_an_owned_handle_hands_out_both_kinds_of_session(postgres_url_str: str) -> None:
+    db = Database(postgres_url_str)
+    try:
+        async with db.session() as owned:
+            with pytest.raises(TransactionBoundaryError):
+                await owned.commit()
+        async with db.unmanaged_session() as unmanaged:
+            await unmanaged.commit()
+    finally:
+        await db.dispose()

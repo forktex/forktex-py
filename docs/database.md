@@ -120,9 +120,9 @@ Four rules:
    commits it once, on success, and rolls it back on any exception.
 2. **Nesting joins — it does not nest.** A function handed a session participates in that
    transaction and gets no boundary of its own, so it cannot half-apply.
-3. **The boundary belongs to whoever opened it.** On a session from `get_session`, `session_scope`
-   or the decorator, `commit()`, `rollback()` and `begin()` raise `TransactionBoundaryError`. To
-   abort, raise.
+3. **The boundary belongs to whoever opened it.** On a session from `get_session`,
+   `session_scope`, `Database.session()` or the decorator, `commit()`, `rollback()` and `begin()`
+   raise `TransactionBoundaryError`. To abort, raise.
 4. **Divisible work is asked for by name** — `savepoint()` or `unmanaged_session()`.
 
 | You need | Use | Who commits |

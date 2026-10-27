@@ -24,8 +24,8 @@
 
 import functools
 import inspect
-from collections.abc import AsyncGenerator, Callable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from collections.abc import AsyncGenerator, Callable, Iterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -41,15 +41,23 @@ from forktex.log import get_logger
 logger = get_logger(__name__)
 
 _BOUNDARY_REFUSED = (
-    "{call}() is not available here: this session's transaction belongs to the "
-    "{owner} that opened it. Raise to abort the whole unit of work, wrap the part "
-    "that may fail in savepoint(session), or open unmanaged_session() to own the "
-    "boundary yourself."
+    "{call}() is not available here: this session's transaction belongs to the block "
+    "that opened it. Raise to abort the whole unit of work, wrap the part that may "
+    "fail in savepoint(session), or open unmanaged_session() to own the boundary "
+    "yourself."
 )
 
 
 class ManagedSession(AsyncSession):
-    _boundary_owner: str | None = None
+    _boundary_is_borrowed: bool = False
+
+    @contextmanager
+    def borrowed_boundary(self) -> Iterator[None]:
+        self._boundary_is_borrowed = True
+        try:
+            yield
+        finally:
+            self._boundary_is_borrowed = False
 
     async def commit(self) -> None:
         self._refuse_if_borrowed("commit")
@@ -64,8 +72,8 @@ class ManagedSession(AsyncSession):
         return super().begin()
 
     def _refuse_if_borrowed(self, call: str) -> None:
-        if self._boundary_owner is not None:
-            raise TransactionBoundaryError(_BOUNDARY_REFUSED.format(call=call, owner=self._boundary_owner))
+        if self._boundary_is_borrowed:
+            raise TransactionBoundaryError(_BOUNDARY_REFUSED.format(call=call))
 
 
 class Database:
@@ -83,7 +91,7 @@ class Database:
         if schema_translate_map:
             engine = engine.execution_options(schema_translate_map=schema_translate_map)
         self._engine: AsyncEngine = engine
-        self._sessionmaker: async_sessionmaker[AsyncSession] = async_sessionmaker(
+        self._sessionmaker: async_sessionmaker[ManagedSession] = async_sessionmaker(
             bind=engine, expire_on_commit=False, class_=ManagedSession
         )
 
@@ -92,11 +100,11 @@ class Database:
         return self._engine
 
     @property
-    def sessionmaker(self) -> async_sessionmaker[AsyncSession]:
+    def sessionmaker(self) -> async_sessionmaker[ManagedSession]:
         return self._sessionmaker
 
     def session(self) -> AbstractAsyncContextManager[AsyncSession]:
-        return _owned_session(self._sessionmaker, owner="get_session()")
+        return _owned_session(self._sessionmaker)
 
     def unmanaged_session(self) -> AbstractAsyncContextManager[AsyncSession]:
         return _unmanaged_session(self._sessionmaker)
@@ -110,26 +118,20 @@ class Database:
 
 
 @asynccontextmanager
-async def _owned_session(sessionmaker: async_sessionmaker[AsyncSession], *, owner: str) -> AsyncGenerator[AsyncSession]:
+async def _owned_session(sessionmaker: async_sessionmaker[ManagedSession]) -> AsyncGenerator[AsyncSession]:
     async with sessionmaker() as session:
-        borrowed = isinstance(session, ManagedSession)
-        if borrowed:
-            session._boundary_owner = owner
         try:
-            yield session
-            if borrowed:
-                session._boundary_owner = None
-            await session.commit()
+            with session.borrowed_boundary():
+                yield session
         except Exception:
-            if borrowed:
-                session._boundary_owner = None
             await session.rollback()
             raise
+        await session.commit()
 
 
 @asynccontextmanager
 async def _unmanaged_session(
-    sessionmaker: async_sessionmaker[AsyncSession],
+    sessionmaker: async_sessionmaker[ManagedSession],
 ) -> AsyncGenerator[AsyncSession]:
     async with sessionmaker() as session:
         yield session

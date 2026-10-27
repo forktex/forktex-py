@@ -42,6 +42,8 @@ DOC_PATHS = [
     *sorted((ROOT / "docs").glob("*.md")),
 ]
 
+CLAIMING_PATHS = [*DOC_PATHS, *(p for p in [ROOT / "CHANGELOG.md"] if p.exists())]
+
 _PAREN_IMPORT = re.compile(r"^from (forktex[\w.]*) import \(([^)]*)\)", re.M)
 _FLAT_IMPORT = re.compile(r"^from (forktex[\w.]*) import ([\w, ]+)$", re.M)
 _PLAIN_IMPORT = re.compile(r"^import (forktex[\w.]*)$", re.M)
@@ -59,7 +61,7 @@ def _claims(text: str) -> list[tuple[str, str]]:
     return out
 
 
-@pytest.mark.parametrize("doc", DOC_PATHS, ids=lambda p: p.name)
+@pytest.mark.parametrize("doc", CLAIMING_PATHS, ids=lambda p: p.name)
 def test_documented_imports_resolve(doc: Path) -> None:
     text = doc.read_text(encoding="utf-8")
     unresolved: list[str] = []
@@ -146,7 +148,7 @@ def test_a_documented_error_code_is_the_code_the_class_carries(package: str) -> 
 _PYTHON_BLOCK = re.compile(r"```python\n(.*?)```", re.S)
 
 
-@pytest.mark.parametrize("doc", DOC_PATHS, ids=lambda p: p.name)
+@pytest.mark.parametrize("doc", CLAIMING_PATHS, ids=lambda p: p.name)
 def test_every_documented_python_example_parses(doc: Path) -> None:
     broken: list[str] = []
     for index, block in enumerate(_PYTHON_BLOCK.findall(doc.read_text(encoding="utf-8")), 1):
