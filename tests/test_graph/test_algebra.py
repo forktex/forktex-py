@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Tests for graph algorithms: BFS, DFS, closure, shortest path, cycles."""
 
 from __future__ import annotations
 
@@ -37,10 +36,6 @@ from forktex.graph import (
 
 
 def _build_dag() -> Graph:
-    """a → b → c
-    ↓
-    d → e
-    """
     g = Graph.empty()
     for nid in ("a", "b", "c", "d", "e"):
         g.add_node(GraphNode(id=nid, kind="n"))
@@ -51,75 +46,72 @@ def _build_dag() -> Graph:
     return g
 
 
-def test_bfs_visits_in_order():
+def test_bfs_visits_in_order() -> None:
     g = _build_dag()
     order = bfs(g, "a")
     assert order[0] == "a"
     assert set(order) == {"a", "b", "c", "d", "e"}
-    # b must come before c/d (bfs).
     assert order.index("b") < order.index("c")
     assert order.index("b") < order.index("d")
 
 
-def test_bfs_unknown_start_returns_empty():
+def test_bfs_unknown_start_returns_empty() -> None:
     g = _build_dag()
     assert bfs(g, "nope") == []
 
 
-def test_dfs_visits_full_reach():
+def test_dfs_visits_full_reach() -> None:
     g = _build_dag()
     order = dfs(g, "a")
     assert order[0] == "a"
     assert set(order) == {"a", "b", "c", "d", "e"}
 
 
-def test_transitive_closure_includes_self():
+def test_transitive_closure_includes_self() -> None:
     g = _build_dag()
     closure = transitive_closure(g, "b")
     assert closure == {"b", "c", "d", "e"}
 
 
-def test_transitive_closure_filters_by_edge_kind():
+def test_transitive_closure_filters_by_edge_kind() -> None:
     g = _build_dag()
     g.add_node(GraphNode(id="x", kind="n"))
     g.add_edge("other_kind", "a", "x")
-    # k-edges only — x is unreachable.
     assert "x" not in transitive_closure(g, "a", edge_kind="k")
-    # other_kind only — only x is reachable.
     assert transitive_closure(g, "a", edge_kind="other_kind") == {"a", "x"}
 
 
-def test_shortest_path_finds_unweighted_path():
+def test_shortest_path_finds_unweighted_path() -> None:
     g = _build_dag()
     path = shortest_path(g, "a", "e")
     assert path == ["a", "b", "d", "e"]
 
 
-def test_shortest_path_self_returns_singleton():
+def test_shortest_path_self_returns_singleton() -> None:
     g = _build_dag()
     assert shortest_path(g, "a", "a") == ["a"]
 
 
-def test_shortest_path_disconnected_returns_none():
+def test_shortest_path_disconnected_returns_none() -> None:
     g = _build_dag()
     g.add_node(GraphNode(id="lonely", kind="n"))
     assert shortest_path(g, "a", "lonely") is None
 
 
-def test_shortest_path_unknown_endpoint_returns_none():
+def test_shortest_path_unknown_endpoint_returns_none() -> None:
     g = _build_dag()
     assert shortest_path(g, "a", "ghost") is None
     assert shortest_path(g, "ghost", "a") is None
 
 
-def test_bfs_dfs_cycles_on_empty_graph():
+def test_bfs_dfs_cycles_on_empty_graph() -> None:
     g = Graph.empty()
     assert bfs(g, "anything") == []
     assert dfs(g, "anything") == []
     assert cycles(g) == []
 
 
-def test_bfs_dfs_on_single_node_no_edges():
+def test_bfs_dfs_on_single_node_no_edges() -> None:
     g = Graph.empty()
     g.add_node(GraphNode(id="lonely", kind="n"))
     assert bfs(g, "lonely") == ["lonely"]
@@ -127,26 +119,24 @@ def test_bfs_dfs_on_single_node_no_edges():
     assert cycles(g) == []
 
 
-def test_cycles_empty_for_dag():
+def test_cycles_empty_for_dag() -> None:
     assert cycles(_build_dag()) == []
 
 
-def test_cycles_finds_cycle_alongside_disconnected_acyclic_component():
-    """A cyclic cluster plus an unrelated disconnected acyclic component —
-    the acyclic part must not suppress or interfere with detection."""
+def test_cycles_finds_cycle_alongside_disconnected_acyclic_component() -> None:
     g = Graph.empty()
     for nid in ("a", "b", "c", "x", "y"):
         g.add_node(GraphNode(id=nid, kind="n"))
     g.add_edge("k", "a", "b")
     g.add_edge("k", "b", "c")
-    g.add_edge("k", "c", "a")  # cycle: a -> b -> c -> a
-    g.add_edge("k", "x", "y")  # disconnected, acyclic
+    g.add_edge("k", "c", "a")
+    g.add_edge("k", "x", "y")
     found = cycles(g)
     assert len(found) == 1
     assert sorted(found[0]) == ["a", "b", "c"]
 
 
-def test_cycles_detects_simple_cycle():
+def test_cycles_detects_simple_cycle() -> None:
     g = Graph.empty()
     for nid in ("a", "b", "c"):
         g.add_node(GraphNode(id=nid, kind="n"))
@@ -158,20 +148,19 @@ def test_cycles_detects_simple_cycle():
     assert sorted(found[0]) == ["a", "b", "c"]
 
 
-def test_cycles_detects_self_loop():
+def test_cycles_detects_self_loop() -> None:
     g = Graph.empty()
     g.add_node(GraphNode(id="a", kind="n"))
     g.add_edge("k", "a", "a")
     assert cycles(g) == [["a"]]
 
 
-def test_cycles_filtered_by_kind():
+def test_cycles_filtered_by_kind() -> None:
     g = Graph.empty()
     for nid in ("a", "b"):
         g.add_node(GraphNode(id=nid, kind="n"))
     g.add_edge("k1", "a", "b")
     g.add_edge("k2", "b", "a")
-    # Combined → cycle. Single kind → acyclic.
     assert cycles(g) != []
     assert cycles(g, edge_kind="k1") == []
     assert cycles(g, edge_kind="k2") == []

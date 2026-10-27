@@ -21,10 +21,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Integration tests for forktex.cache — requires Redis container."""
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 import pytest
 import pytest_asyncio
 from pydantic import BaseModel
@@ -52,27 +52,27 @@ from forktex.error import AppError
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def cache_init(redis_url: str):
+async def cache_init(redis_url: str) -> AsyncIterator[None]:
     await init(redis_url)
     yield
     await close()
 
 
 @pytest.mark.asyncio
-async def test_set_and_get():
+async def test_set_and_get() -> None:
     await set("test:k1", "hello", ex=60)
     val = await get("test:k1")
     assert val == "hello"
 
 
 @pytest.mark.asyncio
-async def test_get_miss_returns_none():
+async def test_get_miss_returns_none() -> None:
     val = await get("test:nonexistent:" + __name__)
     assert val is None
 
 
 @pytest.mark.asyncio
-async def test_delete():
+async def test_delete() -> None:
     await set("test:k2", "world", ex=60)
     await delete("test:k2")
     val = await get("test:k2")
@@ -80,14 +80,14 @@ async def test_delete():
 
 
 @pytest.mark.asyncio
-async def test_invalidate_key():
+async def test_invalidate_key() -> None:
     await set("test:k3", "data", ex=60)
     await invalidate_key("test:k3")
     assert await get("test:k3") is None
 
 
 @pytest.mark.asyncio
-async def test_invalidate_prefix():
+async def test_invalidate_prefix() -> None:
     await set("prefix:a", "1", ex=60)
     await set("prefix:b", "2", ex=60)
     deleted = await invalidate_prefix("prefix")
@@ -97,8 +97,7 @@ async def test_invalidate_prefix():
 
 
 @pytest.mark.asyncio
-async def test_invalidate_prefix_does_not_match_unrelated_keys_sharing_the_string():
-    """ "user" must not match "username:foo" — no bare-string substring match."""
+async def test_invalidate_prefix_does_not_match_unrelated_keys_sharing_the_string() -> None:
     await set("user:1", "a", ex=60)
     await set("username:foo", "b", ex=60)
     deleted = await invalidate_prefix("user")
@@ -109,7 +108,7 @@ async def test_invalidate_prefix_does_not_match_unrelated_keys_sharing_the_strin
 
 
 @pytest.mark.asyncio
-async def test_invalidate_prefix_deletes_the_exact_prefix_key_itself():
+async def test_invalidate_prefix_deletes_the_exact_prefix_key_itself() -> None:
     await set("org:abc123", "profile-data", ex=60)
     await set("org:abc123:members", "members-data", ex=60)
     deleted = await invalidate_prefix("org:abc123")
@@ -119,10 +118,10 @@ async def test_invalidate_prefix_deletes_the_exact_prefix_key_itself():
 
 
 @pytest.mark.asyncio
-async def test_fetch_or_set_caches_result():
+async def test_fetch_or_set_caches_result() -> None:
     call_count = 0
 
-    async def compute():
+    async def compute() -> str:
         nonlocal call_count
         call_count += 1
         return "computed"
@@ -132,11 +131,11 @@ async def test_fetch_or_set_caches_result():
     result2 = await fetch_or_set(key, 60, compute, (), {}, None)
     assert result1 == "computed"
     assert result2 == "computed"
-    assert call_count == 1  # second call hit cache
+    assert call_count == 1
 
 
 @pytest.mark.asyncio
-async def test_cached_decorator():
+async def test_cached_decorator() -> None:
     call_count = 0
 
     @cached(ttl=60)
@@ -151,28 +150,25 @@ async def test_cached_decorator():
     assert r1 == "result:42"
     assert r2 == "result:42"
     assert r3 == "result:99"
-    assert call_count == 2  # 42 once, 99 once
+    assert call_count == 2
 
 
 @pytest.mark.asyncio
-async def test_key_for():
+async def test_key_for() -> None:
     k = key_for("user", "abc-123")
     assert k == "user:abc-123"
     k2 = key_for("feed")
     assert k2 == "feed"
 
 
-def test_key_for_none_part_raises_instead_of_collapsing_to_bare_prefix():
-    """A None part almost always means an unresolved ID upstream — silently
-    collapsing onto the bare "user" prefix key would corrupt every other
-    caller's per-user cache entries under the same key."""
+def test_key_for_none_part_raises_instead_of_collapsing_to_bare_prefix() -> None:
     with pytest.raises(ValueError):
         key_for("user", None)
 
 
 @pytest.mark.asyncio
-async def test_fetch_swr_returns_fresh_value_on_miss():
-    async def compute():
+async def test_fetch_swr_returns_fresh_value_on_miss() -> None:
+    async def compute() -> str:
         return "fresh"
 
     key = "test:swr:" + __name__
@@ -181,31 +177,27 @@ async def test_fetch_swr_returns_fresh_value_on_miss():
 
 
 @pytest.mark.asyncio
-async def test_fetch_swr_serves_stale_value_and_refreshes_in_background():
+async def test_fetch_swr_serves_stale_value_and_refreshes_in_background() -> None:
     call_count = 0
 
-    async def compute():
+    async def compute() -> str:
         nonlocal call_count
         call_count += 1
         return f"computed-{call_count}"
 
     key = "test:swr-stale:" + __name__
-    # ttl=-1 → age (>= 0) is always > ttl, so every read is "stale" and
-    # triggers a background refresh, regardless of clock-second rounding.
     first = await fetch_swr(key, ttl=-1, stale_ttl=300, fn=compute, args=(), kwargs={}, response_model=None)
     assert first == "computed-1"
 
     second = await fetch_swr(key, ttl=-1, stale_ttl=300, fn=compute, args=(), kwargs={}, response_model=None)
-    assert second == "computed-1"  # still serves the stale value immediately
+    assert second == "computed-1"
 
     await shutdown_background_tasks()
-    assert call_count == 2  # background refresh ran
+    assert call_count == 2
 
 
 @pytest.mark.asyncio
-async def test_cached_decorator_stale_ttl_zero_uses_swr_not_fetch_or_set():
-    """stale_ttl=0 is a degenerate SWR config (refresh on every read), not
-    "unset" — it must not silently fall back to plain fetch_or_set."""
+async def test_cached_decorator_stale_ttl_zero_uses_swr_not_fetch_or_set() -> None:
     call_count = 0
 
     @cached(ttl=0, stale_ttl=0)
@@ -219,44 +211,30 @@ async def test_cached_decorator_stale_ttl_zero_uses_swr_not_fetch_or_set():
     await shutdown_background_tasks()
 
 
-def test_serialize_deserialize_roundtrip_plain_value():
+def test_serialize_deserialize_roundtrip_plain_value() -> None:
     raw = serialize({"a": 1, "b": [1, 2, 3]})
     assert deserialize(raw, None) == {"a": 1, "b": [1, 2, 3]}
 
 
 @pytest.mark.asyncio
-async def test_available_and_get_client_not_initialized_after_close():
+async def test_available_and_get_client_not_initialized_after_close() -> None:
     assert available() is True
-    get_client()  # does not raise while initialized
+    get_client()
 
     await close()
     assert available() is False
-    # Both bases assert the contract deliberately: `AppError` is what a consumer's
-    # error boundary catches, `RuntimeError` is what pre-existing call sites (and
-    # `ops._safe_client`) already catch. Losing either is a breaking change.
     with pytest.raises(CacheNotInitializedError) as excinfo:
         get_client()
     assert isinstance(excinfo.value, AppError)
     assert isinstance(excinfo.value, RuntimeError)
-    assert await get("test:not-initialized:" + __name__) is None  # ops degrade, don't raise
+    assert await get("test:not-initialized:" + __name__) is None
 
 
 @pytest.mark.asyncio
-async def test_fetch_swr_keeps_a_valid_entry_when_the_refresh_lock_fails(monkeypatch):
-    """A Redis blip while *acquiring the background-refresh lock* must not be
-    mistaken for a corrupted payload.
-
-    `_refresh_in_background` used to be called inside the same `try` that guards
-    payload parsing, and its lock acquisition (`c.set(lock_key, ...)`) is a raw
-    client call. So any transient error there was caught, mislogged as "SWR cache
-    corrupted", and **deleted a perfectly good key** — then the already-decoded
-    value was discarded and `fn` re-ran synchronously. Serving the stale value is
-    the entire point of stale-while-revalidate; losing it is the one thing this
-    path must not do.
-    """
+async def test_fetch_swr_keeps_a_valid_entry_when_the_refresh_lock_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = 0
 
-    async def compute():
+    async def compute() -> str:
         nonlocal calls
         calls += 1
         return f"value-{calls}"
@@ -268,29 +246,20 @@ async def test_fetch_swr_keeps_a_valid_entry_when_the_refresh_lock_fails(monkeyp
     assert first == "value-1"
     await shutdown_background_tasks()
 
-    # Break only the refresh path's lock acquisition.
-    import forktex.cache.ops as ops
+    from forktex.cache.cache import Cache
 
     async def _boom(*_a: object, **_k: object) -> None:
         raise ConnectionError("redis went away mid-lock")
 
-    monkeypatch.setattr(ops, "_refresh_in_background", _boom)
+    monkeypatch.setattr(Cache, "_refresh_in_background", _boom)
 
     second = await fetch_swr(key, ttl=-1, stale_ttl=300, fn=compute, args=(), kwargs={}, response_model=None)
 
-    # The cached value must still be served, and the key must survive.
     assert second == "value-1", "a failed refresh must still serve the cached value"
     assert await get(key) is not None, "a failed refresh must not invalidate a valid entry"
 
 
-def test_default_cache_key_is_insensitive_to_kwarg_order():
-    """`f(a=1, b=2)` and `f(b=2, a=1)` are the same call and must share an entry.
-
-    The key was built from `f"...:{kwargs}"`, and a dict's repr preserves
-    insertion order — so the two spellings hashed differently and neither ever
-    saw the other's cached value. A permanent miss, invisible except as a cache
-    that never seems to help.
-    """
+def test_default_cache_key_is_insensitive_to_kwarg_order() -> None:
     from forktex.cache.decorators import _default_key
 
     def fn() -> None: ...
@@ -298,13 +267,7 @@ def test_default_cache_key_is_insensitive_to_kwarg_order():
     assert _default_key(fn, (), {"a": 1, "b": 2}) == _default_key(fn, (), {"b": 2, "a": 1})
 
 
-def test_default_cache_key_ignores_object_identity():
-    """Two equal-valued arguments must produce one key.
-
-    An argument falling back to `object.__repr__` embeds its `id()`, so the entry
-    was never re-hit on a later call — and, worse, two *different* objects whose
-    reprs happened to match would collide and serve each other's value.
-    """
+def test_default_cache_key_ignores_object_identity() -> None:
     from forktex.cache.decorators import _default_key
 
     def fn() -> None: ...
@@ -313,15 +276,14 @@ def test_default_cache_key_ignores_object_identity():
         def __init__(self, x: int) -> None:
             self.x = x
 
-        def __repr__(self) -> str:  # a value-based repr, as a well-behaved type would have
+        def __repr__(self) -> str:
             return f"Point({self.x})"
 
     assert _default_key(fn, (Point(1),), {}) == _default_key(fn, (Point(1),), {})
     assert _default_key(fn, (Point(1),), {}) != _default_key(fn, (Point(2),), {})
 
 
-def test_default_cache_key_distinguishes_functions_and_arguments():
-    """The key must still separate what genuinely differs."""
+def test_default_cache_key_distinguishes_functions_and_arguments() -> None:
     from forktex.cache.decorators import _default_key
 
     def one() -> None: ...
@@ -333,23 +295,16 @@ def test_default_cache_key_distinguishes_functions_and_arguments():
 
 
 @pytest.mark.asyncio
-async def test_failed_init_leaves_the_cache_unavailable(redis_url: str):
-    """A failed `init()` must not leave a half-configured client behind.
-
-    `available()` is what `ops._safe_client` trusts to decide whether to talk to
-    Redis at all, so a client that never answered `ping()` must not remain set —
-    otherwise every subsequent operation tries, fails, and logs, instead of
-    degrading quietly.
-    """
+async def test_failed_init_leaves_the_cache_unavailable(redis_url: str) -> None:
     await close()
     with pytest.raises(CacheInitializationError) as excinfo:
-        await init("redis://127.0.0.1:1/0")  # nothing listens on port 1
+        await init("redis://127.0.0.1:1/0")
 
     assert isinstance(excinfo.value, AppError)
     assert available() is False, "a failed init must leave the client unset"
     assert await get("test:after-failed-init:" + __name__) is None
 
-    await init(redis_url)  # restore for the rest of the module
+    await init(redis_url)
 
 
 class _CachedUser(BaseModel):
@@ -357,13 +312,9 @@ class _CachedUser(BaseModel):
     name: str
 
 
-def test_serialize_deserialize_roundtrip_pydantic_model():
-    """`@cached(response_model=...)` is this module's headline feature, and both of
-    its branches — `serialize(BaseModel)` and `deserialize(..., model)` — were
-    never executed: every existing test passed `response_model=None`.
-    """
+def test_serialize_deserialize_roundtrip_pydantic_model() -> None:
     raw = serialize(_CachedUser(id=7, name="ada"))
-    assert raw == '{"id":7,"name":"ada"}'  # model_dump_json, not str(model)
+    assert raw == '{"id":7,"name":"ada"}'
 
     restored = deserialize(raw, _CachedUser)
     assert isinstance(restored, _CachedUser), "must come back as the model, not a dict"
@@ -371,8 +322,7 @@ def test_serialize_deserialize_roundtrip_pydantic_model():
 
 
 @pytest.mark.asyncio
-async def test_cached_decorator_round_trips_a_response_model():
-    """End-to-end through Redis: the decorated function's model survives a cache hit."""
+async def test_cached_decorator_round_trips_a_response_model() -> None:
     calls = 0
 
     @cached(ttl=60, response_model=_CachedUser)
@@ -381,7 +331,7 @@ async def test_cached_decorator_round_trips_a_response_model():
         calls += 1
         return _CachedUser(id=user_id, name="ada")
 
-    await invalidate_prefix("")  # cold start for this key space
+    await invalidate_prefix("")
     first = await load_user(7)
     second = await load_user(7)
 

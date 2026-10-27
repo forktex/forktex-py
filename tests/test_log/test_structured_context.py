@@ -21,17 +21,17 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Tests for forktex.log's log_context()/async_log_context() — structured
-extra fields injected into every log record emitted within a block."""
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 import pytest
 
 from forktex.log import async_log_context, get_extra_fields, log_context
 
 
-def test_log_context_merges_fields(capture_json):
+def test_log_context_merges_fields(capture_json: Callable[..., tuple[logging.Logger, list[dict]]]) -> None:
     log, captured = capture_json()
     with log_context(org_id="org-xyz", user_id="usr-1"):
         log.info("inside context")
@@ -40,7 +40,7 @@ def test_log_context_merges_fields(capture_json):
     assert rec["user_id"] == "usr-1"
 
 
-def test_log_context_does_not_leak(capture_json):
+def test_log_context_does_not_leak(capture_json: Callable[..., tuple[logging.Logger, list[dict]]]) -> None:
     log, captured = capture_json()
     with log_context(org_id="org-xyz"):
         pass
@@ -48,7 +48,7 @@ def test_log_context_does_not_leak(capture_json):
     assert "org_id" not in captured[0]
 
 
-def test_log_context_nested_merge(capture_json):
+def test_log_context_nested_merge(capture_json: Callable[..., tuple[logging.Logger, list[dict]]]) -> None:
     log, captured = capture_json()
     with log_context(a="1"):
         with log_context(b="2"):
@@ -59,7 +59,7 @@ def test_log_context_nested_merge(capture_json):
 
 
 @pytest.mark.asyncio
-async def test_async_log_context(capture_json):
+async def test_async_log_context(capture_json: Callable[..., tuple[logging.Logger, list[dict]]]) -> None:
     log, captured = capture_json()
     async with async_log_context(request_id="req-99"):
         log.info("async context")
@@ -68,10 +68,7 @@ async def test_async_log_context(capture_json):
     assert "request_id" not in captured[1]
 
 
-def test_get_extra_fields_snapshots_current_context():
-    """Public API for a caller wanting to inspect/propagate the current
-    structured context — e.g. into a thread pool or background task — rather
-    than only having it implicitly injected into log records."""
+def test_get_extra_fields_snapshots_current_context() -> None:
     assert get_extra_fields() == {}
     with log_context(org_id="org-xyz"):
         assert get_extra_fields() == {"org_id": "org-xyz"}

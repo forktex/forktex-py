@@ -21,8 +21,14 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Engineering domain package."""
 
-from forktex.engineering.models import Archetype, Blueprint, DeliveryStandard, TechItem
+from __future__ import annotations
 
-__all__ = ["TechItem", "Archetype", "Blueprint", "DeliveryStandard"]
+from forktex.error import AppError, AppErrorCode
+
+
+class WorkerError(AppError, RuntimeError):
+    code = AppErrorCode.INTERNAL
+
+
+__all__ = ["WorkerError"]

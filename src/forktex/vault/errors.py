@@ -22,34 +22,16 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""Vault module errors."""
-
 from __future__ import annotations
 
 from forktex.error import AppError, AppErrorCode
 
 
 class VaultError(AppError):
-    """Base class for vault errors."""
-
     code = AppErrorCode.INTERNAL
 
 
-class DecryptionError(VaultError):
-    """Raised when a blob cannot be decrypted.
-
-    Deliberately does **not** distinguish "wrong KEK" from "tampered ciphertext":
-    Fernet reports both as one failure, and only an operator with the key history
-    can tell them apart. That ambiguity is preserved rather than guessed at — the
-    original ``cryptography.fernet.InvalidToken`` stays on ``__cause__`` for the
-    log/tracker, while callers get an ``AppError`` their boundary can render.
-
-    ``INTERNAL``, not a 4xx: a blob that will not open is a key-management or
-    integrity problem on the server side, never something the caller of an
-    endpoint can fix by changing their request.
-
-    Carries no plaintext, no ciphertext and no key material in its message.
-    """
+class DecryptionError(VaultError): ...
 
 
 __all__ = ["DecryptionError", "VaultError"]

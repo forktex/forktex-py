@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Vector entry point — mirrors Flow's design: one instance, scoped handles."""
 
 from __future__ import annotations
 
@@ -33,39 +32,14 @@ logger = get_logger(__name__)
 
 
 class Vector:
-    """Entry point for the vector module.
-
-    Typically created once at app startup and shared across the process:
-
-        vector = Vector(qdrant_url=settings.qdrant_url)
-
-    Does NOT connect eagerly — a fresh ``AsyncQdrantClient`` is created per
-    operation (stateless, safe for concurrent async use).
-
-    Args:
-        qdrant_url: Full URL of the Qdrant service (e.g. ``"http://qdrant:6333"``).
-        api_key: Optional Qdrant API key for Qdrant Cloud deployments.
-    """
-
     def __init__(self, qdrant_url: str, api_key: str | None = None) -> None:
         self._qdrant_url = qdrant_url
         self._api_key = api_key
 
     def collection(self, name: str) -> CollectionHandle:
-        """Return a handle scoped to the named collection.
-
-        The collection need not exist yet — call ``await handle.create(...)``
-        first (idempotent).
-        """
         return CollectionHandle(name=name, qdrant_url=self._qdrant_url, api_key=self._api_key)
 
     async def list_collections(self, *, prefix: str | None = None) -> list[str]:
-        """List all collection names in Qdrant.
-
-        Args:
-            prefix: If provided, only return names that start with this string.
-                    Use to enumerate tenant collections, e.g. ``prefix="org-abc--"``.
-        """
         q = _make_client(self._qdrant_url, self._api_key)
         try:
             result = await q.get_collections()
@@ -81,22 +55,6 @@ class Vector:
         collection_names: list[str],
         query: SearchQuery,
     ) -> list[SearchHit]:
-        """Fan-out search across multiple collections, merge results by score.
-
-        Each collection is searched independently with the same ``query``.
-        Results are merged and sorted by score descending; the top
-        ``query._limit`` overall hits are returned.
-
-        ``SearchHit.collection`` is set to the source collection name for
-        each result so callers can attribute hits.
-
-        Typical use: cross-collection knowledge-base search for an org.
-
-            hits = await vector.search_across(
-                await vector.list_collections(prefix=f"org-{org_id}:"),
-                SearchQuery(vector=embed(q)).limit(10),
-            )
-        """
         import asyncio
 
         async def _search_one(name: str) -> list[SearchHit]:

@@ -21,36 +21,29 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Integration tests for db.locks — advisory lock primitives."""
 
 from __future__ import annotations
 
 import asyncio
 import uuid
-import zlib
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from forktex.database.locks import advisory_lock, try_advisory_lock
+from forktex.database.locks import advisory_key, advisory_lock, key_from_uuid, try_advisory_lock
+from tests.conftest import sessions_for
 
-LOCK_KEY = zlib.crc32(b"test.advisory.lock")
+LOCK_KEY = advisory_key("test", "advisory", "lock")
 
 
 @pytest.mark.asyncio
-async def test_advisory_lock_serialises_access(postgres_url_str: str):
-    """Two concurrent coroutines competing on the SAME key must not overlap.
-
-    advisory_lock is blocking — the second caller waits until the first
-    releases. The order list will show A:enter, A:exit, B:enter, B:exit
-    (or B first), never A:enter, B:enter interleaved.
-    """
+async def test_advisory_lock_serialises_access(postgres_url_str: str) -> None:
     engine = create_async_engine(postgres_url_str)
     order: list[str] = []
-    shared_key = LOCK_KEY  # both workers use the same key → they serialise
+    shared_key = LOCK_KEY
 
-    async def worker(name: str):
+    async def worker(name: str) -> None:
         async with advisory_lock(engine, shared_key):
             order.append(f"{name}:enter")
             await asyncio.sleep(0.05)
@@ -58,7 +51,6 @@ async def test_advisory_lock_serialises_access(postgres_url_str: str):
 
     await asyncio.gather(worker("A"), worker("B"))
 
-    # Serialised means: whichever went first finished before the other entered
     a_enter, a_exit = order.index("A:enter"), order.index("A:exit")
     b_enter, b_exit = order.index("B:enter"), order.index("B:exit")
     assert a_exit < b_enter or b_exit < a_enter, f"Lock did not serialise: {order}"
@@ -66,10 +58,9 @@ async def test_advisory_lock_serialises_access(postgres_url_str: str):
 
 
 @pytest.mark.asyncio
-async def test_try_advisory_lock_non_blocking_acquires(postgres_url_str: str):
-    """try_advisory_lock must yield True when the lock is free."""
+async def test_try_advisory_lock_non_blocking_acquires(postgres_url_str: str) -> None:
     engine = create_async_engine(postgres_url_str)
-    key = zlib.crc32(b"test.try.lock.free")
+    key = advisory_key("test", "try", "free")
 
     async with try_advisory_lock(engine, key) as acquired:
         assert acquired is True
@@ -78,22 +69,20 @@ async def test_try_advisory_lock_non_blocking_acquires(postgres_url_str: str):
 
 
 @pytest.mark.asyncio
-async def test_try_advisory_lock_contention_second_caller_gets_false(postgres_url_str: str):
-    """While a holder keeps the lock open, a second competitor on the SAME
-    key must get False immediately (non-blocking), not wait or deadlock."""
+async def test_try_advisory_lock_contention_second_caller_gets_false(postgres_url_str: str) -> None:
     engine = create_async_engine(postgres_url_str)
-    key = zlib.crc32(b"test.try.lock.contended")
+    key = advisory_key("test", "try", "contended")
     holder_ready = asyncio.Event()
     release_holder = asyncio.Event()
     second_acquired: list[bool] = []
 
-    async def holder():
+    async def holder() -> None:
         async with try_advisory_lock(engine, key) as acquired:
             assert acquired is True
             holder_ready.set()
             await release_holder.wait()
 
-    async def contender():
+    async def contender() -> None:
         await holder_ready.wait()
         async with try_advisory_lock(engine, key) as acquired:
             second_acquired.append(acquired)
@@ -105,15 +94,13 @@ async def test_try_advisory_lock_contention_second_caller_gets_false(postgres_ur
 
 
 @pytest.mark.asyncio
-async def test_advisory_lock_released_after_context(postgres_url_str: str):
-    """Lock must be acquirable again immediately after context exit."""
+async def test_advisory_lock_released_after_context(postgres_url_str: str) -> None:
     engine = create_async_engine(postgres_url_str)
-    key = zlib.crc32(b"test.release.lock")
+    key = advisory_key("test", "release")
 
     async with advisory_lock(engine, key):
-        pass  # acquire + release
+        pass
 
-    # Must succeed again (no deadlock)
     async with advisory_lock(engine, key):
         pass
 
@@ -121,106 +108,130 @@ async def test_advisory_lock_released_after_context(postgres_url_str: str):
 
 
 @pytest.mark.asyncio
-async def test_advisory_lock_different_keys_do_not_block(postgres_url_str: str):
-    """Workers on different keys must run concurrently (no contention)."""
+async def test_advisory_lock_different_keys_do_not_block(postgres_url_str: str) -> None:
     engine = create_async_engine(postgres_url_str)
-    entered: list[str] = []
+    both_inside = asyncio.Barrier(2)
 
-    async def worker(name: str, key: int):
+    async def hold(key: int) -> None:
         async with advisory_lock(engine, key):
-            entered.append(name)
-            await asyncio.sleep(0.05)
+            await asyncio.wait_for(both_inside.wait(), timeout=5)
 
-    key_a = zlib.crc32(b"lock.key.a")
-    key_b = zlib.crc32(b"lock.key.b")
-    await asyncio.gather(worker("A", key_a), worker("B", key_b))
-    # Both should have entered (different keys = no blocking)
-    assert "A" in entered and "B" in entered
-    await engine.dispose()
+    try:
+        await asyncio.gather(hold(advisory_key("lock", "a")), hold(advisory_key("lock", "b")))
+    finally:
+        await engine.dispose()
 
 
-# ---------------------------------------------------------------------------
-# Key derivation (pure — no container)
-# ---------------------------------------------------------------------------
-
-
-def test_advisory_key_is_deterministic_and_fits_signed_bigint():
-    from forktex.database.locks import advisory_key
+def test_advisory_key_is_deterministic_and_fits_signed_bigint() -> None:
 
     a = advisory_key("myapp", "migrations")
-    assert a == advisory_key("myapp", "migrations")  # stable across calls
-    assert -(2**63) <= a < 2**63  # Postgres bigint is signed
+    assert a == advisory_key("myapp", "migrations")
+    assert -(2**63) <= a < 2**63
 
 
-def test_advisory_key_parts_cannot_collide_by_concatenation():
-    """("a", "b") must not equal ("ab",) — the separator is a NUL, which cannot
-    appear in an identifier."""
-    from forktex.database.locks import advisory_key
+def test_advisory_key_parts_cannot_collide_by_concatenation() -> None:
 
     assert advisory_key("a", "b") != advisory_key("ab")
     assert advisory_key("a_b") != advisory_key("a", "b")
 
 
-def test_advisory_key_requires_a_part():
-    from forktex.database.locks import advisory_key
+def test_advisory_key_requires_a_part() -> None:
 
     with pytest.raises(ValueError, match="at least one part"):
         advisory_key()
 
 
-def test_key_from_uuid_folds_128_bits_into_signed_64():
+def test_key_from_uuid_folds_128_bits_into_signed_64() -> None:
     import uuid as _uuid
-
-    from forktex.database.locks import key_from_uuid
 
     u = _uuid.UUID("12345678-1234-5678-1234-567812345678")
     k = key_from_uuid(u)
-    assert k == key_from_uuid(u)  # deterministic
+    assert k == key_from_uuid(u)
     assert -(2**63) <= k < 2**63
-    # uuid7, not uuid4: two ids minted in the same millisecond share their top 48
-    # bits, so this only passes if the fold actually mixes the low half in rather
-    # than letting the timestamp prefix reach the key unchanged.
     assert key_from_uuid(_uuid.uuid7()) != key_from_uuid(_uuid.uuid7())
 
 
-def test_key_from_uuid_rejects_non_uuid():
-    from forktex.database.locks import key_from_uuid
+def test_key_from_uuid_rejects_non_uuid() -> None:
 
     with pytest.raises(TypeError):
         key_from_uuid("not-a-uuid")
 
 
-# ---------------------------------------------------------------------------
-# Transaction-scoped lock (the scope the engine-based helpers cannot express)
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
-async def test_xact_lock_is_released_at_transaction_end(postgres_url_str: str):
-    """The point of `xact_lock`: it participates in the *caller's* transaction,
-    so it needs no unlock and cannot outlive the transaction. The engine-based
-    helpers open their own connection and therefore cannot do this."""
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+async def test_xact_lock_is_released_at_transaction_end(postgres_url_str: str) -> None:
+    from sqlalchemy.ext.asyncio import create_async_engine
 
-    from forktex.database.locks import advisory_key, xact_lock
+    from forktex.database.locks import xact_lock
 
     key = advisory_key("test", "xact", uuid.uuid7().hex)
     engine = create_async_engine(postgres_url_str)
-    maker = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+    maker = sessions_for(engine)
     try:
         async with maker() as s1:
             async with s1.begin():
                 await xact_lock(s1, key)
-                # while s1's transaction is open, another session cannot take it
                 async with maker() as s2:
                     held = (await s2.execute(sa.select(sa.func.pg_try_advisory_lock(key)))).scalar_one()
                     assert held is False
-                    if held:  # pragma: no cover - defensive cleanup
-                        await s2.execute(sa.select(sa.func.pg_advisory_unlock(key)))
-            # s1's transaction has committed -> Postgres released the lock
             async with maker() as s3:
                 free = (await s3.execute(sa.select(sa.func.pg_try_advisory_lock(key)))).scalar_one()
                 assert free is True
                 await s3.execute(sa.select(sa.func.pg_advisory_unlock(key)))
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_advisory_lock_is_released_when_the_body_aborts_its_transaction(postgres_url_str: str) -> None:
+    engine = create_async_engine(postgres_url_str, pool_size=1, max_overflow=0)
+    key = key_from_uuid(uuid.uuid7())
+    try:
+        with pytest.raises(sa.exc.DBAPIError):
+            async with advisory_lock(engine, key) as conn:
+                await conn.execute(sa.text("SELECT 1/0"))
+
+        other = create_async_engine(postgres_url_str)
+        try:
+            async with try_advisory_lock(other, key) as acquired:
+                assert acquired
+        finally:
+            await other.dispose()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_advisory_lock_rolls_back_work_left_uncommitted_on_its_connection(postgres_url_str: str) -> None:
+    engine = create_async_engine(postgres_url_str)
+    table = f"lock_uncommitted_{uuid.uuid7().hex}"
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(sa.text(f'CREATE TABLE "{table}" (n int)'))
+        async with advisory_lock(engine, advisory_key(table)) as conn:
+            await conn.execute(sa.text(f'INSERT INTO "{table}" VALUES (1)'))
+        async with engine.connect() as conn:
+            assert (await conn.execute(sa.text(f'SELECT count(*) FROM "{table}"'))).scalar_one() == 0
+    finally:
+        async with engine.begin() as conn:
+            await conn.execute(sa.text(f'DROP TABLE IF EXISTS "{table}"'))
+        await engine.dispose()
+
+
+class _UnreleasableConnection:
+    def __init__(self) -> None:
+        self.invalidated = False
+
+    async def rollback(self) -> None:
+        raise ConnectionError("server closed the connection")
+
+    async def invalidate(self) -> None:
+        self.invalidated = True
+
+
+@pytest.mark.asyncio
+async def test_a_lock_that_cannot_be_released_closes_its_connection() -> None:
+    from forktex.database.locks import _release
+
+    conn = _UnreleasableConnection()
+    await _release(conn, 1)
+    assert conn.invalidated

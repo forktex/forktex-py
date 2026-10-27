@@ -22,17 +22,10 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""``StorageConfig`` + ``StorageClient`` — the S3/MinIO client itself.
-
-Split out of ``__init__.py`` so that module is the package *surface* (registry,
-module-level facade, ``__all__``) rather than 545 lines of surface plus
-implementation — ``package-layout.md`` rule 1, one module per concern.
-"""
-
 from __future__ import annotations
 
 from contextlib import AbstractAsyncContextManager
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from urllib.parse import quote
 
 from pydantic import Field
@@ -44,7 +37,11 @@ from forktex.types import BaseValueObject
 if TYPE_CHECKING:
     from types import ModuleType
 
+    from botocore.config import Config
+
 logger = get_logger(__name__)
+
+PublicAccess = Literal["none", "bucket-policy", "credentialed-proxy"]
 
 
 class StorageConfig(BaseValueObject):
@@ -60,6 +57,18 @@ class StorageConfig(BaseValueObject):
     """Public-facing endpoint for presigned URL generation. Defaults to ``url``.
     Set when the internal Docker endpoint differs from the browser-reachable URL
     (e.g. internal=``http://minio:9000``, public=``http://localhost:9100``)."""
+    public_access: PublicAccess = "none"
+    """How an unauthenticated reader reaches this bucket's objects.
+
+    - ``"none"`` — credentials required; ``direct_url`` refuses and ``presign``
+      is the way in.
+    - ``"bucket-policy"`` — ``ensure_bucket`` grants anonymous ``GetObject``
+      with an S3 bucket policy. The only non-portable option: ``PutBucketPolicy``
+      is a MinIO-family and SeaweedFS feature, and Garage answers it 501.
+    - ``"credentialed-proxy"`` — something in front signs the upstream request
+      or streams the object itself. A proxy that forwards the request unsigned
+      does not qualify; the bucket would still have to be anonymously readable.
+    """
 
 
 def _get_aioboto3() -> ModuleType:
@@ -71,14 +80,13 @@ def _get_aioboto3() -> ModuleType:
         raise ImportError("Install 'forktex[storage]' (aioboto3) to use forktex.storage") from exc
 
 
+def _signing_config() -> Config:
+    from botocore.config import Config
+
+    return Config(signature_version="s3v4", s3={"addressing_style": "path"})
+
+
 class StorageClient:
-    """Async S3/MinIO client scoped to a single bucket.
-
-    Obtained via ``register(name, ...)`` + ``get_client(name)``, or constructed
-    directly with a ``StorageConfig``. All methods create short-lived boto3
-    clients per call — stateless, safe for concurrent async use.
-    """
-
     def __init__(self, config: StorageConfig) -> None:
         self._config = config
         self._aioboto3 = _get_aioboto3()
@@ -89,32 +97,23 @@ class StorageClient:
         )
 
     def _client(self, *, public: bool = False) -> AbstractAsyncContextManager[Any]:
-        """Return an async context-manager S3 client.
-
-        ``public=True`` uses ``config.public_url`` for presigned URL generation
-        so the URL hostname is browser-reachable even when running in Docker.
-        """
         public_endpoint = self._config.public_url or self._config.url
         endpoint = public_endpoint if public else self._config.url
-        # aioboto3's stubs return a private ``_`` type without exposing the
-        # async-context-manager protocol — at runtime it implements both
-        # ``__aenter__`` and ``__aexit__``. Cast so call sites type-check.
         return cast(
             AbstractAsyncContextManager[Any],
-            self._session.client("s3", endpoint_url=endpoint),
+            self._session.client("s3", endpoint_url=endpoint, config=_signing_config()),
         )
 
     def direct_url(self, key: str) -> str:
-        """Build a direct (non-presigned) URL for a public-read bucket object.
-
-        Only use this when the bucket has a public-read policy — no auth check
-        is performed here.
-        """
+        if self._config.public_access == "none":
+            raise StorageError(
+                f"bucket {self._config.bucket!r} has no public access configured; "
+                "use presign() or set public_access on its StorageConfig"
+            )
         base = (self._config.public_url or self._config.url).rstrip("/")
         return f"{base}/{self._config.bucket}/{quote(key)}"
 
-    async def ensure_bucket(self, *, public_read: bool = False) -> None:
-        """Create the bucket if absent and optionally apply a public-read policy."""
+    async def ensure_bucket(self) -> None:
         import json
 
         from botocore.exceptions import ClientError
@@ -123,10 +122,6 @@ class StorageClient:
             try:
                 await s3.head_bucket(Bucket=self._config.bucket)
             except ClientError as exc:
-                # Only a genuine "doesn't exist" (404/NoSuchBucket) should
-                # trigger create_bucket — anything else (403 permission
-                # denied, a transient network error) must surface as-is,
-                # not get silently reinterpreted as "let's create it".
                 code = exc.response["Error"]["Code"]
                 if code not in ("404", "NoSuchBucket"):
                     logger.error(
@@ -137,7 +132,7 @@ class StorageClient:
                 logger.info("storage: creating bucket", extra={"bucket": self._config.bucket})
                 await s3.create_bucket(Bucket=self._config.bucket)
 
-            if public_read:
+            if self._config.public_access == "bucket-policy":
                 policy = json.dumps(
                     {
                         "Version": "2012-10-17",
@@ -164,7 +159,6 @@ class StorageClient:
         *,
         content_type: str = "application/octet-stream",
     ) -> None:
-        """Upload bytes to ``key``. Overwrites if the key already exists."""
         logger.debug(
             "storage: uploading object",
             extra={"bucket": self._config.bucket, "key": key, "bytes": len(data), "content_type": content_type},
@@ -178,7 +172,6 @@ class StorageClient:
             )
 
     async def download(self, key: str) -> bytes:
-        """Download and return raw bytes. Raises ``ObjectNotFoundError`` if absent."""
         from botocore.exceptions import ClientError
 
         try:
@@ -191,8 +184,6 @@ class StorageClient:
             if code in ("NoSuchKey", "404"):
                 logger.info("storage: object not found", extra={"bucket": self._config.bucket, "key": key})
                 raise ObjectNotFoundError(key) from exc
-            # The driver message can quote request ids, ARNs and headers, so it
-            # goes to the log and reaches the caller only via `__cause__`.
             logger.error(
                 "storage: download failed",
                 extra={"bucket": self._config.bucket, "key": key, "aws_code": code},
@@ -203,13 +194,11 @@ class StorageClient:
             raise StorageError("storage download failed") from exc
 
     async def delete(self, key: str) -> None:
-        """Delete ``key``. No-op if the key does not exist."""
         logger.info("storage: deleting object", extra={"bucket": self._config.bucket, "key": key})
         async with self._client() as s3:
             await s3.delete_object(Bucket=self._config.bucket, Key=key)
 
     async def exists(self, key: str) -> bool:
-        """Return True if ``key`` exists in the bucket."""
         from botocore.exceptions import ClientError
 
         try:
@@ -238,29 +227,12 @@ class StorageClient:
         content_type: str | None = None,
         response_content_disposition: str | None = None,
     ) -> str:
-        """Generate a presigned URL for ``key``.
-
-        The presigned URL IS the access token — present it directly to MinIO.
-        No additional auth header needed. Signature embedded in the URL.
-
-        Args:
-            key: Object key.
-            expires_in: URL validity in seconds (default 1 hour).
-            method: ``"get_object"`` (download) or ``"put_object"`` (upload).
-            content_type: When ``method="put_object"``, MinIO enforces this
-                content-type during the actor's PUT request. Recommended for
-                uploads so actors can't swap file types.
-            response_content_disposition: Override the Content-Disposition header
-                returned with a GET (e.g. ``'attachment; filename="report.pdf"'``
-                to force download instead of inline display).
-        """
         params: dict[str, Any] = {"Bucket": self._config.bucket, "Key": key}
         if content_type and method == "put_object":
             params["ContentType"] = content_type
         if response_content_disposition and method == "get_object":
             params["ResponseContentDisposition"] = response_content_disposition
 
-        # Use public endpoint so the presigned URL is browser-reachable
         async with self._client(public=True) as s3:
             return await s3.generate_presigned_url(
                 method,
@@ -276,21 +248,6 @@ class StorageClient:
         content_type: str | None = None,
         max_size_bytes: int | None = None,
     ) -> dict[str, Any]:
-        """Generate a presigned POST policy for a browser file upload.
-
-        Returns ``{"url": str, "fields": dict}`` — the browser POSTs a
-        ``multipart/form-data`` request to ``url`` including all ``fields``
-        as hidden form inputs. Compatible with any S3-presigned-POST client.
-
-        This is a single-object upload — unrelated to S3's own chunked
-        "Multipart Upload" API, which this module does not implement.
-
-        Args:
-            key: Object key to upload to.
-            expires_in: Policy validity in seconds.
-            content_type: Restrict uploads to this MIME type.
-            max_size_bytes: Maximum allowed object size. None = unlimited.
-        """
         conditions: list[Any] = []
         fields: dict[str, str] = {}
 

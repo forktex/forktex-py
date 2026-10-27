@@ -22,17 +22,12 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""`forktex.worker` — the `Worker` lifecycle and its three hosts.
-
-The seams asserted here are ownership seams: lifecycle ordering, the
-run-before-start guard, who owns the signals, whether a graceful stop actually
-drains, and the pool's supervisor contract. The arq worker itself is faked at the
-one place `Worker.start` builds it, so these run without consuming real jobs;
-`tests/test_queue/` covers real execution against Redis.
-"""
-
 from __future__ import annotations
 
+from collections.abc import Coroutine
+from collections.abc import Callable
+from typing import Any
+from collections.abc import Iterator
 import asyncio
 import signal
 
@@ -52,9 +47,7 @@ from forktex.worker.factory import _bootstrap
 
 
 @pytest.fixture(autouse=True)
-def _register_dummy_task():
-    """arq requires >=1 registered function to construct a Worker. Register a no-op
-    so these tests can build real Worker instances."""
+def _register_dummy_task() -> Iterator[None]:
 
     @queue.task()
     async def _noop(ctx: dict) -> str:
@@ -64,8 +57,6 @@ def _register_dummy_task():
 
 
 class _FakeArq:
-    """Stands in for `arq.Worker`: records the lifecycle without consuming."""
-
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.signals: list[int] = []
@@ -78,8 +69,6 @@ class _FakeArq:
         self.calls.append("returned")
 
     def handle_sig(self, signum: int) -> None:
-        """arq's immediate-cancel path. Recorded separately so a test can prove the
-        graceful stop does NOT come through here."""
         self.signals.append(signum)
         self._stop.set()
 
@@ -92,40 +81,33 @@ class _FakeArq:
 
 
 @pytest.fixture
-def fake_arq(monkeypatch):
-    """Replace `queue.make_worker` — the single seam `Worker.start` builds through."""
+def fake_arq(monkeypatch: pytest.MonkeyPatch) -> _FakeArq:
     from forktex.worker import factory as worker_factory
 
     built: dict = {}
     fake = _FakeArq()
 
-    def _make_worker(**kwargs):
+    def _make_worker(**kwargs: object) -> _FakeArq:
         built.update(kwargs)
         return fake
 
     monkeypatch.setattr(worker_factory._queue, "make_worker", _make_worker)
-    fake.built = built  # type: ignore[attr-defined]
+    fake.built = built
     return fake
 
 
 @pytest.fixture
-def no_queue_io(monkeypatch):
-    """Stub the queue pool so lifecycle tests need no Redis."""
+def no_queue_io(monkeypatch: pytest.MonkeyPatch) -> None:
     from forktex.worker import factory as worker_factory
 
-    async def _noop(*_a, **_k) -> None:
+    async def _noop(*_a: object, **_k: object) -> None:
         return None
 
     monkeypatch.setattr(worker_factory._queue, "init", _noop)
     monkeypatch.setattr(worker_factory._queue, "close", _noop)
 
 
-# --------------------------------------------------------------------------
-# config
-# --------------------------------------------------------------------------
-
-
-def test_worker_config_defaults():
+def test_worker_config_defaults() -> None:
     cfg = WorkerConfig(redis_url="redis://localhost:6379/1")
     assert cfg.queue_name == "default"
     assert cfg.max_jobs == 10
@@ -134,10 +116,10 @@ def test_worker_config_defaults():
     assert cfg.startup_hooks == []
 
 
-def test_config_reaches_the_arq_worker(fake_arq, no_queue_io):
+def test_config_reaches_the_arq_worker(fake_arq: _FakeArq, no_queue_io: None) -> None:
     cfg = WorkerConfig(redis_url="redis://h/1", queue_name="q", max_jobs=3, job_timeout=7, drain_timeout=11.0)
 
-    async def _go():
+    async def _go() -> None:
         async with Worker(cfg):
             pass
 
@@ -149,11 +131,9 @@ def test_config_reaches_the_arq_worker(fake_arq, no_queue_io):
     assert built["drain_timeout"] == 11
 
 
-def test_drain_timeout_reaches_arq_as_an_int(fake_arq, no_queue_io):
-    """arq compares `job_completion_wait` against a whole-second budget, so a float
-    config value has to be narrowed rather than passed through."""
+def test_drain_timeout_reaches_arq_as_an_int(fake_arq: _FakeArq, no_queue_io: None) -> None:
 
-    async def _go():
+    async def _go() -> None:
         async with Worker(WorkerConfig(redis_url="redis://h/1", drain_timeout=2.9)):
             pass
 
@@ -162,12 +142,9 @@ def test_drain_timeout_reaches_arq_as_an_int(fake_arq, no_queue_io):
     assert isinstance(fake_arq.built["drain_timeout"], int)
 
 
-# --------------------------------------------------------------------------
-# lifecycle
-# --------------------------------------------------------------------------
-
-
-async def test_start_runs_hooks_in_order_before_the_queue_pool(fake_arq, monkeypatch):
+async def test_start_runs_hooks_in_order_before_the_queue_pool(
+    fake_arq: _FakeArq, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from forktex.worker import factory as worker_factory
 
     order: list[str] = []
@@ -178,10 +155,10 @@ async def test_start_runs_hooks_in_order_before_the_queue_pool(fake_arq, monkeyp
     async def hook_b() -> None:
         order.append("b")
 
-    async def _init(*_a, **_k) -> None:
+    async def _init(*_a: object, **_k: object) -> None:
         order.append("queue.init")
 
-    async def _close(*_a, **_k) -> None:
+    async def _close(*_a: object, **_k: object) -> None:
         return None
 
     monkeypatch.setattr(worker_factory._queue, "init", _init)
@@ -191,11 +168,10 @@ async def test_start_runs_hooks_in_order_before_the_queue_pool(fake_arq, monkeyp
     async with Worker(cfg):
         pass
 
-    # Hooks first, so what they register exists before any job runs, then the pool.
     assert order == ["a", "b", "queue.init"]
 
 
-async def test_a_raising_hook_aborts_before_any_consuming(fake_arq, no_queue_io):
+async def test_a_raising_hook_aborts_before_any_consuming(fake_arq: _FakeArq, no_queue_io: None) -> None:
     async def boom() -> None:
         raise RuntimeError("hook failed")
 
@@ -207,19 +183,19 @@ async def test_a_raising_hook_aborts_before_any_consuming(fake_arq, no_queue_io)
     assert fake_arq.calls == [], "the consumer started despite a failed hook"
 
 
-async def test_run_before_start_is_refused():
+async def test_run_before_start_is_refused() -> None:
     worker = Worker(WorkerConfig(redis_url="redis://h/1"))
     with pytest.raises(RuntimeError, match="before start"):
         await worker.run()
 
 
-async def test_arq_worker_property_before_start_is_refused():
+async def test_arq_worker_property_before_start_is_refused() -> None:
     worker = Worker(WorkerConfig(redis_url="redis://h/1"))
     with pytest.raises(RuntimeError, match="has not run"):
         _ = worker.arq_worker
 
 
-async def test_start_is_idempotent(fake_arq, no_queue_io):
+async def test_start_is_idempotent(fake_arq: _FakeArq, no_queue_io: None) -> None:
     worker = Worker(WorkerConfig(redis_url="redis://h/1"))
     await worker.start()
     first = worker.arq_worker
@@ -228,7 +204,7 @@ async def test_start_is_idempotent(fake_arq, no_queue_io):
     await worker.aclose()
 
 
-async def test_standalone_owns_the_signals_and_embedded_does_not(fake_arq, no_queue_io):
+async def test_standalone_owns_the_signals_and_embedded_does_not(fake_arq: _FakeArq, no_queue_io: None) -> None:
     cfg = WorkerConfig(redis_url="redis://h/1")
 
     async with Worker(cfg, handle_signals=True):
@@ -240,13 +216,13 @@ async def test_standalone_owns_the_signals_and_embedded_does_not(fake_arq, no_qu
     assert fake_arq.built["handle_signals"] is False
 
 
-async def test_stop_and_aclose_are_safe_before_start(fake_arq):
+async def test_stop_and_aclose_are_safe_before_start(fake_arq: _FakeArq) -> None:
     worker = Worker(WorkerConfig(redis_url="redis://h/1"))
     await worker.stop()
     await worker.aclose()
 
 
-async def test_aclose_is_idempotent(fake_arq, no_queue_io):
+async def test_aclose_is_idempotent(fake_arq: _FakeArq, no_queue_io: None) -> None:
     worker = Worker(WorkerConfig(redis_url="redis://h/1"))
     await worker.start()
     await worker.aclose()
@@ -254,15 +230,7 @@ async def test_aclose_is_idempotent(fake_arq, no_queue_io):
     assert fake_arq.calls.count("close") == 1
 
 
-# --------------------------------------------------------------------------
-# graceful stop
-# --------------------------------------------------------------------------
-
-
-async def test_stop_drains_instead_of_cancelling_in_flight_jobs(fake_arq, no_queue_io):
-    """Regression guard for a silent job-killer. arq's `handle_sig` cancels every
-    in-flight task immediately; only `handle_sig_wait_for_completion` stops picking
-    up new work and waits. A graceful stop routed through the former loses jobs."""
+async def test_stop_drains_instead_of_cancelling_in_flight_jobs(fake_arq: _FakeArq, no_queue_io: None) -> None:
     worker = Worker(WorkerConfig(redis_url="redis://h/1"), handle_signals=False)
     await worker.start()
     task = asyncio.create_task(worker.run())
@@ -275,7 +243,7 @@ async def test_stop_drains_instead_of_cancelling_in_flight_jobs(fake_arq, no_que
     await worker.aclose()
 
 
-async def test_stop_makes_run_return(fake_arq, no_queue_io):
+async def test_stop_makes_run_return(fake_arq: _FakeArq, no_queue_io: None) -> None:
     worker = Worker(WorkerConfig(redis_url="redis://h/1"), handle_signals=False)
     await worker.start()
     task = asyncio.create_task(worker.run())
@@ -286,12 +254,7 @@ async def test_stop_makes_run_return(fake_arq, no_queue_io):
     await worker.aclose()
 
 
-# --------------------------------------------------------------------------
-# background() — the FastAPI-lifespan host
-# --------------------------------------------------------------------------
-
-
-async def test_background_consumes_alongside_the_host_and_drains(fake_arq, no_queue_io):
+async def test_background_consumes_alongside_the_host_and_drains(fake_arq: _FakeArq, no_queue_io: None) -> None:
     cfg = WorkerConfig(redis_url="redis://h/1")
     async with background(cfg) as worker:
         assert isinstance(worker, Worker)
@@ -303,16 +266,13 @@ async def test_background_consumes_alongside_the_host_and_drains(fake_arq, no_qu
     assert "close" in fake_arq.calls
 
 
-async def test_background_does_not_let_arq_take_the_hosts_signals(fake_arq, no_queue_io):
-    """The whole reason `background` exists: arq's handlers would fight the host's
-    own shutdown path."""
+async def test_background_does_not_let_arq_take_the_hosts_signals(fake_arq: _FakeArq, no_queue_io: None) -> None:
     async with background(WorkerConfig(redis_url="redis://h/1")):
         pass
     assert fake_arq.built["handle_signals"] is False
 
 
-async def test_background_cancels_when_the_drain_overruns(no_queue_io, monkeypatch):
-    """A job that ignores the drain must not hold the host's shutdown open forever."""
+async def test_background_cancels_when_the_drain_overruns(no_queue_io: None, monkeypatch: pytest.MonkeyPatch) -> None:
     from forktex.worker import factory as worker_factory
 
     class _NeverStops:
@@ -342,7 +302,9 @@ async def test_background_cancels_when_the_drain_overruns(no_queue_io, monkeypat
     assert stubborn.cancelled, "an unresponsive consumer was never cancelled"
 
 
-async def test_background_uses_an_explicit_drain_timeout_over_the_config(no_queue_io, monkeypatch):
+async def test_background_uses_an_explicit_drain_timeout_over_the_config(
+    no_queue_io: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from forktex.worker import factory as worker_factory
 
     class _NeverStops:
@@ -365,7 +327,6 @@ async def test_background_uses_an_explicit_drain_timeout_over_the_config(no_queu
     stubborn = _NeverStops()
     monkeypatch.setattr(worker_factory._queue, "make_worker", lambda **_k: stubborn)
 
-    # Config says 300s; the call site says 50ms and must win, or the test would hang.
     cfg = WorkerConfig(redis_url="redis://h/1", drain_timeout=300.0)
     async with background(cfg, drain_timeout=0.05):
         await asyncio.sleep(0)
@@ -373,8 +334,9 @@ async def test_background_uses_an_explicit_drain_timeout_over_the_config(no_queu
     assert stubborn.cancelled
 
 
-async def test_background_reraises_a_consumer_that_dies_on_its_own(no_queue_io, monkeypatch):
-    """A worker task that crashes must not leave the host running blind."""
+async def test_background_reraises_a_consumer_that_dies_on_its_own(
+    no_queue_io: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from forktex.worker import factory as worker_factory
 
     class _Dies:
@@ -394,17 +356,12 @@ async def test_background_reraises_a_consumer_that_dies_on_its_own(no_queue_io, 
             await asyncio.sleep(0)
 
 
-# --------------------------------------------------------------------------
-# run_worker / pool
-# --------------------------------------------------------------------------
-
-
-def test_run_worker_is_a_thin_asyncio_run_wrapper(monkeypatch):
+def test_run_worker_is_a_thin_asyncio_run_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
     from forktex.worker import factory as worker_factory
 
     seen: dict = {}
 
-    def _fake_run(coro):
+    def _fake_run(coro: Coroutine[Any, Any, object]) -> None:
         seen["coro"] = coro.__qualname__
         coro.close()
 
@@ -413,15 +370,13 @@ def test_run_worker_is_a_thin_asyncio_run_wrapper(monkeypatch):
     assert seen["coro"] == _bootstrap.__qualname__
 
 
-def test_a_pool_of_one_skips_the_supervisor(monkeypatch):
-    """An extra process would only add a signal hop between the manager and the
-    worker."""
+def test_a_pool_of_one_skips_the_supervisor(monkeypatch: pytest.MonkeyPatch) -> None:
     from forktex.worker import factory as worker_factory
 
     calls: list[str] = []
     monkeypatch.setattr(worker_factory, "run_worker", lambda cfg: calls.append("direct"))
 
-    def _no_process(*_a, **_k):
+    def _no_process(*_a: object, **_k: object) -> None:
         raise AssertionError("a pool of one spawned a supervisor")
 
     monkeypatch.setattr(worker_factory.multiprocessing, "get_context", _no_process)
@@ -429,54 +384,55 @@ def test_a_pool_of_one_skips_the_supervisor(monkeypatch):
     assert calls == ["direct"]
 
 
-def test_a_pool_needs_at_least_one_process():
+def test_a_pool_needs_at_least_one_process() -> None:
     with pytest.raises(ValueError, match="processes must be >= 1"):
         run_worker_pool(WorkerConfig(redis_url="redis://h/1"), processes=0)
 
 
-def test_create_worker_passes_through_to_queue(fake_arq):
+def test_create_worker_passes_through_to_queue(fake_arq: _FakeArq) -> None:
     cfg = WorkerConfig(redis_url="redis://h/1", queue_name="passthrough", drain_timeout=9.0)
     create_worker(cfg)
     assert fake_arq.built["queue_name"] == "passthrough"
     assert fake_arq.built["drain_timeout"] == 9
-    # No lifecycle wiring: create_worker deliberately skips hooks and the pool.
     assert "handle_signals" not in fake_arq.built
 
 
 class _FakeChild:
-    def __init__(self, target=None, args=(), name=""):
+    def __init__(
+        self,
+        target: Callable[..., object] | None = None,
+        args: tuple[object, ...] = (),
+        name: str = "",
+    ) -> None:
         self.name = name
         self.pid = 4242
         self.exitcode = 0
         self.started = False
         self.joined = False
 
-    def start(self):
+    def start(self) -> None:
         self.started = True
 
-    def join(self):
+    def join(self) -> None:
         self.joined = True
 
-    def is_alive(self):
+    def is_alive(self) -> bool:
         return False
 
 
 @pytest.fixture
-def fake_pool(monkeypatch):
+def fake_pool(monkeypatch: pytest.MonkeyPatch) -> list[_FakeChild]:
     from forktex.worker import factory as worker_factory
 
     made: list[_FakeChild] = []
 
     class _Ctx:
-        def Process(self, **kwargs):  # noqa: N802 - matches multiprocessing's API
+        def Process(self, **kwargs: object) -> _FakeChild:
             child = _FakeChild(**kwargs)
             made.append(child)
             return child
 
-        def Process_positional(self, *a, **k):  # pragma: no cover
-            raise AssertionError
-
-    def _get_context(method):
+    def _get_context(method: str) -> _Ctx:
         assert method == "spawn", f"pool must spawn, not {method!r}"
         return _Ctx()
 
@@ -484,35 +440,27 @@ def fake_pool(monkeypatch):
     return made
 
 
-def test_a_pool_starts_and_joins_one_process_per_worker(fake_pool):
+def test_a_pool_starts_and_joins_one_process_per_worker(fake_pool: list[_FakeChild]) -> None:
     run_worker_pool(WorkerConfig(redis_url="redis://h/1"), processes=3)
     assert len(fake_pool) == 3
     assert all(c.started and c.joined for c in fake_pool)
 
 
-def test_a_pool_uses_spawn_not_fork(fake_pool):
-    """A forked child inherits the parent's event loop, Redis sockets and DB pool,
-    none of which survive the fork intact. The fixture asserts the method."""
+def test_a_pool_uses_spawn_not_fork(fake_pool: list[_FakeChild]) -> None:
     run_worker_pool(WorkerConfig(redis_url="redis://h/1"), processes=2)
     assert len(fake_pool) == 2
 
 
-def test_the_pool_restores_the_signal_handlers_it_installed(fake_pool):
+def test_the_pool_restores_the_signal_handlers_it_installed(fake_pool: list[_FakeChild]) -> None:
     before = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
     run_worker_pool(WorkerConfig(redis_url="redis://h/1"), processes=2)
     after = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
     assert after == before
 
 
-async def test_arqs_own_drain_cancellation_is_not_mistaken_for_the_host_stopping(no_queue_io, monkeypatch):
-    """Regression guard, found only by the real FastAPI integration test.
-
-    arq ends its drain by cancelling its own main task, so `run()` legitimately
-    finishes *cancelled*. An earlier `wait_for(shield(task))` re-raised that
-    CancelledError out of the context manager; inside a lifespan's shutdown that made
-    the entire ASGI app look cancelled and the client saw a dead future instead of a
-    clean shutdown.
-    """
+async def test_arqs_own_drain_cancellation_is_not_mistaken_for_the_host_stopping(
+    no_queue_io: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from forktex.worker import factory as worker_factory
 
     class _CancelsItselfOnDrain:
@@ -532,19 +480,18 @@ async def test_arqs_own_drain_cancellation_is_not_mistaken_for_the_host_stopping
 
     monkeypatch.setattr(worker_factory._queue, "make_worker", lambda **_k: _CancelsItselfOnDrain())
 
-    # Must complete normally — no CancelledError escaping into the host.
     async with background(WorkerConfig(redis_url="redis://h/1", drain_timeout=5.0)):
         await asyncio.sleep(0)
 
 
-def test_config_is_exposed_on_the_worker():
+def test_config_is_exposed_on_the_worker() -> None:
     cfg = WorkerConfig(redis_url="redis://h/1", queue_name="exposed")
     assert Worker(cfg).config is cfg
 
 
-def test_the_pool_forwards_a_signal_to_every_live_child(fake_pool, monkeypatch):
-    """The parent is a supervisor: SIGTERM to it must reach the children, or an
-    orchestrator's stop would kill the parent and orphan the workers."""
+def test_the_pool_forwards_a_signal_to_every_live_child(
+    fake_pool: list[_FakeChild], monkeypatch: pytest.MonkeyPatch
+) -> None:
     from forktex.worker import factory as worker_factory
 
     killed: list[tuple[int, int]] = []
@@ -553,14 +500,13 @@ def test_the_pool_forwards_a_signal_to_every_live_child(fake_pool, monkeypatch):
     handlers: dict = {}
     real_signal = signal.signal
 
-    def _capture(sig, handler):
+    def _capture(sig: int, handler: object) -> None:
         if callable(handler):
             handlers[sig] = handler
         return real_signal(sig, handler) if not callable(handler) else real_signal(sig, signal.SIG_DFL)
 
     monkeypatch.setattr(worker_factory.signal, "signal", _capture)
 
-    # Children must look alive for the forwarder to signal them.
     monkeypatch.setattr(_FakeChild, "is_alive", lambda self: True)
 
     run_worker_pool(WorkerConfig(redis_url="redis://h/1"), processes=2)
@@ -569,6 +515,5 @@ def test_the_pool_forwards_a_signal_to_every_live_child(fake_pool, monkeypatch):
     forward(signal.SIGTERM, None)
     assert killed == [(4242, signal.SIGTERM), (4242, signal.SIGTERM)]
 
-    # Idempotent: a second signal while already stopping must not re-kill.
     forward(signal.SIGTERM, None)
     assert len(killed) == 2

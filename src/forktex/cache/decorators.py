@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Cache decorator for async functions."""
 
 import functools
 import hashlib
@@ -33,18 +32,6 @@ from forktex.cache.ops import fetch_or_set, fetch_swr
 
 
 def _default_key(func: Callable, args: tuple, kwargs: dict) -> str:
-    """A cache key derived from the qualified function name and its arguments.
-
-    ``kwargs`` are sorted, because a dict's repr preserves insertion order and
-    ``f(a=1, b=2)`` / ``f(b=2, a=1)`` are the same call — hashing them apart is a
-    permanent miss that looks like a cache which simply never helps.
-
-    The argument text is still ``repr``, so the key is only as stable as the
-    arguments' reprs. A value whose type falls back to ``object.__repr__``
-    embeds its ``id()``: the entry is never re-hit, and two objects that happen
-    to share a repr collide. Pass ``key_builder`` for arguments that are not
-    reliably representable — identity is not a cache key.
-    """
     rendered_kwargs = ", ".join(f"{k}={kwargs[k]!r}" for k in sorted(kwargs))
     raw = f"{func.__module__}.{func.__qualname__}:{args!r}:{{{rendered_kwargs}}}"
     return hashlib.sha256(raw.encode()).hexdigest()
@@ -57,24 +44,6 @@ def cached(
     key_builder: Callable | None = None,
     response_model: type[BaseModel] | None = None,
 ) -> Callable:
-    """Decorator to cache async function results in Redis.
-
-    Args:
-        ttl: Cache TTL in seconds (or refresh threshold for SWR).
-        stale_ttl: If set, uses stale-while-revalidate strategy.
-        key_builder: Custom function to build cache key from args.
-        response_model: Pydantic model for deserialization.
-
-    Usage::
-
-        @cached(ttl=300, response_model=UserProfile)
-        async def get_profile(user_id: str) -> UserProfile:
-            ...
-
-        @cached(ttl=60, stale_ttl=300)
-        async def get_feed(org_id: str) -> dict:
-            ...
-    """
 
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)

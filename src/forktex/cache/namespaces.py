@@ -21,42 +21,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Cache key namespace management.
-
-Each consumer project should define its own CachePrefix enum extending
-StrEnum. This module provides the base pattern and the ``key_for()`` builder.
-
-Usage::
-
-    from enum import StrEnum
-    from forktex.cache.namespaces import key_for
-
-    class CachePrefix(StrEnum):
-        USER = "user"
-        FEED = "feed"
-        STATS = "stats"
-
-    key = key_for(CachePrefix.USER, user_id)  # "user:abc-123"
-"""
 
 from enum import StrEnum
 
 
 class CachePrefix(StrEnum):
-    """Base cache prefix enum. Consumers should define their own."""
-
     pass
 
 
 def key_for(prefix: str | CachePrefix, *parts: object) -> str:
-    """Build a namespaced cache key: ``"prefix:part1:part2"``.
-
-    Raises ``ValueError`` if any part is ``None`` — a ``None`` part almost
-    always means an upstream ID was never resolved (e.g. ``user_id`` not
-    yet set), and silently dropping it would collapse a per-entity key
-    onto the bare, unscoped ``prefix`` key, which every other caller of
-    that prefix also reads and writes.
-    """
     if any(p is None for p in parts):
         raise ValueError(f"key_for({prefix!r}, ...): None part in {parts!r}")
     parts_str = ":".join(str(p) for p in parts if p != "")

@@ -21,30 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Level-1 ``[graph]`` extra — pure-Python multi-edge typed-graph algebra.
-
-A generic in-memory graph primitive consumers compose into bigger
-substrates. ``GraphNode`` / ``GraphEdge`` carry a free-form ``kind: str``
-so each consumer brings its own vocabulary (forktex-py[graph] uses
-``project_root``/``module``/``contains``; an intelligence consumer can
-use ``person``/``account``/``works_at``). Multi-edge by construction:
-edges with the same kind, endpoints, and attrs collapse; differ on any
-of those three and they coexist between the same pair of nodes.
-
-What ships:
-  - ``GraphNode`` / ``GraphEdge`` / ``Graph`` Pydantic models.
-  - Deterministic edge IDs via blake2s over (kind, src, dst, attrs).
-  - O(1) lazy adjacency (out_edges / in_edges / neighbors).
-  - Algorithms: BFS, DFS, transitive closure, shortest path, cycle detection.
-  - Subgraph extract / induce.
-  - Deterministic JSON serialisation (sorted), parse round-trip.
-
-What does NOT ship:
-  - Persistence. This is an in-memory algebra; persist the result yourself.
-  - Cypher / SPARQL / DSL parsing. Out of scope.
-  - Backends. Tomorrow Neo4j/dgraph adapters land as peer extras; today
-    this is in-memory only. The user-facing API stays stable.
-"""
 
 from forktex.graph.algebra import (
     bfs,

@@ -3,7 +3,9 @@
 The shared error vocabulary: an `AppError` hierarchy, a stable `AppErrorCode` enum, and the
 `ErrorEnvelope` wire shape every ForkTex service returns on failure.
 
-Always bundled — no extra required.
+## Install
+
+Always bundled — `error` is a level-0 extra with no packages behind it. `pip install forktex` is enough; `forktex[error]` resolves but installs nothing extra. Depends on `forktex.types`, a level-0 sibling. Nothing here ever raises `ImportError` for a missing extra.
 
 ```bash
 pip install forktex

@@ -22,36 +22,16 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""Graph module errors.
-
-Each keeps a builtin in its bases alongside the ``AppError`` type: these are
-raised from id lookups and argument checks, so callers already catch
-``KeyError``/``ValueError`` and must keep working.
-"""
-
 from __future__ import annotations
 
 from forktex.error import AppErrorCode, BadRequestError, NotFoundError
 
 
 class NodeNotFoundError(NotFoundError, KeyError):
-    """An edge referenced a node id the graph does not contain.
-
-    A ``NotFoundError`` so a graph miss carries the same contract as any other
-    missing resource; ``KeyError`` stays in the bases because these are raised
-    from id lookups and callers catch it as such.
-    """
-
     code = AppErrorCode.NOT_FOUND
 
 
 class InvalidDirectionError(BadRequestError, ValueError):
-    """``neighbors(direction=…)`` was given something other than out/in/both.
-
-    ``ValueError`` stays in the bases for the same reason as
-    :class:`NodeNotFoundError`'s ``KeyError``: it is what callers already catch.
-    """
-
     code = AppErrorCode.BAD_REQUEST
 
 

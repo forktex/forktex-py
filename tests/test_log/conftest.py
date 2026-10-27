@@ -21,10 +21,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Shared fixtures for tests/test_log/*.py — no containers needed (stdlib only)."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from collections.abc import Iterator
 import json
 import logging
 
@@ -34,27 +35,14 @@ from forktex.log import JsonFormatter, get_logger, set_trace_id
 
 
 @pytest.fixture(autouse=True)
-def reset_trace_id():
-    """Ensure trace_id is cleared between tests."""
+def reset_trace_id() -> Iterator[None]:
     set_trace_id(None)
     yield
     set_trace_id(None)
 
 
 @pytest.fixture
-def capture_json():
-    """Factory fixture: build an isolated logger + JSON-capturing handler.
-
-    ``handler.addFilter(ContextFilter(...))`` is required manually here — it's what
-    ``setup_logging()`` wires onto the root handler in production, and it's what
-    actually sets ``record.trace_id``/``root_trace_id``/``run_id``/``service``/
-    ``_forktex_extra`` from the current contextvars.
-
-        def test_x(capture_json):
-            log, captured = capture_json(service="svc1")
-            log.info("hello")
-            assert captured[0]["message"] == "hello"
-    """
+def capture_json() -> Callable[..., tuple[logging.Logger, list[dict]]]:
 
     def _factory(service: str = "test") -> tuple[logging.Logger, list[dict]]:
         from forktex.log import ContextFilter
@@ -66,7 +54,7 @@ def capture_json():
                 captured.append(json.loads(self.format(record)))
 
         handler = CaptureHandler()
-        handler.setFormatter(JsonFormatter())  # service is injected onto the record by _ContextFilter
+        handler.setFormatter(JsonFormatter())
         handler.addFilter(ContextFilter(service=service))
 
         log = get_logger(f"test.module.{service}")

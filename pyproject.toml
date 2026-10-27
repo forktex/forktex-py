@@ -24,7 +24,7 @@
 
 [project]
 name = "forktex"
-version = "0.11.0"
+version = "0.13.0"
 description = "The shared Python substrate for ForkTex services — logging, errors, types, and one facade per piece of infrastructure."
 authors = [
     {name = "FORKTEX",email = "info@forktex.com"}
@@ -157,7 +157,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ANN"]
 # passed through, the real class under `TYPE_CHECKING` for an import cycle),
 # not to add a line here.
 # Tests: baseline only (test code isn't held to the annotation/strict set).
-"tests/**" = ["E1", "E2", "E5", "I", "UP", "B", "SIM", "RUF", "ANN"]
+"tests/**" = ["E1", "E2", "E5", "I", "UP", "B", "BLE", "N", "SIM", "RUF", "ANN"]
 
 [tool.pyright]
 include = ["src"]

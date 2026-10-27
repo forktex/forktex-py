@@ -22,36 +22,20 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""Storage module errors.
-
-``AppError`` subclasses, so an HTTP transport renders them with a real status
-(404 for a missing object) rather than a masked 500 — see ``forktex.error``.
-"""
-
 from __future__ import annotations
 
 from forktex.error import AppError, AppErrorCode
 
 
 class StorageError(AppError):
-    """Base class for storage errors."""
-
     code = AppErrorCode.INTERNAL
 
 
 class ObjectNotFoundError(StorageError):
-    """Raised when a requested key does not exist."""
-
     code = AppErrorCode.NOT_FOUND
 
 
 class ClientNotRegisteredError(StorageError):
-    """Raised when ``get_client(name)`` is called for an unregistered name.
-
-    ``INTERNAL`` — a missing ``register()`` call is a deployment/wiring
-    mistake, not something the caller of an HTTP endpoint can fix.
-    """
-
     code = AppErrorCode.INTERNAL
 
 

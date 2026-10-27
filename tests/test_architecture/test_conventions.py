@@ -22,19 +22,6 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""Conventions the 12 shipped packages hold in common, checked rather than trusted.
-
-Two rules from `docs/engineering/standards/`, both of which had live violations
-until this pass:
-
-- `package-layout.md:130-132` — "`errors.py` is always `errors.py`". Five packages
-  defined error classes inline instead, three of them buried in a 155-line
-  `__init__.py`.
-- `error-envelope.md:56-58` — a library's public errors derive from `AppError`, so
-  a consumer's single boundary renders them instead of letting a bare
-  `RuntimeError` escape as a masked 500. `cache` raised a bare one.
-"""
-
 from __future__ import annotations
 
 import ast
@@ -44,27 +31,10 @@ import pathlib
 import pytest
 
 from forktex.error import AppError
+from tests.test_architecture.test_public_surface import PACKAGES
 
 SRC = pathlib.Path(__file__).resolve().parents[2] / "src" / "forktex"
 
-#: The shipped packages, same list as `test_public_surface.PACKAGES`.
-PACKAGES = [
-    "cache",
-    "database",
-    "error",
-    "graph",
-    "iso",
-    "log",
-    "queue",
-    "storage",
-    "store",
-    "types",
-    "vault",
-    "vector",
-]
-
-#: `error` IS the shared error vocabulary — its classes belong in its own
-#: `__init__.py`, not in a nested `errors.py`.
 _IS_THE_VOCABULARY = {"error"}
 
 
@@ -74,13 +44,7 @@ def _classes_defined_in(path: pathlib.Path) -> list[str]:
 
 
 @pytest.mark.parametrize("package", sorted(set(PACKAGES) - _IS_THE_VOCABULARY))
-def test_error_classes_live_in_errors_py(package: str):
-    """An error class defined outside `errors.py` is a convention break.
-
-    Not cosmetic: the whole point of a fixed filename is that a reader (or an
-    agent) can find every failure mode of a package without reading it. Three of
-    `storage`'s were previously invisible inside its `__init__.py`.
-    """
+def test_error_classes_live_in_errors_py(package: str) -> None:
     stray: list[str] = []
     for path in sorted((SRC / package).rglob("*.py")):
         if path.name == "errors.py":
@@ -90,8 +54,7 @@ def test_error_classes_live_in_errors_py(package: str):
 
 
 @pytest.mark.parametrize("package", PACKAGES)
-def test_every_exported_error_derives_from_app_error(package: str):
-    """A public error that is not an `AppError` escapes the consumer's boundary."""
+def test_every_exported_error_derives_from_app_error(package: str) -> None:
     module = importlib.import_module(f"forktex.{package}")
     rogue = [
         name
@@ -103,52 +66,34 @@ def test_every_exported_error_derives_from_app_error(package: str):
     assert rogue == [], f"forktex.{package} exports errors that are not AppError subclasses: {rogue}"
 
 
-#: The three facades that expose a named-client registry. `code-reuse.md` rule 2
-#: says a mechanic needed in a second package should be promoted; at the third use
-#: these had already diverged — only `storage` logged, only `store` omitted
-#: `deregister` from its `__all__`. Until a shared `ClientRegistry` exists, this
-#: pins the surface so they cannot drift apart again.
-_REGISTRY_FACADES = ["storage", "store", "vector"]
+_REGISTRY_FACADES = sorted(
+    package
+    for package in PACKAGES
+    if "from forktex.registry import ClientRegistry" in (SRC / package / "__init__.py").read_text()
+)
 _REGISTRY_SURFACE = ("register", "get_client", "deregister")
 
 
 @pytest.mark.parametrize("package", _REGISTRY_FACADES)
-def test_registry_facades_expose_the_same_surface(package: str):
+def test_registry_facades_expose_the_same_surface(package: str) -> None:
     module = importlib.import_module(f"forktex.{package}")
     missing = [name for name in _REGISTRY_SURFACE if name not in module.__all__]
     assert missing == [], f"forktex.{package} omits registry functions from __all__: {missing}"
 
 
 @pytest.mark.parametrize("package", _REGISTRY_FACADES)
-def test_registry_facades_raise_the_same_error_for_an_unregistered_name(package: str):
-    """Each defines its own `ClientNotRegisteredError`; all must be `AppError`s so
-    one consumer boundary covers every backend."""
+def test_registry_facades_raise_the_same_error_for_an_unregistered_name(package: str) -> None:
     module = importlib.import_module(f"forktex.{package}")
     error = getattr(module, "ClientNotRegisteredError", None)
     assert error is not None, f"forktex.{package} does not export ClientNotRegisteredError"
     assert issubclass(error, AppError), f"forktex.{package}.ClientNotRegisteredError is not an AppError"
 
 
-#: `iso` raises stdlib TypeError/ValueError for argument errors, not AppError.
-#: Recorded rather than silently tolerated: `forktex.error` imports `forktex.types`
-#: which imports `forktex.iso`, so an `iso -> error` edge closes a cycle between
-#: three level-0 primitives. See the exemption note in `iso/__init__.py`.
-#: Listing it here means a *new* stdlib raise elsewhere is a deliberate act that
-#: shows up in review, not a silent drift.
 _STDLIB_RAISE_EXEMPT = {"iso"}
 
 
 @pytest.mark.parametrize("package", sorted(set(PACKAGES) - _STDLIB_RAISE_EXEMPT))
-def test_public_functions_do_not_raise_bare_runtime_errors(package: str):
-    """`error-envelope.md`: a library's errors bridge onto `AppError`, so one
-    consumer boundary renders them instead of letting a bare `RuntimeError`
-    escape as a masked 500.
-
-    Only `RuntimeError` is policed here, deliberately. `TypeError`/`ValueError`
-    for a wrong-typed argument are what a Python caller already expects and are
-    not transport-facing; a bare `RuntimeError` is the one that reads as
-    "something broke" and has no catch site.
-    """
+def test_public_functions_do_not_raise_bare_runtime_errors(package: str) -> None:
     offenders: list[str] = []
     for path in sorted((SRC / package).rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -162,20 +107,14 @@ def test_public_functions_do_not_raise_bare_runtime_errors(package: str):
     assert offenders == [], f"forktex.{package} raises a bare RuntimeError: {offenders}"
 
 
-def test_the_stdlib_raise_exemption_is_still_real():
-    """A stale exemption is a rule that has quietly stopped applying."""
-    import forktex.iso  # noqa: F401
+def test_the_stdlib_raise_exemption_is_still_real() -> None:
+    importlib.import_module("forktex.iso")
 
     source = (SRC / "iso" / "__init__.py").read_text(encoding="utf-8")
     assert "raise TypeError" in source or "raise ValueError" in source, (
         "iso no longer raises stdlib errors — drop it from _STDLIB_RAISE_EXEMPT"
     )
-    assert "deliberate, recorded exception" in source, "the iso exemption lost its written rationale"
 
-
-# ---------------------------------------------------------------------------
-# Identifiers: uuid7, everywhere one is minted.
-# ---------------------------------------------------------------------------
 
 REPO = SRC.parents[1]
 
@@ -183,7 +122,6 @@ _WRONG_VERSIONS = {"uuid1", "uuid3", "uuid4", "uuid5"}
 
 
 def _uuid_calls(path: pathlib.Path) -> list[tuple[int, str]]:
-    """Every `uuid.uuidN()` / `uuidN()` call in a file, as (lineno, name)."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     found: list[tuple[int, str]] = []
     for node in ast.walk(tree):
@@ -197,19 +135,7 @@ def _uuid_calls(path: pathlib.Path) -> list[tuple[int, str]]:
 
 
 @pytest.mark.parametrize("tree", ["src", "tests"])
-def test_only_uuid7_is_ever_minted(tree: str):
-    """No non-v7 UUID constructor is called anywhere, with no exemptions.
-
-    v7's leading 48 bits are a millisecond timestamp, so ids sort by creation
-    time: a primary-key b-tree appends instead of writing into a random leaf, and
-    `ORDER BY id` is a real chronological order without a second column. A v4 id
-    mixed into the same column silently sorts to a random position and gives up
-    both properties for entropy no key needs.
-
-    `tests/` is held to the same rule as `src/`, not a looser one: a test model's
-    `default=` is the worked example a consumer copies, so a v4 there teaches the
-    opposite of what the library does.
-    """
+def test_only_uuid7_is_ever_minted(tree: str) -> None:
     offenders = [
         f"{path.relative_to(REPO)}:{lineno} calls {name}()"
         for path in sorted((REPO / tree).rglob("*.py"))
@@ -219,19 +145,7 @@ def test_only_uuid7_is_ever_minted(tree: str):
 
 
 @pytest.mark.parametrize("tree", ["src", "tests"])
-def test_no_uuid_is_truncated(tree: str):
-    """A sliced `uuid7()` is the one way to hold v7 and still be wrong.
-
-    v7 front-loads a millisecond timestamp, so a prefix slice keeps the clock and
-    discards the entropy: `uuid7().hex[:8]` returned ONE distinct value across
-    1000 mints in this repo, where `uuid4().hex[:8]` returned 1000. The unique
-    per-run schema, bucket, collection, database and queue names in this suite all
-    used such a slice, and all now take the full `.hex` — a Postgres schema at 45
-    chars and an S3 bucket at 53 are still well inside their 63-byte caps.
-
-    Catches `uuid.uuid7().hex[:8]`, `str(uuid7())[:8]` and `uuid7().hex[2:10]`
-    alike: any subscript with a slice applied directly to a uuid-derived value.
-    """
+def test_no_uuid_is_truncated(tree: str) -> None:
     offenders: list[str] = []
     for path in sorted((REPO / tree).rglob("*.py")):
         source = path.read_text(encoding="utf-8")
@@ -243,3 +157,51 @@ def test_no_uuid_is_truncated(tree: str):
             if "uuid" in ast.unparse(node.value):
                 offenders.append(f"{path.relative_to(REPO)}:{node.lineno} slices `{ast.unparse(node)}`")
     assert offenders == [], f"a truncated uuid7 keeps the clock and drops the entropy: {offenders}"
+
+
+def _exported_errors(module: object) -> list[type[BaseException]]:
+    return [
+        obj
+        for name in module.__all__
+        if isinstance(obj := getattr(module, name), type) and issubclass(obj, BaseException)
+    ]
+
+
+def _base_error_name(package: str) -> str:
+    return f"{package.capitalize()}Error"
+
+
+PACKAGES_WITH_A_BASE_ERROR = [
+    package for package in PACKAGES if hasattr(importlib.import_module(f"forktex.{package}"), _base_error_name(package))
+]
+
+
+@pytest.mark.parametrize("package", PACKAGES_WITH_A_BASE_ERROR)
+def test_a_packages_base_error_catches_every_error_it_exports(package: str) -> None:
+    module = importlib.import_module(f"forktex.{package}")
+    base: type[BaseException] = getattr(module, _base_error_name(package))
+    rogue = sorted(e.__name__ for e in _exported_errors(module) if not issubclass(e, base))
+    assert rogue == [], f"forktex.{package} exports {rogue}, which `except {base.__name__}` misses"
+
+
+TESTS = pathlib.Path(__file__).resolve().parents[1]
+
+SHARED_SETUP = [
+    ("async_sessionmaker(", "sessions_for"),
+    ('CREATE SCHEMA IF NOT EXISTS "{fresh_schema}"', "the fresh_schema fixture"),
+]
+
+
+@pytest.mark.parametrize(("construct", "replacement"), SHARED_SETUP)
+def test_database_setup_goes_through_conftest(construct: str, replacement: str) -> None:
+    offenders = [
+        f"{path.relative_to(TESTS.parent)}:{lineno}"
+        for path in sorted(TESTS.rglob("*.py"))
+        if path.name != "conftest.py" and path != pathlib.Path(__file__)
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if construct in line
+    ]
+    assert offenders == [], (
+        f"{construct} belongs to {replacement} in tests/conftest.py, not to individual "
+        f"modules — eight hand-rolled copies had already drifted apart: {offenders}"
+    )

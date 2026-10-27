@@ -93,11 +93,12 @@ from forktex.storage import (
 | `exists(key)` | Async. `head_object` → `bool`. |
 | `presign(key, expires_in=3600, *, method="get_object", content_type=None, response_content_disposition=None)` | Async. Presigned URL. |
 | `presign_post(key, *, expires_in=3600, content_type=None, max_size_bytes=None)` | Async. `{"url", "fields"}` for a browser form upload. |
-| `StorageClient` | Per-bucket client. Same six operations plus `ensure_bucket(*, public_read=False)` and `direct_url(key)`. |
-| `StorageConfig` | Frozen Pydantic value object: `url`, `bucket`, `access_key`, `secret_key`, `region`, `public_url`. |
+| `StorageClient` | Per-bucket client. Same six operations plus `ensure_bucket()` and `direct_url(key)`. |
+| `StorageConfig` | Frozen Pydantic value object: `url`, `bucket`, `access_key`, `secret_key`, `region`, `public_url`, `public_access`. |
 | `StorageError` | Base error, `AppErrorCode.INTERNAL`. |
 | `ObjectNotFoundError` | `AppErrorCode.NOT_FOUND`. |
 | `ClientNotRegisteredError` | `AppErrorCode.INTERNAL`. |
+| `PublicAccess` | `Literal["none", "bucket-policy", "credentialed-proxy"]` — the type of `register(..., public_access=...)`. |
 
 Presigned PUT for an untrusted uploader — the S3 signature *is* the token, no extra auth header:
 
@@ -157,10 +158,14 @@ ARNs and headers, so the detail is logged (with the AWS error code) and reaches 
 - **`content_type` only enters the signature for `method="put_object"`**, and
   `response_content_disposition` only for `method="get_object"`; the other combination is dropped
   without warning.
-- **`direct_url()` performs no auth check.** It is only correct against a bucket with a public-read
-  policy. The key is URL-encoded with `urllib.parse.quote`.
-- **`ensure_bucket(public_read=True)` makes the bucket world-readable** and logs at `warning` level
-  when it applies the policy.
+- **`direct_url()` raises unless the bucket declares `public_access`.** It performs no auth check
+  otherwise. The key is URL-encoded with `urllib.parse.quote`.
+- **`public_access="bucket-policy"` makes the bucket world-readable.** `ensure_bucket()` applies the
+  policy and logs at `warning` level when it does. It is the only call in the module that is not
+  plain S3 — Garage answers `PutBucketPolicy` with 501 — so a bucket that does not need anonymous
+  readers should leave `public_access` at `"none"`.
+- **Presigned URLs are SigV4, path-style.** SigV2 links are honoured by MinIO and rejected by
+  Garage, R2 and current AWS regions.
 - **`ensure_bucket()` only creates on a genuine 404/`NoSuchBucket`.** A 403 from `head_bucket`
   propagates rather than being reinterpreted as "create it".
 - **Credentials are `repr`-suppressed.** `StorageConfig.access_key`/`secret_key` use

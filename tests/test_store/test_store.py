@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Integration tests for forktex.store — requires MongoDB container."""
 
 from __future__ import annotations
 
@@ -48,7 +47,7 @@ async def client(mongo_url: str) -> StoreClient:
 
 
 @pytest.mark.asyncio
-async def test_insert_and_find_one(client: StoreClient):
+async def test_insert_and_find_one(client: StoreClient) -> None:
     doc_id = await client.insert_one("widgets", {"name": "alpha", "score": 10})
     assert isinstance(doc_id, str)
 
@@ -56,14 +55,11 @@ async def test_insert_and_find_one(client: StoreClient):
     assert found is not None
     assert found["name"] == "alpha"
     assert found["score"] == 10
-    assert isinstance(found["_id"], str)  # ObjectId normalized to str
+    assert isinstance(found["_id"], str)
 
 
 @pytest.mark.asyncio
-async def test_insert_without_id_assigns_a_real_object_id(client: StoreClient):
-    """No id= given → MongoDB assigns a real ObjectId (the idiomatic
-    default), not a generated uuid — returned as its 24-hex-char string
-    form, and round-trippable through find_one/update_one/delete_one."""
+async def test_insert_without_id_assigns_a_real_object_id(client: StoreClient) -> None:
     from bson import ObjectId
 
     doc_id = await client.insert_one("widgets", {"name": "gen-id"})
@@ -76,7 +72,7 @@ async def test_insert_without_id_assigns_a_real_object_id(client: StoreClient):
 
 
 @pytest.mark.asyncio
-async def test_insert_with_caller_supplied_id(client: StoreClient):
+async def test_insert_with_caller_supplied_id(client: StoreClient) -> None:
     custom_id = str(uuid.uuid7())
     doc_id = await client.insert_one("widgets", {"name": "beta"}, id=custom_id)
     assert doc_id == custom_id
@@ -87,13 +83,13 @@ async def test_insert_with_caller_supplied_id(client: StoreClient):
 
 
 @pytest.mark.asyncio
-async def test_find_one_missing_returns_none(client: StoreClient):
+async def test_find_one_missing_returns_none(client: StoreClient) -> None:
     result = await client.find_one("widgets", {"_id": str(uuid.uuid7())})
     assert result is None
 
 
 @pytest.mark.asyncio
-async def test_find_with_filter_and_limit(client: StoreClient):
+async def test_find_with_filter_and_limit(client: StoreClient) -> None:
     for i in range(5):
         await client.insert_one("items", {"kind": "test-find", "n": i})
     await client.insert_one("items", {"kind": "other"})
@@ -105,7 +101,7 @@ async def test_find_with_filter_and_limit(client: StoreClient):
 
 
 @pytest.mark.asyncio
-async def test_update_one_modifies_existing(client: StoreClient):
+async def test_update_one_modifies_existing(client: StoreClient) -> None:
     doc_id = await client.insert_one("widgets", {"name": "gamma", "score": 1})
     updated = await client.update_one("widgets", {"_id": doc_id}, {"score": 99})
     assert updated is True
@@ -115,13 +111,13 @@ async def test_update_one_modifies_existing(client: StoreClient):
 
 
 @pytest.mark.asyncio
-async def test_update_one_no_match_without_upsert_returns_false(client: StoreClient):
+async def test_update_one_no_match_without_upsert_returns_false(client: StoreClient) -> None:
     updated = await client.update_one("widgets", {"_id": str(uuid.uuid7())}, {"score": 1})
     assert updated is False
 
 
 @pytest.mark.asyncio
-async def test_update_one_upsert_inserts_new_document(client: StoreClient):
+async def test_update_one_upsert_inserts_new_document(client: StoreClient) -> None:
     new_id = str(uuid.uuid7())
     updated = await client.update_one("widgets", {"_id": new_id}, {"score": 5}, upsert=True)
     assert updated is True
@@ -132,7 +128,7 @@ async def test_update_one_upsert_inserts_new_document(client: StoreClient):
 
 
 @pytest.mark.asyncio
-async def test_delete_one(client: StoreClient):
+async def test_delete_one(client: StoreClient) -> None:
     doc_id = await client.insert_one("widgets", {"name": "delta"})
     deleted = await client.delete_one("widgets", {"_id": doc_id})
     assert deleted is True
@@ -140,13 +136,13 @@ async def test_delete_one(client: StoreClient):
 
 
 @pytest.mark.asyncio
-async def test_delete_one_missing_returns_false(client: StoreClient):
+async def test_delete_one_missing_returns_false(client: StoreClient) -> None:
     deleted = await client.delete_one("widgets", {"_id": str(uuid.uuid7())})
     assert deleted is False
 
 
 @pytest.mark.asyncio
-async def test_count(client: StoreClient):
+async def test_count(client: StoreClient) -> None:
     suffix = uuid.uuid7().hex
     for i in range(4):
         await client.insert_one("counted", {"batch": suffix, "n": i})
@@ -156,7 +152,7 @@ async def test_count(client: StoreClient):
 
 
 @pytest.mark.asyncio
-async def test_multi_client_registry(mongo_url: str):
+async def test_multi_client_registry(mongo_url: str) -> None:
     c1 = register("multi-a", url=mongo_url, database="multi_a_db")
     c2 = register("multi-b", url=mongo_url, database="multi_b_db")
     assert get_client("multi-a") is c1
@@ -167,13 +163,13 @@ async def test_multi_client_registry(mongo_url: str):
 
 
 @pytest.mark.asyncio
-async def test_get_unregistered_client_raises():
+async def test_get_unregistered_client_raises() -> None:
     with pytest.raises(ClientNotRegisteredError):
         get_client("not-registered-xyz-abc")
 
 
 @pytest.mark.asyncio
-async def test_module_level_convenience_functions(mongo_url: str):
+async def test_module_level_convenience_functions(mongo_url: str) -> None:
     import forktex.store as store
 
     await store.init(url=mongo_url, database=f"convenience_{uuid.uuid7().hex}")
@@ -188,14 +184,8 @@ async def test_module_level_convenience_functions(mongo_url: str):
         await store.close()
 
 
-# ---------------------------------------------------------------------------
-# Transactions — require the MongoDB deployment to be a replica set
-# (tests/_containers.py::start_mongo configures a single-node one).
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
-async def test_transaction_commits_across_collections(client: StoreClient):
+async def test_transaction_commits_across_collections(client: StoreClient) -> None:
     async with client.transaction() as session:
         order_id = await client.insert_one("orders", {"sku": "widget-1", "qty": 2}, session=session)
         await client.insert_one("inventory", {"sku": "widget-1", "stock": 8}, session=session)
@@ -208,7 +198,7 @@ async def test_transaction_commits_across_collections(client: StoreClient):
 
 
 @pytest.mark.asyncio
-async def test_transaction_rolls_back_on_exception(client: StoreClient):
+async def test_transaction_rolls_back_on_exception(client: StoreClient) -> None:
     with pytest.raises(ValueError, match="boom"):
         async with client.transaction() as session:
             await client.insert_one("orders", {"sku": "widget-2"}, id="order-rollback", session=session)
@@ -220,17 +210,10 @@ async def test_transaction_rolls_back_on_exception(client: StoreClient):
 @pytest.mark.asyncio
 async def test_operation_without_session_does_not_see_uncommitted_writes(
     client: StoreClient,
-):
-    """Reading your own writes inside an open transaction requires passing
-    the same session explicitly — this is real Mongo isolation semantics,
-    not a store-specific quirk, and confirms session= is actually wired
-    through to the underlying pymongo call rather than silently ignored."""
+) -> None:
     async with client.transaction() as session:
         doc_id = await client.insert_one("orders", {"sku": "widget-3"}, session=session)
-        # No session= passed here — must not observe the uncommitted insert.
         assert await client.find_one("orders", {"_id": doc_id}) is None
-        # With the session, the write is visible (read-your-own-writes).
         assert await client.find_one("orders", {"_id": doc_id}, session=session) is not None
 
-    # After commit, visible without a session too.
     assert await client.find_one("orders", {"_id": doc_id}) is not None

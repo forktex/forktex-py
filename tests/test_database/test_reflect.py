@@ -21,24 +21,25 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Integration tests for forktex.database.reflect — requires Postgres."""
 
 from __future__ import annotations
 
 
+from sqlalchemy.ext.asyncio import AsyncEngine
+from collections.abc import AsyncIterator
 import pytest
 import pytest_asyncio
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from forktex.database import reflect
+from tests.conftest import sessions_for
 
 
 @pytest_asyncio.fixture
-async def engine(postgres_url_str: str, fresh_schema: str):
+async def engine(postgres_url_str: str, fresh_schema: str) -> AsyncIterator[AsyncEngine]:
     eng = create_async_engine(postgres_url_str)
     async with eng.begin() as conn:
-        await conn.execute(sa.text(f'CREATE SCHEMA IF NOT EXISTS "{fresh_schema}"'))
         await conn.execute(
             sa.text(
                 f'CREATE TABLE "{fresh_schema}".reflect_probe ('
@@ -52,23 +53,21 @@ async def engine(postgres_url_str: str, fresh_schema: str):
 
 
 @pytest.mark.asyncio
-async def test_columns_returns_names(engine, fresh_schema: str):
+async def test_columns_returns_names(engine: AsyncEngine, fresh_schema: str) -> None:
     async with engine.connect() as conn:
         names = await reflect.columns(conn, "reflect_probe", schema=fresh_schema)
     assert names == {"c_uuid", "c_int8", "c_tstz", "c_ts", "c_bool", "c_text"}
 
 
 @pytest.mark.asyncio
-async def test_relation_may_embed_the_schema(engine, fresh_schema: str):
+async def test_relation_may_embed_the_schema(engine: AsyncEngine, fresh_schema: str) -> None:
     async with engine.connect() as conn:
         names = await reflect.columns(conn, f"{fresh_schema}.reflect_probe")
     assert "c_uuid" in names
 
 
 @pytest.mark.asyncio
-async def test_absent_table_yields_empty_rather_than_raising(engine, fresh_schema: str):
-    """Callers treat 'absent' and 'no columns' alike — both mean nothing to
-    reconcile against — so this must not raise."""
+async def test_absent_table_yields_empty_rather_than_raising(engine: AsyncEngine, fresh_schema: str) -> None:
     async with engine.connect() as conn:
         assert await reflect.columns(conn, "no_such_table", schema=fresh_schema) == set()
         assert await reflect.column_types(conn, "no_such_table", schema=fresh_schema) == {}
@@ -77,14 +76,7 @@ async def test_absent_table_yields_empty_rather_than_raising(engine, fresh_schem
 
 
 @pytest.mark.asyncio
-async def test_column_types_are_lossless_about_timezone(engine, fresh_schema: str):
-    """The reason this returns type *objects* and not name strings.
-
-    `information_schema.udt_name` distinguishes `timestamptz` from `timestamp`,
-    but SQLAlchemy's own type *naming* collapses both to "timestamp" — so a
-    name-based round-trip silently discards timezone-awareness. The type object
-    keeps it.
-    """
+async def test_column_types_are_lossless_about_timezone(engine: AsyncEngine, fresh_schema: str) -> None:
     async with engine.connect() as conn:
         types = await reflect.column_types(conn, "reflect_probe", schema=fresh_schema)
 
@@ -92,13 +84,12 @@ async def test_column_types_are_lossless_about_timezone(engine, fresh_schema: st
     assert types["c_tstz"].timezone is True
     assert isinstance(types["c_ts"], sa.TIMESTAMP)
     assert types["c_ts"].timezone is False
-    # and they render distinctly, which a name-keyed map could not express
     assert reflect.type_ddl(types["c_tstz"]) == "TIMESTAMP WITH TIME ZONE"
     assert reflect.type_ddl(types["c_ts"]) == "TIMESTAMP WITHOUT TIME ZONE"
 
 
 @pytest.mark.asyncio
-async def test_type_ddl_is_unambiguous_and_reversible(engine, fresh_schema: str):
+async def test_type_ddl_is_unambiguous_and_reversible(engine: AsyncEngine, fresh_schema: str) -> None:
     async with engine.connect() as conn:
         types = await reflect.column_types(conn, "reflect_probe", schema=fresh_schema)
     assert reflect.type_ddl(types["c_int8"]) == "BIGINT"
@@ -107,19 +98,17 @@ async def test_type_ddl_is_unambiguous_and_reversible(engine, fresh_schema: str)
 
 
 @pytest.mark.asyncio
-async def test_has_table_and_indexes(engine, fresh_schema: str):
+async def test_has_table_and_indexes(engine: AsyncEngine, fresh_schema: str) -> None:
     async with engine.connect() as conn:
         assert await reflect.has_table(conn, "reflect_probe", schema=fresh_schema) is True
         assert "ix_probe_text" in await reflect.indexes(conn, "reflect_probe", schema=fresh_schema)
 
 
 @pytest.mark.asyncio
-async def test_works_with_a_session_not_just_a_connection(postgres_url_str: str, fresh_schema: str, engine):
-    """Prior callers were split between sessions and connections; one API serves
-    both so neither has to open its own."""
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-    maker = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+async def test_works_with_a_session_not_just_a_connection(
+    postgres_url_str: str, fresh_schema: str, engine: AsyncEngine
+) -> None:
+    maker = sessions_for(engine)
     async with maker() as session:
         names = await reflect.columns(session, "reflect_probe", schema=fresh_schema)
     assert "c_uuid" in names

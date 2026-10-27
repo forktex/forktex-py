@@ -21,14 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Pydantic models for the ``[graph]`` extra.
-
-The wire format is the Pydantic envelope (``Graph(meta, nodes, edges)``).
-Adjacency indices are private and rebuilt lazily on first lookup —
-they're never serialised. Mutation (``add_node`` / ``add_edge``) keeps
-them in sync incrementally; freshly-parsed graphs trigger a one-shot
-rebuild on the first read access.
-"""
 
 from __future__ import annotations
 
@@ -42,15 +34,11 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from forktex.graph.errors import InvalidDirectionError, NodeNotFoundError
 
-# Generic str — consumers bring their own vocabulary. forktex-py[graph]
-# narrows these to FSD-specific Literals; here in core they stay open.
 NodeKind = str
 EdgeKind = str
 
 
 class GraphMeta(BaseModel):
-    """Wire-level metadata. Optional but useful for round-trip provenance."""
-
     model_config = ConfigDict(extra="ignore")
 
     name: str | None = None
@@ -59,8 +47,6 @@ class GraphMeta(BaseModel):
 
 
 class GraphNode(BaseModel):
-    """A typed graph node. ``id`` must be unique within a Graph."""
-
     model_config = ConfigDict(extra="ignore")
 
     id: str
@@ -70,13 +56,6 @@ class GraphNode(BaseModel):
 
 
 class GraphEdge(BaseModel):
-    """A typed graph edge.
-
-    ``id`` is computed from ``(kind, src_id, dst_id, attrs)`` so any two
-    edges with the same shape collapse, while edges that differ in kind
-    or attributes coexist between the same node pair (multi-edge).
-    """
-
     model_config = ConfigDict(extra="ignore")
 
     id: str
@@ -87,24 +66,12 @@ class GraphEdge(BaseModel):
 
 
 def edge_id(kind: str, src_id: str, dst_id: str, attrs: dict[str, Any] | None = None) -> str:
-    """Deterministic edge id including a short hash of attrs.
-
-    Format: ``"<kind>:<src>-><dst>:<8hex>"``. Stable across runs given
-    the same inputs (JSON-canonicalised attrs + sorted keys).
-    """
     payload = json.dumps(attrs or {}, sort_keys=True, default=str).encode("utf-8")
     digest = hashlib.blake2s(payload, digest_size=4).hexdigest()
     return f"{kind}:{src_id}->{dst_id}:{digest}"
 
 
 class Graph(BaseModel):
-    """Typed multi-edge graph with deterministic serialisation.
-
-    Adjacency indices (``_by_id`` / ``_out`` / ``_in``) are private and
-    excluded from serialisation. Lookup methods rebuild them lazily on
-    first access; mutation methods keep them in sync.
-    """
-
     model_config = ConfigDict(extra="ignore")
 
     meta: GraphMeta = Field(default_factory=GraphMeta)
@@ -118,8 +85,6 @@ class Graph(BaseModel):
     _indexed: bool = PrivateAttr(default=False)
 
     def add_node(self, node: GraphNode) -> GraphNode:
-        """Idempotent on ``node.id``. Returns the existing node if one
-        with the same id already exists, otherwise the inserted one."""
         self._ensure_index()
         if node.id in self._by_id:
             return self._by_id[node.id]
@@ -136,8 +101,6 @@ class Graph(BaseModel):
         dst_id: str,
         attrs: dict[str, Any] | None = None,
     ) -> GraphEdge:
-        """Idempotent on the deterministic edge id. Both endpoints must
-        already exist as nodes — a missing endpoint raises ``KeyError``."""
         self._ensure_index()
         if src_id not in self._by_id:
             raise NodeNotFoundError(f"unknown src_id: {src_id!r}")
@@ -196,7 +159,6 @@ class Graph(BaseModel):
         kind: EdgeKind | None = None,
         direction: str = "out",
     ) -> list[GraphNode]:
-        """Adjacent nodes via ``direction`` ∈ ``{"out", "in", "both"}``."""
         self._ensure_index()
         if direction == "out":
             edges = self.out_edges(node_id, kind=kind)
@@ -222,15 +184,6 @@ class Graph(BaseModel):
         return [e for e in self.edges if e.kind == kind]
 
     def sorted(self) -> Graph:
-        """Return a new Graph with deterministically sorted nodes + edges.
-
-        Use before writing to disk so the file is byte-stable across runs
-        (same input → same output → no diff churn). Nodes/edges are deep
-        copies — mutating the result's ``attrs`` never affects ``self``
-        (Pydantic doesn't copy already-validated model instances by
-        default, so without this, "sorted" would silently alias the
-        originals).
-        """
 
         def _edge_key(e: GraphEdge) -> tuple[str, str, str, str]:
             return (e.kind, e.src_id, e.dst_id, e.id)
@@ -240,11 +193,6 @@ class Graph(BaseModel):
         return Graph(meta=self.meta, nodes=sorted_nodes, edges=sorted_edges)
 
     def merge(self, other: Graph) -> Graph:
-        """Merge ``other`` into self (mutating self). Self's meta is kept.
-
-        Nodes/edges are deep-copied in — self and ``other`` never end up
-        sharing a mutable ``attrs`` dict after this call.
-        """
         for n in other.nodes:
             self.add_node(n.model_copy(deep=True))
         for e in other.edges:

@@ -22,17 +22,12 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""`forktex.api` + `forktex.worker` in one process — the integration contract.
-
-`background()` exists so an API can consume its own queue inside its lifespan.
-These run the real thing end to end against Redis: a request enqueues a job, the
-worker embedded in the same process consumes it, and the trace id that came in on
-`X-Request-ID` has to be visible from inside the job body. That last assertion is
-the one that makes the two tiers debuggable as a single system.
-"""
-
 from __future__ import annotations
 
+from collections.abc import Callable
+from fastapi import FastAPI
+from collections.abc import AsyncIterator
+from collections.abc import Iterator
 import asyncio
 import time
 from contextlib import asynccontextmanager
@@ -45,7 +40,6 @@ from forktex.api import AppConfig, create_app
 from forktex.log import get_root_trace_id, get_trace_id
 from forktex.worker import WorkerConfig, background
 
-#: What the job body observed, appended from inside the worker.
 _observed: list[dict[str, str | None]] = []
 
 
@@ -55,13 +49,12 @@ async def record_request(ctx: queue.JobCtx, note: str) -> str:
     return "recorded"
 
 
-def _build_app(redis_url: str):
+def _build_app(redis_url: str) -> FastAPI:
     cfg = WorkerConfig(redis_url=redis_url, queue_name="itest", max_jobs=2, drain_timeout=5.0)
 
     @asynccontextmanager
-    async def lifespan(_app):
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         async with background(cfg) as worker:
-            # Default poll delay is 0.5s; tighten it so the test is not mostly sleep.
             worker.arq_worker.poll_delay_s = 0.05
             yield
 
@@ -75,9 +68,7 @@ def _build_app(redis_url: str):
     return app
 
 
-def _wait_for(predicate, timeout: float = 15.0) -> bool:
-    """Poll from the test thread — TestClient runs the loop on its own thread, so a
-    plain sleep here lets the embedded worker make progress."""
+def _wait_for(predicate: Callable[[], bool], timeout: float = 15.0) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if predicate():
@@ -87,14 +78,13 @@ def _wait_for(predicate, timeout: float = 15.0) -> bool:
 
 
 @pytest.fixture(autouse=True)
-def _clean(redis_url: str):
+def _clean(redis_url: str) -> Iterator[None]:
     _observed.clear()
     yield
     _observed.clear()
 
 
-def test_an_api_consumes_its_own_queue_in_process(redis_url: str):
-    """The `background()` contract: no separate worker process, yet the job runs."""
+def test_an_api_consumes_its_own_queue_in_process(redis_url: str) -> None:
     with TestClient(_build_app(redis_url)) as client:
         response = client.post("/work", params={"note": "hello"})
         assert response.status_code == 202
@@ -105,10 +95,7 @@ def test_an_api_consumes_its_own_queue_in_process(redis_url: str):
     assert _observed[0]["note"] == "hello"
 
 
-def test_the_requests_trace_id_is_visible_inside_the_job(redis_url: str):
-    """End-to-end correlation. The id on `X-Request-ID` is what an operator has in
-    hand from the response; it must also be what the job's logs are stamped with,
-    or the two tiers cannot be searched as one story."""
+def test_the_requests_trace_id_is_visible_inside_the_job(redis_url: str) -> None:
     with TestClient(_build_app(redis_url)) as client:
         response = client.post("/work", params={"note": "traced"}, headers={"X-Request-ID": "req-integration-1"})
         assert response.headers["X-Request-ID"] == "req-integration-1"
@@ -118,23 +105,17 @@ def test_the_requests_trace_id_is_visible_inside_the_job(redis_url: str):
     assert _observed[0]["trace_id"] == "req-integration-1"
 
 
-def test_the_worker_shuts_down_with_the_app(redis_url: str):
-    """Leaving the lifespan must stop the consumer: a worker outliving its host would
-    keep a Redis pool open and keep consuming after the app said it was done."""
+def test_the_worker_shuts_down_with_the_app(redis_url: str) -> None:
     app = _build_app(redis_url)
     with TestClient(app) as client:
         client.post("/work", params={"note": "shutdown"})
         assert _wait_for(lambda: len(_observed) >= 1)
-    # Exiting the `with` ran the lifespan's shutdown, which drained the worker.
-    # A second enqueue now has no consumer in this process, so nothing new appears.
     before = len(_observed)
     time.sleep(0.3)
     assert len(_observed) == before
 
 
-def test_health_probes_can_report_the_queue_the_api_feeds(redis_url: str):
-    """The natural readiness wiring for an api+worker service: prove the queue the
-    API enqueues onto is actually reachable, using `queue.worker_health`."""
+def test_health_probes_can_report_the_queue_the_api_feeds(redis_url: str) -> None:
 
     async def queue_ready() -> bool:
         await queue.worker_health(redis_url, queue_name="itest")
@@ -143,7 +124,7 @@ def test_health_probes_can_report_the_queue_the_api_feeds(redis_url: str):
     cfg = WorkerConfig(redis_url=redis_url, queue_name="itest", drain_timeout=1.0)
 
     @asynccontextmanager
-    async def lifespan(_app):
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         async with background(cfg):
             yield
 
@@ -155,9 +136,7 @@ def test_health_probes_can_report_the_queue_the_api_feeds(redis_url: str):
     assert response.json() == {"status": "ready", "checks": {"queue": True}}
 
 
-def test_an_unreachable_queue_makes_the_api_not_ready(redis_url: str):
-    """The probe has to actually fail when the dependency is gone — otherwise it is
-    decoration, and a broken service reports ready."""
+def test_an_unreachable_queue_makes_the_api_not_ready(redis_url: str) -> None:
 
     async def queue_ready() -> bool:
         await queue.worker_health("redis://127.0.0.1:1", queue_name="itest")
@@ -171,16 +150,12 @@ def test_an_unreachable_queue_makes_the_api_not_ready(redis_url: str):
     assert response.json()["checks"] == {"queue": False}
 
 
-def test_an_app_error_raised_while_enqueuing_still_renders_an_envelope(redis_url: str):
-    """The two modules share the error contract: a queue failure surfacing from a
-    route is an `AppError` subclass, so `api`'s middleware maps it rather than
-    masking it as a generic 500."""
+def test_an_app_error_raised_while_enqueuing_still_renders_an_envelope(redis_url: str) -> None:
     app = create_app(AppConfig())
 
     @app.post("/broken")
     async def broken() -> dict[str, str]:
         await queue.init("redis://127.0.0.1:1")
-        # `_get_pool` cannot reach Redis; queue raises its own QueueError (an AppError).
         await queue.enqueue(record_request, "never")
         return {"unreachable": "yes"}
 
@@ -191,9 +166,7 @@ def test_an_app_error_raised_while_enqueuing_still_renders_an_envelope(redis_url
     assert "traceId" in response.json()
 
 
-async def test_a_task_can_chain_more_work_from_inside_the_worker(redis_url: str):
-    """`Worker.start` initialises the module-level pool precisely so a running job can
-    `enqueue()` again. Without it, chained work would be silently dropped."""
+async def test_a_task_can_chain_more_work_from_inside_the_worker(redis_url: str) -> None:
     chained: list[str] = []
 
     @queue.task(queue="itest-chain")

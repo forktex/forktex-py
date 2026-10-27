@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Integration tests for forktex.storage — requires MinIO container."""
 
 from __future__ import annotations
 
@@ -59,8 +58,20 @@ async def client(minio_config: dict) -> StorageClient:
     return c
 
 
+@pytest_asyncio.fixture
+async def public_client(minio_config: dict) -> StorageClient:
+    return register(
+        "test-public",
+        url=minio_config["url"],
+        bucket=minio_config["bucket"],
+        access_key=minio_config["access_key"],
+        secret_key=minio_config["secret_key"],
+        public_access="bucket-policy",
+    )
+
+
 @pytest.mark.asyncio
-async def test_upload_and_download(client: StorageClient):
+async def test_upload_and_download(client: StorageClient) -> None:
     data = b"hello storage world"
     await client.upload("test/hello.txt", data, content_type="text/plain")
     result = await client.download("test/hello.txt")
@@ -68,34 +79,33 @@ async def test_upload_and_download(client: StorageClient):
 
 
 @pytest.mark.asyncio
-async def test_exists_true_and_false(client: StorageClient):
+async def test_exists_true_and_false(client: StorageClient) -> None:
     await client.upload("test/exists.txt", b"data")
     assert await client.exists("test/exists.txt") is True
     assert await client.exists("test/no-such-key.txt") is False
 
 
 @pytest.mark.asyncio
-async def test_delete(client: StorageClient):
+async def test_delete(client: StorageClient) -> None:
     await client.upload("test/to-delete.txt", b"bye")
     await client.delete("test/to-delete.txt")
     assert await client.exists("test/to-delete.txt") is False
 
 
 @pytest.mark.asyncio
-async def test_delete_missing_key_is_a_noop(client: StorageClient):
-    """delete() on a key that never existed must not raise."""
+async def test_delete_missing_key_is_a_noop(client: StorageClient) -> None:
     await client.delete("test/never-existed-xyz-abc.txt")
 
 
 @pytest.mark.asyncio
-async def test_upload_overwrites_existing_key(client: StorageClient):
+async def test_upload_overwrites_existing_key(client: StorageClient) -> None:
     await client.upload("test/overwrite.txt", b"original")
     await client.upload("test/overwrite.txt", b"replaced")
     assert await client.download("test/overwrite.txt") == b"replaced"
 
 
 @pytest.mark.asyncio
-async def test_upload_download_key_with_special_characters(client: StorageClient):
+async def test_upload_download_key_with_special_characters(client: StorageClient) -> None:
     key = "test/special chars #1 (v2).txt"
     data = b"special key data"
     await client.upload(key, data)
@@ -104,13 +114,13 @@ async def test_upload_download_key_with_special_characters(client: StorageClient
 
 
 @pytest.mark.asyncio
-async def test_download_missing_raises(client: StorageClient):
+async def test_download_missing_raises(client: StorageClient) -> None:
     with pytest.raises(ObjectNotFoundError):
         await client.download("test/definitely-missing-xyz-abc.txt")
 
 
 @pytest.mark.asyncio
-async def test_presign_get_returns_url(client: StorageClient):
+async def test_presign_get_returns_url(client: StorageClient) -> None:
     await client.upload("test/presign-target.txt", b"presigned")
     url = await client.presign("test/presign-target.txt", expires_in=300)
     assert url.startswith("http")
@@ -118,7 +128,7 @@ async def test_presign_get_returns_url(client: StorageClient):
 
 
 @pytest.mark.asyncio
-async def test_presign_put_returns_url(client: StorageClient):
+async def test_presign_put_returns_url(client: StorageClient) -> None:
     url = await client.presign(
         "test/upload-target.txt",
         expires_in=300,
@@ -129,7 +139,7 @@ async def test_presign_put_returns_url(client: StorageClient):
 
 
 @pytest.mark.asyncio
-async def test_presign_post_returns_policy(client: StorageClient):
+async def test_presign_post_returns_policy(client: StorageClient) -> None:
     result = await client.presign_post(
         "test/multipart-target.txt",
         expires_in=300,
@@ -141,7 +151,7 @@ async def test_presign_post_returns_policy(client: StorageClient):
 
 
 @pytest.mark.asyncio
-async def test_multi_client_registry(minio_config: dict):
+async def test_multi_client_registry(minio_config: dict) -> None:
     c1 = register(
         "multi-a",
         url=minio_config["url"],
@@ -162,22 +172,20 @@ async def test_multi_client_registry(minio_config: dict):
 
 
 @pytest.mark.asyncio
-async def test_get_unregistered_client_raises():
+async def test_get_unregistered_client_raises() -> None:
     with pytest.raises(ClientNotRegisteredError):
         get_client("not-registered-xyz-abc")
 
 
 @pytest.mark.asyncio
-async def test_direct_url(client: StorageClient):
-    url = client.direct_url("images/hero.jpg")
+async def test_direct_url(public_client: StorageClient) -> None:
+    url = public_client.direct_url("images/hero.jpg")
     assert "hero.jpg" in url
     assert "test-bucket" in url
 
 
 @pytest.mark.asyncio
-async def test_direct_url_encodes_special_characters_in_key():
-    """A raw '#'/space in the key must not be able to truncate the URL or
-    change which fragment/query the browser resolves it as."""
+async def test_direct_url_encodes_special_characters_in_key() -> None:
     from forktex.storage import StorageClient, StorageConfig
 
     c = StorageClient(
@@ -187,15 +195,14 @@ async def test_direct_url_encodes_special_characters_in_key():
             access_key="x",
             secret_key="y",
             public_url="http://cdn.example.com",
+            public_access="bucket-policy",
         )
     )
     url = c.direct_url("images/hero #1.jpg")
     assert url == "http://cdn.example.com/test-bucket/images/hero%20%231.jpg"
 
 
-def test_storage_config_masks_secrets_in_repr():
-    """access_key/secret_key must never appear in repr()/str() — they're
-    plaintext credentials that could otherwise leak into logs/tracebacks."""
+def test_storage_config_masks_secrets_in_repr() -> None:
     from forktex.storage import StorageConfig
 
     c = StorageConfig(url="http://minio:9000", bucket="b", access_key="AKIA_SECRET", secret_key="SK_SECRET")
@@ -203,7 +210,6 @@ def test_storage_config_masks_secrets_in_repr():
     assert "SK_SECRET" not in repr(c)
     assert "AKIA_SECRET" not in str(c)
     assert "SK_SECRET" not in str(c)
-    # ... but the real values are still there for actual use and serialization.
     assert c.access_key == "AKIA_SECRET"
     assert c.secret_key == "SK_SECRET"
     assert c.model_dump()["access_key"] == "AKIA_SECRET"
@@ -211,7 +217,7 @@ def test_storage_config_masks_secrets_in_repr():
 
 
 @pytest.mark.asyncio
-async def test_ensure_bucket_creates_when_absent(minio_config: dict):
+async def test_ensure_bucket_creates_when_absent(minio_config: dict) -> None:
     import uuid
 
     from forktex.storage import StorageClient, StorageConfig
@@ -226,52 +232,81 @@ async def test_ensure_bucket_creates_when_absent(minio_config: dict):
         )
     )
     await c.ensure_bucket()
-    # Bucket now usable — upload proves it exists.
     await c.upload("probe.txt", b"data")
     assert await c.download("probe.txt") == b"data"
 
 
 @pytest.mark.asyncio
-async def test_ensure_bucket_idempotent_when_already_exists(client: StorageClient):
-    await client.ensure_bucket()  # bucket from the `client` fixture already exists
-    await client.ensure_bucket()  # must not raise the second time either
+async def test_ensure_bucket_idempotent_when_already_exists(client: StorageClient) -> None:
+    await client.ensure_bucket()
+    await client.ensure_bucket()
 
 
 @pytest.mark.asyncio
-async def test_ensure_bucket_public_read_sets_policy(minio_config: dict):
+async def test_ensure_bucket_writes_a_policy_only_when_the_bucket_declares_one(minio_config: dict) -> None:
     import uuid
+
+    from botocore.exceptions import ClientError
 
     from forktex.storage import StorageClient, StorageConfig
 
-    fresh_bucket = f"ensure-bucket-public-{uuid.uuid7().hex}"
-    c = StorageClient(
-        StorageConfig(
-            url=minio_config["url"],
-            bucket=fresh_bucket,
-            access_key=minio_config["access_key"],
-            secret_key=minio_config["secret_key"],
+    def _client(bucket: str, **extra: object) -> StorageClient:
+        return StorageClient(
+            StorageConfig(
+                url=minio_config["url"],
+                bucket=bucket,
+                access_key=minio_config["access_key"],
+                secret_key=minio_config["secret_key"],
+                **extra,
+            )
         )
-    )
-    await c.ensure_bucket(public_read=True)
 
+    public = f"ensure-bucket-public-{uuid.uuid7().hex}"
+    c = _client(public, public_access="bucket-policy")
+    await c.ensure_bucket()
     async with c._client() as s3:
-        policy = await s3.get_bucket_policy(Bucket=fresh_bucket)
+        policy = await s3.get_bucket_policy(Bucket=public)
         assert "s3:GetObject" in policy["Policy"]
 
-
-# ---------------------------------------------------------------------------
-# Module-level facade
-#
-# `storage.upload(...)` and friends are published in `__all__`, but every test
-# above drives a `StorageClient` instance instead — so the whole delegating
-# facade (and `init`/`close`, which name the default client) shipped without ever
-# being called. Each body is a one-line delegation, which is exactly where a
-# wrong keyword name survives review.
-# ---------------------------------------------------------------------------
+    private = f"ensure-bucket-private-{uuid.uuid7().hex}"
+    p = _client(private)
+    await p.ensure_bucket()
+    async with p._client() as s3:
+        with pytest.raises(ClientError) as caught:
+            await s3.get_bucket_policy(Bucket=private)
+        assert caught.value.response["Error"]["Code"] in ("NoSuchBucketPolicy", "404")
 
 
 @pytest.mark.asyncio
-async def test_module_facade_round_trips_through_the_default_client(minio_config: dict):
+async def test_direct_url_refuses_a_bucket_with_no_public_access() -> None:
+    from forktex.storage import StorageClient, StorageConfig, StorageError
+
+    c = StorageClient(StorageConfig(url="http://minio:9000", bucket="private", access_key="x", secret_key="y"))
+    with pytest.raises(StorageError, match="no public access"):
+        c.direct_url("docs/invoice.pdf")
+
+
+@pytest.mark.asyncio
+async def test_signed_links_are_sigv4(client: StorageClient) -> None:
+    import urllib.parse
+
+    url = await client.presign("docs/invoice.pdf", expires_in=60)
+    params = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+
+    assert "X-Amz-Signature" in params
+    assert params["X-Amz-Algorithm"] == ["AWS4-HMAC-SHA256"]
+    assert "AWSAccessKeyId" not in params
+
+    post = await client.presign_post("uploads/x.bin", expires_in=60)
+    assert "x-amz-signature" in post["fields"]
+    assert "signature" not in post["fields"]
+
+
+#
+
+
+@pytest.mark.asyncio
+async def test_module_facade_round_trips_through_the_default_client(minio_config: dict) -> None:
     await storage_init(
         url=minio_config["url"],
         bucket=minio_config["bucket"],
@@ -299,17 +334,17 @@ async def test_module_facade_round_trips_through_the_default_client(minio_config
 
 
 @pytest.mark.asyncio
-async def test_module_facade_close_is_idempotent_and_deregisters(minio_config: dict):
+async def test_module_facade_close_is_idempotent_and_deregisters(minio_config: dict) -> None:
     await storage_init(
         url=minio_config["url"],
         bucket=minio_config["bucket"],
         access_key=minio_config["access_key"],
         secret_key=minio_config["secret_key"],
     )
-    get_client()  # the default name resolves while registered
+    get_client()
 
     await storage_close()
-    await storage_close()  # idempotent
+    await storage_close()
 
     with pytest.raises(ClientNotRegisteredError):
         get_client()

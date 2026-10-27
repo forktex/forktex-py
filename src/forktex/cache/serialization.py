@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Pydantic-aware JSON serialization for cache values."""
 
 from __future__ import annotations
 
@@ -34,7 +33,6 @@ from forktex.types import JsonValue
 
 
 def serialize(value: object) -> str:
-    """Serialize a value to JSON string. Handles Pydantic models."""
     if isinstance(value, BaseModel):
         return value.model_dump_json()
     return json.dumps(value, default=str)
@@ -49,14 +47,6 @@ def deserialize(data: str, model: None) -> JsonValue: ...
 
 
 def deserialize[T: BaseModel](data: str, model: type[T] | None) -> T | JsonValue:
-    """Deserialize a JSON string, optionally into a Pydantic model.
-
-    Overloaded rather than returning ``object``: the single signature declared a
-    type parameter and then discarded it, so ``deserialize(raw, UserProfile)``
-    type-checked as ``object``. That erasure propagated through ``fetch_or_set``
-    and ``fetch_swr`` into ``@cached``, which is why ``response_model=`` gave a
-    consumer no type information at all.
-    """
     if model:
         return model.model_validate_json(data)
     return json.loads(data)

@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Subgraph extraction + JSON round-trip tests."""
 
 from __future__ import annotations
 
@@ -38,25 +37,21 @@ def _line_graph(length: int = 5) -> Graph:
     return g
 
 
-def test_induced_subgraph_keeps_only_listed_nodes():
+def test_induced_subgraph_keeps_only_listed_nodes() -> None:
     g = _line_graph(5)
     sub = induced_subgraph(g, ["n1", "n2", "n3"])
     assert {n.id for n in sub.nodes} == {"n1", "n2", "n3"}
-    # Edges with one endpoint outside the set are dropped.
     assert {(e.src_id, e.dst_id) for e in sub.edges} == {("n1", "n2"), ("n2", "n3")}
 
 
-def test_induced_subgraph_ignores_unknown_ids():
+def test_induced_subgraph_ignores_unknown_ids() -> None:
     g = _line_graph(3)
     sub = induced_subgraph(g, ["n0", "ghost"])
     assert {n.id for n in sub.nodes} == {"n0"}
     assert sub.edges == []
 
 
-def test_induced_subgraph_is_independent_of_source():
-    """Mutating a node's attrs on the subgraph must not affect the source
-    — the docstring promises "its own private adjacency index" and that
-    "mutations don't affect the source"."""
+def test_induced_subgraph_is_independent_of_source() -> None:
     g = _line_graph(3)
     g.node("n0").attrs["count"] = 1
 
@@ -66,21 +61,20 @@ def test_induced_subgraph_is_independent_of_source():
     assert g.node("n0").attrs["count"] == 1
 
 
-def test_subgraph_around_max_depth_zero_returns_only_start():
+def test_subgraph_around_max_depth_zero_returns_only_start() -> None:
     g = _line_graph(5)
     sub = subgraph_around(g, "n2", max_depth=0)
     assert {n.id for n in sub.nodes} == {"n2"}
     assert sub.edges == []
 
 
-def test_subgraph_around_grows_radius():
+def test_subgraph_around_grows_radius() -> None:
     g = _line_graph(5)
     sub = subgraph_around(g, "n2", max_depth=1)
-    # Both directions: n1, n2, n3.
     assert {n.id for n in sub.nodes} == {"n1", "n2", "n3"}
 
 
-def test_subgraph_around_directional():
+def test_subgraph_around_directional() -> None:
     g = _line_graph(5)
     fwd = subgraph_around(g, "n2", max_depth=2, direction="out")
     assert {n.id for n in fwd.nodes} == {"n2", "n3", "n4"}
@@ -88,15 +82,14 @@ def test_subgraph_around_directional():
     assert {n.id for n in back.nodes} == {"n0", "n1", "n2"}
 
 
-def test_subgraph_around_unknown_start_returns_empty():
+def test_subgraph_around_unknown_start_returns_empty() -> None:
     g = _line_graph(3)
     sub = subgraph_around(g, "ghost", max_depth=2)
     assert sub.nodes == []
     assert sub.edges == []
 
 
-def test_json_round_trip_preserves_topology():
-    """Build → serialise → parse → identical topology + lookups work."""
+def test_json_round_trip_preserves_topology() -> None:
     g = _line_graph(4)
     g.add_edge("other", "n1", "n3", {"weight": 0.5})
 
@@ -105,5 +98,4 @@ def test_json_round_trip_preserves_topology():
 
     assert {n.id for n in g.nodes} == {n.id for n in g2.nodes}
     assert {e.id for e in g.edges} == {e.id for e in g2.edges}
-    # Adjacency works after parse (lazy index).
     assert [n.id for n in g2.neighbors("n1")] == sorted([n.id for n in g.neighbors("n1")])

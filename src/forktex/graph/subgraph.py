@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Subgraph extraction helpers."""
 
 from __future__ import annotations
 
@@ -33,19 +32,9 @@ if TYPE_CHECKING:
 
 
 def induced_subgraph(graph: Graph, node_ids: Iterable[str]) -> Graph:
-    """Subgraph containing exactly the given nodes plus every edge whose
-    both endpoints are in the set.
-
-    Meta is copied from the source graph as-is. The new graph has its
-    own private adjacency index — mutations don't affect the source.
-    """
     from forktex.graph.models import Graph as _Graph
 
     keep = {nid for nid in node_ids if graph.has_node(nid)}
-    # Deep-copy — Pydantic doesn't copy already-validated model instances
-    # by default, so without this, the "own private" nodes/edges below
-    # would actually alias the source graph's, and mutating a returned
-    # node's `attrs` would silently corrupt the source too.
     new_nodes = [n.model_copy(deep=True) for n in graph.nodes if n.id in keep]
     new_edges = [e.model_copy(deep=True) for e in graph.edges if e.src_id in keep and e.dst_id in keep]
     return _Graph(meta=graph.meta, nodes=new_nodes, edges=new_edges)
@@ -59,13 +48,6 @@ def subgraph_around(
     edge_kind: EdgeKind | None = None,
     direction: str = "both",
 ) -> Graph:
-    """Subgraph containing all nodes within ``max_depth`` hops of
-    ``start_id`` plus the induced edges. ``max_depth=0`` returns just
-    the start node (if present); larger depths grow the radius.
-
-    ``direction='both'`` reachable in either direction; ``'out'``
-    follows forward edges only; ``'in'`` only backward edges.
-    """
     if not graph.has_node(start_id):
         from forktex.graph.models import Graph as _Graph
 
@@ -73,8 +55,6 @@ def subgraph_around(
     if max_depth <= 0:
         return induced_subgraph(graph, [start_id])
 
-    # Layered BFS to enforce the depth bound — the algebra.bfs helper
-    # would walk the full reachable set without depth tracking.
     keep: set[str] = {start_id}
     frontier: set[str] = {start_id}
     for _ in range(max_depth):

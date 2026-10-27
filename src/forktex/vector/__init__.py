@@ -21,44 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Multi-modal vector space embedding and search over Qdrant.
-
-Qdrant-first with a thin abstraction layer that surfaces four search strategies:
-dense (text), multimodal (CLIP/image), hybrid (dense+sparse RRF fusion),
-and sparse (BM25/SPLADE keyword).
-
-Collections are tenant-scoped by caller convention — the caller sets the
-collection name (e.g. ``f"org-{org_id}--knowledge"``).
-
-    vector = Vector(qdrant_url="http://qdrant:6333")
-
-    # Create (idempotent)
-    coll = vector.collection("org-abc:knowledge")
-    await coll.create(dim=1536, multimodal_dim=512)
-
-    # Upsert
-    await coll.upsert([
-        VectorPoint(
-            id="chunk-001",
-            vector=embed_text("The capital of France is Paris."),
-            payload={"text": "The capital of France is Paris.", "source": "wiki"},
-            multimodal_vector=embed_clip(image),  # optional
-        )
-    ])
-
-    # Search — dense (default)
-    hits = await coll.search(SearchQuery(vector=embed_text(query)).limit(10))
-
-    # Search — hybrid
-    hits = await coll.search(
-        SearchQuery(vector=embed_text(query))
-        .limit(10)
-        .using("hybrid")
-        .score_threshold(0.6)
-    )
-
-Requires: pip install 'forktex[vector]'  (qdrant-client)
-"""
 
 from forktex.registry import ClientRegistry
 from forktex.vector.collection import CollectionHandle
@@ -78,34 +40,18 @@ from forktex.vector.types import (
 )
 from forktex.vector.vector import Vector
 
-# Mirrors ``forktex.storage``'s registry: register a named ``Vector``
-# at startup, look it up by name from anywhere (e.g., the rich VECTOR
-# field handler in [space]). ``"default"`` is the convention for
-# single-client setups.
-
 _registry: ClientRegistry[Vector] = ClientRegistry("vector", ClientNotRegisteredError)
 
 
 def register(name: str, qdrant_url: str, *, api_key: str | None = None) -> Vector:
-    """Register a named ``Vector`` client and return it.
-
-    Replaces any previous client of the same name. ``Vector`` builds a fresh
-    ``AsyncQdrantClient`` per operation, so nothing is leaked by replacement.
-    """
     return _registry.set(name, Vector(qdrant_url=qdrant_url, api_key=api_key))
 
 
 def get_client(name: str = "default") -> Vector:
-    """Return a registered ``Vector`` client by name.
-
-    Raises ``ClientNotRegisteredError`` if the name has not been registered.
-    """
     return _registry.get(name)
 
 
 def deregister(name: str = "default") -> Vector | None:
-    """Remove ``name`` from the registry and return the dropped client (or
-    ``None`` if it wasn't registered). Idempotent."""
     return _registry.pop(name)
 
 

@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""CollectionHandle — async operations on a single Qdrant collection."""
 
 from __future__ import annotations
 
@@ -48,7 +47,6 @@ if TYPE_CHECKING:
 
 
 def _make_client(url: str, api_key: str | None) -> AsyncQdrantClient:
-    """Create a fresh AsyncQdrantClient (stateless, close after use)."""
     try:
         from qdrant_client import AsyncQdrantClient
     except ImportError as exc:
@@ -57,18 +55,6 @@ def _make_client(url: str, api_key: str | None) -> AsyncQdrantClient:
 
 
 class CollectionHandle:
-    """Scoped handle for a named Qdrant collection.
-
-    Obtained via ``vector.collection("name")`` — not instantiated directly.
-    Creates a fresh ``AsyncQdrantClient`` per operation (stateless, safe for
-    concurrent async use). Explicitly closes each client after use.
-
-    Named vector spaces per collection:
-    - ``"dense"``: required text embedding.
-    - ``"multimodal"``: optional CLIP/image embedding.
-    - ``"sparse"``: optional sparse BM25/SPLADE vector for hybrid search.
-    """
-
     def __init__(self, name: str, qdrant_url: str, api_key: str | None) -> None:
         self._name = name
         self._qdrant_url = qdrant_url
@@ -82,14 +68,6 @@ class CollectionHandle:
         multimodal_dim: int | None = None,
         sparse: bool = False,
     ) -> None:
-        """Create the collection. No-op if it already exists.
-
-        Args:
-            dim: Dense vector dimension (e.g. 1536 for text-embedding-3-small).
-            distance: ``"cosine"``, ``"dot"``, or ``"euclidean"``.
-            multimodal_dim: Optional second vector space for CLIP embeddings.
-            sparse: If True, adds a ``"sparse"`` space for BM25/SPLADE hybrid.
-        """
         from qdrant_client.models import Distance, SparseVectorParams, VectorParams
 
         dist_map = {
@@ -118,7 +96,6 @@ class CollectionHandle:
             await q.close()
 
     async def delete(self) -> None:
-        """Delete the collection and all its data."""
         q = _make_client(self._qdrant_url, self._api_key)
         try:
             await q.delete_collection(self._name)
@@ -126,7 +103,6 @@ class CollectionHandle:
             await q.close()
 
     async def info(self) -> CollectionInfo:
-        """Return metadata about the collection."""
         q = _make_client(self._qdrant_url, self._api_key)
         try:
             try:
@@ -147,7 +123,6 @@ class CollectionHandle:
                 multimodal_dim = vectors_config["multimodal"].size
         if info.config.params.sparse_vectors:
             has_sparse = "sparse" in info.config.params.sparse_vectors
-        # v1.9+: points_count; v1.17+: vectors_count may not exist
         pts = getattr(info, "points_count", None) or getattr(info, "vectors_count", None) or 0
         return CollectionInfo(
             name=self._name,
@@ -158,7 +133,6 @@ class CollectionHandle:
         )
 
     async def upsert(self, points: list[VectorPoint]) -> None:
-        """Insert or update points. Existing IDs are overwritten."""
         if not points:
             return
         from qdrant_client.http.exceptions import UnexpectedResponse
@@ -171,10 +145,6 @@ class CollectionHandle:
             if p.multimodal_vector is not None:
                 vectors["multimodal"] = p.multimodal_vector
             if p.sparse_vector is not None:
-                # PointStruct.vector is a plain {name: vector} dict — the named-vector
-                # entry doesn't need a NamedSparseVector wrapper (that type was only
-                # for the old top-level client.search() API, and no longer exists
-                # in qdrant-client 1.19+); a bare SparseVector under "sparse" works.
                 vectors["sparse"] = QSparseVector(
                     indices=p.sparse_vector.indices,
                     values=p.sparse_vector.values,
@@ -193,7 +163,6 @@ class CollectionHandle:
             await q.close()
 
     async def delete_points(self, ids: list[str | int]) -> None:
-        """Delete points by ID. No-op if ``ids`` is empty."""
         if not ids:
             return
         from qdrant_client.models import PointIdsList
@@ -208,7 +177,6 @@ class CollectionHandle:
             await q.close()
 
     async def search(self, query: SearchQuery) -> list[SearchHit]:
-        """Execute a vector search and return ranked hits."""
         from qdrant_client.models import Filter, Fusion, FusionQuery, Prefetch
         from qdrant_client.models import SparseVector as QSparseVector
 
@@ -243,10 +211,6 @@ class CollectionHandle:
                 hits = result.points
 
             elif strategy == "sparse":
-                # The sparse space is indexed separately, so a keyword search cannot
-                # be derived from the dense query vector. This branch used to be
-                # folded in with "hybrid" below, which meant `using("sparse")` ran a
-                # dense search and silently returned dense results.
                 if query._sparse_vector is None:
                     raise InvalidQueryError(
                         "using('sparse') requires a sparse query vector — call "
@@ -267,9 +231,6 @@ class CollectionHandle:
                 hits = result.points
 
             elif strategy == "hybrid":
-                # Dense prefetch fused with RRF. When the caller also supplied a
-                # sparse vector, prefetch both spaces so the fusion is genuinely
-                # hybrid rather than a single-space rerank.
                 prefetch = [Prefetch(query=query._vector, using="dense", limit=query._limit * 3)]
                 if query._sparse_vector is not None:
                     prefetch.append(
@@ -313,13 +274,6 @@ class CollectionHandle:
         hits: list[SearchHit],
         top_k: int,
     ) -> list[SearchHit]:
-        """Re-score hits using cosine similarity between ``query_vector`` and
-        the hit vectors fetched from Qdrant.
-
-        Retrieves the stored dense vectors for each hit ID, computes cosine
-        similarity against the query, and returns the top-k results sorted by
-        the new score.
-        """
         if not hits:
             return []
 
@@ -349,7 +303,6 @@ class CollectionHandle:
         for hit in hits:
             sv = stored.get(hit.id)
             if sv is None:
-                # Vector not retrievable — fall back to original search score
                 logger.debug(
                     "rerank: vector not found for hit %r, keeping original score",
                     hit.id,

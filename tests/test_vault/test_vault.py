@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Tests for forktex.vault — pure crypto (no container) + SQLAlchemy integration."""
 
 from __future__ import annotations
 
@@ -36,6 +35,7 @@ pytest.importorskip("cryptography", reason="cryptography not installed")
 from forktex.database import BaseDBModel, TimestampMixin
 from forktex.error import AppError
 from forktex.vault import DecryptionError, EncryptedJSON, Vault
+from tests.conftest import models_sessionmaker
 
 KEK = "super-secret-key-for-testing-only"
 KEK2 = "another-secret-key-for-rotation"
@@ -44,20 +44,13 @@ _vault_for_model = Vault(kek=KEK)
 
 
 class _VaultSecret(BaseDBModel, TimestampMixin):
-    """Module-level model so SQLAlchemy can resolve Mapped[] annotations."""
-
     __tablename__ = "vault_secret_test"
 
     id: Mapped[uuid.UUID] = mapped_column(sa.UUID(as_uuid=True), primary_key=True, default=uuid.uuid7)
     payload: Mapped[bytes | None] = mapped_column(EncryptedJSON(_vault_for_model), nullable=True)
 
 
-# ---------------------------------------------------------------------------
-# Pure crypto tests (no container needed)
-# ---------------------------------------------------------------------------
-
-
-def test_encrypt_decrypt_roundtrip():
+def test_encrypt_decrypt_roundtrip() -> None:
     vault = Vault(kek=KEK)
     data = {"api_key": "sk-abc", "org_id": "org-xyz", "nested": {"a": 1}}
     blob = vault.encrypt(data)
@@ -65,38 +58,30 @@ def test_encrypt_decrypt_roundtrip():
     assert vault.decrypt(blob) == data
 
 
-def test_encrypt_empty_dict():
+def test_encrypt_empty_dict() -> None:
     vault = Vault(kek=KEK)
     assert vault.decrypt(vault.encrypt({})) == {}
 
 
-def test_encrypt_unicode_values():
+def test_encrypt_unicode_values() -> None:
     vault = Vault(kek=KEK)
     data = {"msg": "Ünïcödé héré 🎉", "lang": "ro"}
     assert vault.decrypt(vault.encrypt(data)) == data
 
 
-def test_different_keks_produce_different_blobs():
+def test_different_keks_produce_different_blobs() -> None:
     blob1 = Vault(kek=KEK).encrypt({"secret": "value"})
     blob2 = Vault(kek=KEK2).encrypt({"secret": "value"})
     assert blob1 != blob2
 
 
-def test_same_kek_produces_different_blobs_each_call():
-    # Fernet uses a fresh IV per encrypt — two encryptions of the same data differ
+def test_same_kek_produces_different_blobs_each_call() -> None:
     vault = Vault(kek=KEK)
     data = {"x": 1}
     assert vault.encrypt(data) != vault.encrypt(data)
 
 
-def test_wrong_kek_raises_on_decrypt():
-    """A `DecryptionError`, not the raw `InvalidToken`.
-
-    The third-party exception used to escape onto the public surface, where a
-    consumer's `except AppError` boundary missed it and it surfaced as a masked
-    500. The original is kept on `__cause__` so an operator can still tell a
-    wrong-KEK from a tampered-blob by reading the traceback.
-    """
+def test_wrong_kek_raises_on_decrypt() -> None:
     from cryptography.fernet import InvalidToken
 
     blob = Vault(kek=KEK).encrypt({"x": 1})
@@ -105,20 +90,19 @@ def test_wrong_kek_raises_on_decrypt():
 
     assert isinstance(excinfo.value, AppError)
     assert isinstance(excinfo.value.__cause__, InvalidToken)
-    # The message must carry no key material and no ciphertext.
     assert KEK2 not in str(excinfo.value)
     assert "blob" not in str(excinfo.value).lower() or "tampered" in str(excinfo.value)
 
 
-def test_tampered_blob_raises():
+def test_tampered_blob_raises() -> None:
     vault = Vault(kek=KEK)
     blob = bytearray(vault.encrypt({"x": 1}))
-    blob[10] ^= 0xFF  # flip bits
+    blob[10] ^= 0xFF
     with pytest.raises(DecryptionError):
         vault.decrypt(bytes(blob))
 
 
-def test_rotate_kek_roundtrip():
+def test_rotate_kek_roundtrip() -> None:
     vault = Vault(kek=KEK)
     data = {"credentials": "token-abc"}
     blob = vault.encrypt(data)
@@ -127,10 +111,10 @@ def test_rotate_kek_roundtrip():
     assert Vault(kek=KEK2).decrypt(new_blob) == data
 
     with pytest.raises(DecryptionError):
-        Vault(kek=KEK2).decrypt(blob)  # old blob invalid with new KEK
+        Vault(kek=KEK2).decrypt(blob)
 
 
-def test_rotate_kek_bytes_form():
+def test_rotate_kek_bytes_form() -> None:
     vault = Vault(kek=KEK)
     data = {"k": "v"}
     blob = vault.encrypt(data)
@@ -138,146 +122,90 @@ def test_rotate_kek_bytes_form():
     assert Vault(kek=KEK2).decrypt(new_blob) == data
 
 
-def test_kek_bytes_input():
+def test_kek_bytes_input() -> None:
     vault = Vault(kek=KEK.encode())
     data = {"key": "val"}
     assert vault.decrypt(vault.encrypt(data)) == data
 
 
-def test_kek_length_independence():
-    # Short and long KEKs both work (SHA-256 normalises them)
+def test_kek_length_independence() -> None:
     for kek in ["a", "x" * 128, "中文キー"]:
         v = Vault(kek=kek)
         d = {"k": kek}
         assert v.decrypt(v.encrypt(d)) == d
 
 
-def test_empty_string_kek_still_works():
+def test_empty_string_kek_still_works() -> None:
     v = Vault(kek="")
     assert v.decrypt(v.encrypt({"k": "v"})) == {"k": "v"}
 
 
-def test_repr_does_not_leak_key_material():
-    """The default dataclass-style repr of the underlying Fernet object
-    embeds the derived key in cleartext — Vault must override __repr__ so
-    a stray log/traceback/error-reporter capture never exposes it."""
+def test_repr_does_not_leak_key_material() -> None:
     v = Vault(kek=KEK)
     assert KEK not in repr(v)
     assert "signing_key" not in repr(v).lower()
     assert "encryption_key" not in repr(v).lower()
 
 
-def test_non_json_native_values_are_stringified_not_rejected():
-    """encrypt() uses json.dumps(..., default=str) — matches the same
-    fallback convention used by forktex.cache.serialize(). Non-native
-    values (e.g. raw bytes) round-trip as their str() form, not as their
-    original type — callers must pre-serialize anything that needs exact
-    round-tripping."""
+def test_non_json_native_values_are_stringified_not_rejected() -> None:
     vault = Vault(kek=KEK)
     data = {"raw": b"\x00\x01binary"}
     blob = vault.encrypt(data)
     assert vault.decrypt(blob) == {"raw": str(b"\x00\x01binary")}
 
 
-# ---------------------------------------------------------------------------
-# SQLAlchemy EncryptedJSON column integration (requires Postgres container)
-# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_encrypted_json_column_roundtrip(postgres_url_str: str, fresh_schema: str) -> None:
+    async with models_sessionmaker(postgres_url_str, fresh_schema, "forktex_grid") as maker:
+        secret_data = {"api_key": "sk-test", "org_id": "org-1", "score": 42}
+
+        async with maker() as session:
+            row = _VaultSecret(payload=secret_data)
+            session.add(row)
+            await session.commit()
+            row_id = row.id
+
+        async with maker() as session:
+            loaded = await session.get(_VaultSecret, row_id)
+            assert loaded is not None
+            assert loaded.payload == secret_data
 
 
 @pytest.mark.asyncio
-async def test_encrypted_json_column_roundtrip(postgres_url_str: str, fresh_schema: str):
-    """EncryptedJSON must encrypt on flush and decrypt transparently on load."""
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-    engine = create_async_engine(
-        postgres_url_str,
-        execution_options={"schema_translate_map": {None: fresh_schema, "forktex_grid": fresh_schema}},
-    )
-    async with engine.begin() as conn:
-        await conn.execute(sa.text(f'CREATE SCHEMA IF NOT EXISTS "{fresh_schema}"'))
-        await conn.run_sync(BaseDBModel.metadata.create_all)
-
-    maker = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
-    secret_data = {"api_key": "sk-test", "org_id": "org-1", "score": 42}
-
-    async with maker() as session:
-        row = _VaultSecret(payload=secret_data)
-        session.add(row)
-        await session.commit()
-        row_id = row.id
-
-    async with maker() as session:
-        loaded = await session.get(_VaultSecret, row_id)
-        assert loaded is not None
-        assert loaded.payload == secret_data
-
-    await engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_encrypted_json_wrong_vault_on_load_raises(postgres_url_str: str, fresh_schema: str):
-    """Loading a row through an EncryptedJSON column bound to the WRONG
-    Vault must raise on SELECT, not silently return garbage or None — a decrypt
-    failure must never look like a missing value."""
+async def test_encrypted_json_wrong_vault_on_load_raises(postgres_url_str: str, fresh_schema: str) -> None:
     from sqlalchemy.orm import DeclarativeBase
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-    engine = create_async_engine(
-        postgres_url_str,
-        execution_options={"schema_translate_map": {None: fresh_schema, "forktex_grid": fresh_schema}},
-    )
-    async with engine.begin() as conn:
-        await conn.execute(sa.text(f'CREATE SCHEMA IF NOT EXISTS "{fresh_schema}"'))
-        await conn.run_sync(BaseDBModel.metadata.create_all)
+    async with models_sessionmaker(postgres_url_str, fresh_schema, "forktex_grid") as maker:
+        async with maker() as session:
+            row = _VaultSecret(payload={"api_key": "sk-wrong-vault-test"})
+            session.add(row)
+            await session.commit()
+            row_id = row.id
 
-    maker = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
-    async with maker() as session:
-        row = _VaultSecret(payload={"api_key": "sk-wrong-vault-test"})
-        session.add(row)
-        await session.commit()
-        row_id = row.id
+        wrong_vault = Vault(kek=KEK2)
 
-    # A second mapping of the same table, bound to a DIFFERENT vault.
-    wrong_vault = Vault(kek=KEK2)
+        class _Base(DeclarativeBase):
+            pass
 
-    class _Base(DeclarativeBase):
-        pass
+        class _VaultSecretWrongVault(_Base):
+            __tablename__ = "vault_secret_test"
+            id: Mapped[uuid.UUID] = mapped_column(sa.UUID(as_uuid=True), primary_key=True)
+            payload: Mapped[bytes | None] = mapped_column(EncryptedJSON(wrong_vault), nullable=True)
 
-    class _VaultSecretWrongVault(_Base):
-        __tablename__ = "vault_secret_test"
-        id: Mapped[uuid.UUID] = mapped_column(sa.UUID(as_uuid=True), primary_key=True)
-        payload: Mapped[bytes | None] = mapped_column(EncryptedJSON(wrong_vault), nullable=True)
-
-    async with maker() as session:
-        with pytest.raises(DecryptionError):
-            await session.get(_VaultSecretWrongVault, row_id)
-
-    await engine.dispose()
+        async with maker() as session:
+            with pytest.raises(DecryptionError):
+                await session.get(_VaultSecretWrongVault, row_id)
 
 
 @pytest.mark.asyncio
-async def test_encrypted_json_null_roundtrip(postgres_url_str: str, fresh_schema: str):
-    """Null payload must survive flush/load without decryption attempt."""
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+async def test_encrypted_json_null_roundtrip(postgres_url_str: str, fresh_schema: str) -> None:
+    async with models_sessionmaker(postgres_url_str, fresh_schema, "forktex_grid") as maker:
+        async with maker() as session:
+            row = _VaultSecret(payload=None)
+            session.add(row)
+            await session.commit()
+            row_id = row.id
 
-    engine = create_async_engine(
-        postgres_url_str,
-        execution_options={"schema_translate_map": {None: fresh_schema, "forktex_grid": fresh_schema}},
-    )
-    async with engine.begin() as conn:
-        await conn.execute(sa.text(f'CREATE SCHEMA IF NOT EXISTS "{fresh_schema}"'))
-        await conn.run_sync(BaseDBModel.metadata.create_all)
-
-    maker = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
-
-    async with maker() as session:
-        row = _VaultSecret(payload=None)
-        session.add(row)
-        await session.commit()
-        row_id = row.id
-
-    async with maker() as session:
-        loaded = await session.get(_VaultSecret, row_id)
-        assert loaded.payload is None
-
-    await engine.dispose()
+        async with maker() as session:
+            loaded = await session.get(_VaultSecret, row_id)
+            assert loaded.payload is None

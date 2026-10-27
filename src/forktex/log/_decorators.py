@@ -21,9 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""``@traced`` — wrap a callable with entry/exit/exception logging + a
-scoped trace_id, for any sync or async function (worker job handler, flow
-step, CLI entry point)."""
 
 from __future__ import annotations
 
@@ -42,29 +39,6 @@ def traced(
     name: str | None = None,
     level: int = logging.INFO,
 ) -> Callable:
-    """Wrap ``fn`` to log one entry line, one exit line (with duration) on
-    success, or an ``exception()`` line (then re-raise) on failure — scoping
-    a fresh ``trace_id`` for the call via :func:`trace_context`/
-    :func:`async_trace_context` (nested under any already-established
-    ``root_trace_id``, so a traced step inside a traced job still correlates
-    with it).
-
-    Usable bare or parametrized, on sync or async callables::
-
-        @traced
-        async def process_job(job_id: str) -> None: ...
-
-        @traced(name="ingest.step", level=logging.DEBUG)
-        def compute() -> int: ...
-
-    A standalone primitive — compose it with other decorators (e.g.
-    ``queue.task()``) rather than expecting either to special-case the
-    other::
-
-        @queue.task()
-        @traced()
-        async def handler(ctx) -> None: ...
-    """
 
     def decorator(func: Callable) -> Callable:
         label = name or func.__qualname__

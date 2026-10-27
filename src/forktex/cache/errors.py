@@ -22,45 +22,19 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""Cache module errors.
-
-``AppError`` subclasses, so a consumer's single ``except AppError`` boundary
-renders them like every other forktex error instead of letting a bare
-``RuntimeError`` escape as a masked 500 — see ``forktex.error``.
-
-Both also inherit ``RuntimeError``, the same way
-``database.DatabaseNotInitializedError`` and ``queue.QueueError`` do: this
-module used to raise a plain ``RuntimeError``, and ``cache.ops._safe_client``
-catches that to degrade to a cache miss. Keeping the base means every existing
-``except RuntimeError`` call site — inside this library and out — still works.
-"""
-
 from __future__ import annotations
 
 from forktex.error import AppError, AppErrorCode
 
 
 class CacheError(AppError, RuntimeError):
-    """Base class for cache module errors."""
-
     code = AppErrorCode.INTERNAL
 
 
-class CacheNotInitializedError(CacheError):
-    """Raised when the client is requested before :func:`init` configured one.
-
-    ``INTERNAL`` because a missing ``init()`` is a wiring mistake in the host
-    process, not something the caller of an endpoint can fix or retry.
-    """
+class CacheNotInitializedError(CacheError): ...
 
 
 class CacheInitializationError(CacheError):
-    """Raised when :func:`init` cannot reach Redis.
-
-    The client is left unset, so :func:`available` keeps reporting ``False``
-    rather than handing out a connection that never worked.
-    """
-
     code = AppErrorCode.UNAVAILABLE
 
 

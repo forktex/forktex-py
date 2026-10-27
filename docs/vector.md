@@ -93,6 +93,7 @@ from forktex.vector import (
 | `CollectionNotFoundError` | `AppErrorCode.NOT_FOUND`. |
 | `DimensionMismatchError` | `AppErrorCode.VALIDATION`. |
 | `ClientNotRegisteredError` | Subclasses `VectorError`; inherits `INTERNAL`. |
+| `SearchStrategy` | `Literal["dense", "multimodal", "hybrid", "sparse"]` — the type of the `strategy` argument. |
 
 ```python
 from forktex.vector import SearchQuery, Vector, VectorPoint

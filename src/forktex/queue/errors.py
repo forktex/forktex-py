@@ -22,25 +22,12 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""Queue module errors."""
-
 from __future__ import annotations
 
 from forktex.error import AppError, AppErrorCode
 
 
 class QueueError(AppError, RuntimeError):
-    """Raised on queue configuration or connection errors.
-
-    Inherits from **both** bases deliberately. ``AppError`` gives it a
-    ``code``/``details`` and makes it renderable by any transport that
-    already handles ``AppError`` (e.g. an HTTP envelope middleware)
-    instead of surfacing as a masked 500. ``RuntimeError`` is
-    retained so pre-existing ``except RuntimeError`` call sites keep
-    working unchanged — both derive from ``Exception``, so the MRO is
-    consistent and neither guarantee is lost.
-    """
-
     code = AppErrorCode.INTERNAL
 
 

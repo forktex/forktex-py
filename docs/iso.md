@@ -53,6 +53,12 @@ No custom exception type. Three stdlib ones:
 
 Catch `ValueError` at a parse boundary; there is nothing else to catch.
 
+**`iso` is the one module that does not raise `AppError`.** Every other package raises a typed
+`forktex.error` leaf so a consumer's single boundary renders it. `iso` cannot: `forktex.error`
+imports `forktex.types`, which imports `forktex.iso`, so an `iso -> error` edge would close a cycle
+between three level-0 primitives. The exemption is deliberate, and `test_the_stdlib_raise_exemption_is_still_real`
+holds it to raising stdlib errors so the carve-out cannot quietly outlive its reason.
+
 ## Gotchas
 
 - **Naive means UTC by default.** `to_iso`/`from_iso` assume it rather than raising, because every existing caller relied on that before this module existed. Pass `strict=True` if you have no such assumption to preserve — the default stays `False` so `grid`'s stored text format is untouched.

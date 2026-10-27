@@ -21,14 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""The camelCase-on-the-wire promise has to hold for a plain `model_dump()`.
-
-`BaseAppModel` documents "snake_case in Python, camelCase on the wire", but the
-alias generator alone only applies aliases when a caller passes `by_alias=True`.
-Every call site that forgot emitted snake_case and contradicted the error
-envelope travelling on the same connection, so `serialize_by_alias` is now part
-of the config and this pins it.
-"""
 
 from __future__ import annotations
 
@@ -44,22 +36,20 @@ class _Frozen(BaseWireValueObject):
     started_at: str
 
 
-def test_model_dump_emits_camel_case_without_by_alias():
+def test_model_dump_emits_camel_case_without_by_alias() -> None:
     dumped = _Payload(trace_id="abc", retry_after_seconds=3).model_dump()
     assert dumped == {"traceId": "abc", "retryAfterSeconds": 3}
 
 
-def test_model_dump_json_emits_camel_case_too():
+def test_model_dump_json_emits_camel_case_too() -> None:
     assert '"traceId"' in _Payload(trace_id="abc").model_dump_json()
 
 
-def test_frozen_wire_value_objects_follow_the_same_rule():
+def test_frozen_wire_value_objects_follow_the_same_rule() -> None:
     assert _Frozen(started_at="2026-01-01T00:00:00Z").model_dump() == {"startedAt": "2026-01-01T00:00:00Z"}
 
 
-def test_both_input_shapes_are_still_accepted():
-    """The point of the convention is that curl and TypeScript clients can each
-    use their native spelling, so serialisation must not narrow validation."""
+def test_both_input_shapes_are_still_accepted() -> None:
     assert _Payload(trace_id="a").trace_id == "a"
     assert _Payload.model_validate({"traceId": "a"}).trace_id == "a"
     assert _Payload.model_validate({"trace_id": "a"}).trace_id == "a"

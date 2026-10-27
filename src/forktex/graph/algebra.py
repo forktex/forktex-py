@@ -21,13 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Algorithms over ``Graph``.
-
-Pure functions taking a ``Graph`` plus a starting node id; return ids
-(not full nodes) so callers can decide what to materialise. All
-algorithms accept an optional ``edge_kind`` filter — pass it to
-constrain traversal to one edge type without slicing the graph first.
-"""
 
 from __future__ import annotations
 
@@ -46,8 +39,6 @@ def bfs(
     edge_kind: EdgeKind | None = None,
     direction: str = "out",
 ) -> list[str]:
-    """Breadth-first traversal. Returns visited ids in BFS order, including
-    ``start_id`` first. Unknown ``start_id`` returns ``[]``."""
     if not graph.has_node(start_id):
         return []
     visited: set[str] = {start_id}
@@ -70,7 +61,6 @@ def dfs(
     edge_kind: EdgeKind | None = None,
     direction: str = "out",
 ) -> list[str]:
-    """Depth-first traversal. Returns visited ids in DFS pre-order."""
     if not graph.has_node(start_id):
         return []
     visited: set[str] = set()
@@ -95,7 +85,6 @@ def transitive_closure(
     edge_kind: EdgeKind | None = None,
     direction: str = "out",
 ) -> set[str]:
-    """All node ids reachable FROM ``start_id`` (inclusive)."""
     return set(bfs(graph, start_id, edge_kind=edge_kind, direction=direction))
 
 
@@ -107,14 +96,6 @@ def shortest_path(
     edge_kind: EdgeKind | None = None,
     direction: str = "out",
 ) -> list[str] | None:
-    """Unweighted shortest path between two nodes. Returns the list of
-    node ids from ``src_id`` to ``dst_id`` inclusive, or ``None`` if
-    no path exists. ``src_id == dst_id`` returns ``[src_id]``.
-
-    Edge weights aren't part of the model — every edge counts as 1.
-    Callers needing weighted shortest path should encode weight in
-    ``attrs`` and run their own Dijkstra.
-    """
     if src_id == dst_id and graph.has_node(src_id):
         return [src_id]
     if not graph.has_node(src_id) or not graph.has_node(dst_id):
@@ -147,12 +128,6 @@ def cycles(
     *,
     edge_kind: EdgeKind | None = None,
 ) -> list[list[str]]:
-    """All simple directed cycles in the graph (one representative per
-    cyclic SCC). Returns a list of node-id lists; an empty list means
-    the graph (under the given ``edge_kind`` filter) is acyclic.
-
-    Implements Tarjan's SCC + retains only components of size > 1, plus
-    self-loops as size-1 cycles. For dense graphs this is O(V + E)."""
 
     def successors(nid: str) -> Iterable[str]:
         return [e.dst_id for e in graph.out_edges(nid, kind=edge_kind) if graph.has_node(e.dst_id)]
@@ -196,7 +171,6 @@ def cycles(
             cyclic.append(comp)
         elif len(comp) == 1:
             v = comp[0]
-            # Self-loop?
             if any(e.dst_id == v for e in graph.out_edges(v, kind=edge_kind)):
                 cyclic.append([v])
     return cyclic

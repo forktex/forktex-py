@@ -62,6 +62,8 @@ from forktex.vault import EncryptedJSON, Vault
 | `Vault.decrypt(blob: bytes) -> dict` | Fernet-decrypt then `json.loads`. |
 | `Vault.rotate_kek(new_kek, blob) -> bytes` | Decrypt with the current KEK, re-encrypt under `new_kek`. |
 | `EncryptedJSON(vault)` | SQLAlchemy `TypeDecorator` over `LargeBinary` (BYTEA in Postgres). `cache_ok = True`. `None` passes through unencrypted in both directions. |
+| `VaultError` | Base vault error, `AppErrorCode.INTERNAL`. |
+| `DecryptionError` | Subclasses `VaultError`. Raised by `decrypt()` — the underlying `InvalidToken` is on `__cause__`. |
 
 `Vault.__repr__` returns `Vault(<redacted>)` — the default Fernet repr embeds the derived key in
 cleartext and would otherwise reach logs, tracebacks and error reporters that capture locals.
@@ -70,8 +72,8 @@ cleartext and would otherwise reach logs, tracebacks and error reporters that ca
 
 | Raised | When | Catch? |
 |---|---|---|
-| `ImportError("Install 'cryptography' to use forktex.vault")` | `Vault(kek)` without `cryptography`. | No — install it. |
-| `cryptography.fernet.InvalidToken` | `decrypt()` (and therefore `rotate_kek()` and any `EncryptedJSON` load) with the wrong KEK or a tampered/corrupt blob. | Only at an operational boundary. |
+| `ImportError("Install 'forktex[vault]' (cryptography) to use forktex.vault")` | `Vault(kek)` without the extra. | No — install it. |
+| `DecryptionError` | `decrypt()` (and therefore `rotate_kek()` and any `EncryptedJSON` load) with the wrong KEK or a tampered/corrupt blob. Fernet cannot tell those apart, so the message does not guess; `cryptography.fernet.InvalidToken` is on `__cause__`. | Only at an operational boundary. |
 
 `InvalidToken` is passed through deliberately rather than wrapped in an `AppError` — the same
 exception means "wrong KEK" and "tampered ciphertext", and only an operator can distinguish them.

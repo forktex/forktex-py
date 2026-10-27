@@ -22,30 +22,17 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""Database module errors.
-
-``ConflictError`` — raised by the CRUD layer on a uniqueness violation — is not
-redefined here: it belongs to the shared vocabulary in ``forktex.error`` and is
-re-exported by ``forktex.database`` so one handler catches both import paths.
-"""
-
 from __future__ import annotations
 
 from forktex.error import AppError, AppErrorCode
 
 
 class DatabaseNotInitializedError(AppError, RuntimeError):
-    """A session was requested before :func:`init_engine` configured a default.
-
-    Inherits both bases deliberately, the same way ``queue.QueueError`` does:
-    ``AppError`` gives it a ``code`` and makes it renderable by any transport
-    that already handles ``AppError``, while ``RuntimeError`` keeps
-    pre-existing ``except RuntimeError`` call sites working. ``INTERNAL``
-    because a missing ``init_engine()`` is a wiring mistake, not something the
-    caller of an endpoint can fix or retry.
-    """
-
     code = AppErrorCode.INTERNAL
 
 
-__all__ = ["DatabaseNotInitializedError"]
+class TransactionBoundaryError(AppError, RuntimeError):
+    code = AppErrorCode.INTERNAL
+
+
+__all__ = ["DatabaseNotInitializedError", "TransactionBoundaryError"]

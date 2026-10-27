@@ -16,7 +16,9 @@ is `init()` being unable to reach Redis.
 ## Wiring
 
 **Shape A — module-level singleton.** One Redis client per process, held in a module global,
-created by `init(url)` and torn down by `close()`. There are no named clients.
+created by `init(url)` and torn down by `close()`. There are no named clients. `Cache(url)` is
+the same handle built directly — it owns the client and every operation, and the module-level
+functions are shims over one default instance of it.
 
 ```python
 from contextlib import asynccontextmanager

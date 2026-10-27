@@ -21,15 +21,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Integration tests for forktex.vector — requires Qdrant container.
-
-Note: Qdrant point IDs must be unsigned integers or valid UUIDs — not arbitrary
-strings. Tests use integers or uuid.uuid7() strings.
-Collection names cannot contain ':' — use '--' as tenant separator instead.
-"""
 
 from __future__ import annotations
 
+from forktex.vector import CollectionHandle
+from collections.abc import AsyncIterator
 import uuid
 
 import pytest
@@ -50,7 +46,7 @@ from forktex.vector import (
 from forktex.error import AppErrorCode
 from forktex.vector.errors import DimensionMismatchError, InvalidQueryError
 
-DIM = 4  # tiny vectors for speed in tests
+DIM = 4
 COLLECTION_PREFIX = "test-core-py--"
 
 
@@ -65,7 +61,7 @@ async def collection_name() -> str:
 
 
 @pytest_asyncio.fixture
-async def coll(vector: Vector, collection_name: str):
+async def coll(vector: Vector, collection_name: str) -> AsyncIterator[CollectionHandle]:
     handle = vector.collection(collection_name)
     await handle.create(dim=DIM, distance="cosine")
     yield handle
@@ -76,19 +72,17 @@ async def coll(vector: Vector, collection_name: str):
 
 
 def _vec(vals: list[float]) -> list[float]:
-    """Pad/trim to DIM."""
     return (vals + [0.0] * DIM)[:DIM]
 
 
 @pytest.mark.asyncio
-async def test_create_and_info(coll):
+async def test_create_and_info(coll: CollectionHandle) -> None:
     info = await coll.info()
     assert info.dim == DIM
 
 
 @pytest.mark.asyncio
-async def test_upsert_and_search_dense(coll):
-    # Use integer IDs — Qdrant requires uint or UUID
+async def test_upsert_and_search_dense(coll: CollectionHandle) -> None:
     points = [
         VectorPoint(id=1, vector=_vec([1, 0, 0, 0]), payload={"text": "apple"}),
         VectorPoint(id=2, vector=_vec([0, 1, 0, 0]), payload={"text": "banana"}),
@@ -97,12 +91,11 @@ async def test_upsert_and_search_dense(coll):
     await coll.upsert(points)
     hits = await coll.search(SearchQuery(vector=_vec([1, 0, 0, 0])).limit(3))
     assert len(hits) > 0
-    # Point 1 ([1,0,0,0]) is most similar to query [1,0,0,0]
     assert hits[0].id == 1
 
 
 @pytest.mark.asyncio
-async def test_upsert_with_uuid_ids(coll):
+async def test_upsert_with_uuid_ids(coll: CollectionHandle) -> None:
     uid = str(uuid.uuid7())
     await coll.upsert([VectorPoint(id=uid, vector=_vec([1, 0, 0, 0]))])
     hits = await coll.search(SearchQuery(vector=_vec([1, 0, 0, 0])).limit(1))
@@ -110,7 +103,7 @@ async def test_upsert_with_uuid_ids(coll):
 
 
 @pytest.mark.asyncio
-async def test_delete_points(coll):
+async def test_delete_points(coll: CollectionHandle) -> None:
     await coll.upsert([VectorPoint(id=100, vector=_vec([0.5, 0.5, 0, 0]))])
     await coll.delete_points([100])
     hits = await coll.search(SearchQuery(vector=_vec([0.5, 0.5, 0, 0])).limit(5))
@@ -118,7 +111,7 @@ async def test_delete_points(coll):
 
 
 @pytest.mark.asyncio
-async def test_score_threshold_filters(coll):
+async def test_score_threshold_filters(coll: CollectionHandle) -> None:
     await coll.upsert(
         [
             VectorPoint(id=10, vector=_vec([1, 0, 0, 0])),
@@ -132,7 +125,7 @@ async def test_score_threshold_filters(coll):
 
 
 @pytest.mark.asyncio
-async def test_payload_stored_and_returned(coll):
+async def test_payload_stored_and_returned(coll: CollectionHandle) -> None:
     await coll.upsert([VectorPoint(id=20, vector=_vec([1, 0, 0, 0]), payload={"key": "value", "n": 42})])
     hits = await coll.search(SearchQuery(vector=_vec([1, 0, 0, 0])).limit(1))
     assert len(hits) == 1
@@ -141,20 +134,20 @@ async def test_payload_stored_and_returned(coll):
 
 
 @pytest.mark.asyncio
-async def test_list_collections(vector: Vector, collection_name: str, coll):
+async def test_list_collections(vector: Vector, collection_name: str, coll: CollectionHandle) -> None:
     names = await vector.list_collections()
     assert collection_name in names
 
 
 @pytest.mark.asyncio
-async def test_list_collections_with_prefix(vector: Vector, collection_name: str, coll):
+async def test_list_collections_with_prefix(vector: Vector, collection_name: str, coll: CollectionHandle) -> None:
     names = await vector.list_collections(prefix=COLLECTION_PREFIX)
     assert all(n.startswith(COLLECTION_PREFIX) for n in names)
     assert collection_name in names
 
 
 @pytest.mark.asyncio
-async def test_search_across(vector: Vector):
+async def test_search_across(vector: Vector) -> None:
     names = []
     for i in range(2):
         name = f"{COLLECTION_PREFIX}cross--{uuid.uuid7().hex}"
@@ -166,10 +159,6 @@ async def test_search_across(vector: Vector):
         hits = await vector.search_across(names, SearchQuery(vector=_vec([1, 0, 0, 0])).limit(4))
         assert len(hits) >= 1
         assert all(h.collection in names for h in hits)
-        # SearchHit is a frozen BaseValueObject — search_across() must rebuild each
-        # hit via model_copy(update={"collection": name}) rather than mutate in
-        # place; confirm each hit's payload still matches the collection it was
-        # tagged with (i.e. collection tagging didn't get scrambled across collections).
         for h in hits:
             i = names.index(h.collection)
             assert h.payload == {"i": i}
@@ -182,7 +171,7 @@ async def test_search_across(vector: Vector):
 
 
 @pytest.mark.asyncio
-async def test_rerank_returns_top_k(coll):
+async def test_rerank_returns_top_k(coll: CollectionHandle) -> None:
     points = [VectorPoint(id=i + 1, vector=_vec([float(i + 1), 0, 0, 0])) for i in range(5)]
     await coll.upsert(points)
     query_vec = _vec([5, 0, 0, 0])
@@ -193,7 +182,7 @@ async def test_rerank_returns_top_k(coll):
 
 
 @pytest.mark.asyncio
-async def test_multimodal_collection(vector: Vector):
+async def test_multimodal_collection(vector: Vector) -> None:
     name = f"{COLLECTION_PREFIX}mm--{uuid.uuid7().hex}"
     h = vector.collection(name)
     await h.create(dim=DIM, multimodal_dim=DIM)
@@ -214,7 +203,7 @@ async def test_multimodal_collection(vector: Vector):
 
 
 @pytest.mark.asyncio
-async def test_sparse_vector_upsert_and_hybrid_search(vector: Vector):
+async def test_sparse_vector_upsert_and_hybrid_search(vector: Vector) -> None:
     name = f"{COLLECTION_PREFIX}sparse--{uuid.uuid7().hex}"
     h = vector.collection(name)
     await h.create(dim=DIM, sparse=True)
@@ -240,36 +229,29 @@ async def test_sparse_vector_upsert_and_hybrid_search(vector: Vector):
 
 
 @pytest.mark.asyncio
-async def test_upsert_dimension_mismatch_raises_typed_error(coll):
+async def test_upsert_dimension_mismatch_raises_typed_error(coll: CollectionHandle) -> None:
     with pytest.raises(DimensionMismatchError):
-        await coll.upsert([VectorPoint(id=1, vector=[1.0, 0.0])])  # DIM is 4, this is length 2
+        await coll.upsert([VectorPoint(id=1, vector=[1.0, 0.0])])
 
 
-def test_register_get_client_deregister_roundtrip():
+def test_register_get_client_deregister_roundtrip() -> None:
     try:
         registered = register("test-registry-client", qdrant_url="http://localhost:6333")
         assert get_client("test-registry-client") is registered
         dropped = deregister("test-registry-client")
         assert dropped is registered
-        assert deregister("test-registry-client") is None  # idempotent
+        assert deregister("test-registry-client") is None
     finally:
         deregister("test-registry-client")
 
 
-def test_get_client_unregistered_raises():
+def test_get_client_unregistered_raises() -> None:
     with pytest.raises(ClientNotRegisteredError):
         get_client("definitely-not-registered")
 
 
 @pytest.mark.asyncio
-async def test_sparse_strategy_searches_the_sparse_space_not_the_dense_one(vector: Vector):
-    """`using("sparse")` must query the sparse index.
-
-    It used to share a branch with `"hybrid"`, prefetching `using="dense"` — so a
-    keyword search silently returned dense-similarity results. The setup here makes
-    the two rankings disagree: point 1 is the *worst* dense match for the query
-    vector but the only point carrying the queried sparse terms.
-    """
+async def test_sparse_strategy_searches_the_sparse_space_not_the_dense_one(vector: Vector) -> None:
     name = f"{COLLECTION_PREFIX}sparse-only--{uuid.uuid7().hex}"
     h = vector.collection(name)
     await h.create(dim=DIM, sparse=True)
@@ -278,13 +260,13 @@ async def test_sparse_strategy_searches_the_sparse_space_not_the_dense_one(vecto
             [
                 VectorPoint(
                     id=1,
-                    vector=_vec([0, 0, 0, 1]),  # orthogonal to the dense query below
+                    vector=_vec([0, 0, 0, 1]),
                     payload={"text": "keyword-match"},
                     sparse_vector=SparseVector(indices=[7, 9], values=[0.9, 0.8]),
                 ),
                 VectorPoint(
                     id=2,
-                    vector=_vec([1, 0, 0, 0]),  # the best dense match
+                    vector=_vec([1, 0, 0, 0]),
                     payload={"text": "dense-match"},
                     sparse_vector=SparseVector(indices=[42], values=[0.1]),
                 ),
@@ -299,23 +281,21 @@ async def test_sparse_strategy_searches_the_sparse_space_not_the_dense_one(vecto
         )
 
         assert hits, "sparse search returned nothing"
-        # If this branch fell through to the dense path, id=2 would rank first.
         assert hits[0].id == 1, f"sparse search ranked by the dense vector: {[h_.id for h_ in hits]}"
     finally:
         await h.delete()
 
 
 @pytest.mark.asyncio
-async def test_sparse_strategy_without_a_sparse_vector_is_rejected(coll):
-    """Silently falling back to a dense search is what this replaces."""
+async def test_sparse_strategy_without_a_sparse_vector_is_rejected(coll: CollectionHandle) -> None:
     with pytest.raises(InvalidQueryError, match="requires a sparse query vector"):
         await coll.search(SearchQuery(vector=_vec([1, 0, 0, 0])).using("sparse"))
 
 
 @pytest.mark.asyncio
-async def test_unknown_strategy_is_a_bad_request_not_an_internal_error(coll):
+async def test_unknown_strategy_is_a_bad_request_not_an_internal_error(coll: CollectionHandle) -> None:
     query = SearchQuery(vector=_vec([1, 0, 0, 0]))
-    query._strategy = "nonsense"  # type: ignore[assignment]
+    query._strategy = "nonsense"
     with pytest.raises(InvalidQueryError) as excinfo:
         await coll.search(query)
     assert excinfo.value.code == AppErrorCode.BAD_REQUEST

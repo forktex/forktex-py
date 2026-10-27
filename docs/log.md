@@ -165,6 +165,7 @@ for batch_id in batches:
 | `get_extra_fields()` | The current `log_context()` fields as a dict (never `None`). |
 | `bind_current_context(fn)` | Wrap a callable so it re-binds the calling context's trace when it later runs in a thread. |
 | `ContextFilter(service=None)` | The `logging.Filter` that puts `trace_id`/`root_trace_id`/`run_id`/`service` on records. Attach it yourself when you own the handlers and cannot call `setup_logging`. |
+| `shutdown_logging()` | Drain and stop the queue listener started by `setup_logging(queue=True)`. Call it on shutdown or the last records are lost. |
 
 Env overrides — consulted only when the matching argument is left `None`: `$FORKTEX_LOG_LEVEL`, `$FORKTEX_LOG_DEBUG`, `$FORKTEX_LOG_JSON`. An explicit argument always wins.
 

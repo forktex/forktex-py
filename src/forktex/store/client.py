@@ -22,14 +22,6 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""``StoreConfig`` + ``StoreClient`` — the MongoDB client itself, plus the
-``ObjectId``/``_id`` normalisation every method funnels through.
-
-Split out of ``__init__.py`` so that module is the package *surface* (registry,
-module-level facade, ``__all__``) — ``package-layout.md`` rule 1, one module per
-concern.
-"""
-
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -39,7 +31,7 @@ from forktex.log import get_logger
 from forktex.types import BaseValueObject
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncGenerator
 
     from pymongo.asynchronous.client_session import AsyncClientSession
     from pymongo.asynchronous.mongo_client import AsyncMongoClient
@@ -63,20 +55,6 @@ def _make_client(url: str) -> AsyncMongoClient:
 
 
 def _to_query_id(value: object) -> object:
-    """Coerce a string that looks like a valid ``ObjectId`` back to one.
-
-    Auto-generated ids are stored as real ``ObjectId``s (the ordinary,
-    idiomatic MongoDB default) — a string filter would never match one (a
-    string and an ``ObjectId`` are different BSON types even when they
-    print the same), so lookups must convert back. Caller-supplied custom
-    ids that don't look like a 24-hex-char ``ObjectId`` are left untouched,
-    since they were stored as literal strings.
-
-    Edge case this can't disambiguate: a caller-supplied custom id that
-    happens to *also* be valid ``ObjectId`` hex form gets coerced here too,
-    which would mismatch the literal string it was actually stored as. Rare
-    in practice — avoid raw 24-hex-char custom ids if this matters.
-    """
     from bson import ObjectId
 
     if isinstance(value, str) and ObjectId.is_valid(value):
@@ -92,13 +70,6 @@ def _normalize_filter(filter: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize(doc: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Convert MongoDB's ``ObjectId`` ``_id`` to a plain string.
-
-    Every document this module hands back has a string ``_id`` — matching
-    the rest of the codebase's convention of string identifiers everywhere
-    — instead of leaking a ``bson.ObjectId`` that isn't JSON-serializable
-    by default.
-    """
     if doc is None:
         return None
     if "_id" in doc:
@@ -107,15 +78,6 @@ def _normalize(doc: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 class StoreClient:
-    """Async MongoDB client scoped to a single logical database.
-
-    Obtained via ``register(name, ...)`` + ``get_client(name)``, or constructed
-    directly with a ``StoreConfig``. Holds one persistent ``AsyncMongoClient``
-    for its lifetime — unlike ``forktex.storage``'s per-call clients,
-    MongoDB's async client is designed to be constructed once and reused; it
-    manages its own internal connection pool.
-    """
-
     def __init__(self, config: StoreConfig) -> None:
         self._config = config
         self._client = _make_client(config.url)
@@ -129,12 +91,6 @@ class StoreClient:
         id: str | None = None,
         session: AsyncClientSession | None = None,
     ) -> str:
-        """Insert ``document`` into ``collection``. Returns the document id.
-
-        Pass ``id`` to store a caller-supplied string id (e.g. a natural
-        key); otherwise MongoDB assigns a real ``ObjectId`` (returned as
-        its string form).
-        """
         payload = dict(document)
         if id is not None:
             payload["_id"] = id
@@ -148,7 +104,6 @@ class StoreClient:
         *,
         session: AsyncClientSession | None = None,
     ) -> dict[str, Any] | None:
-        """Return the first document matching ``filter``, or ``None``."""
         doc = await self._db[collection].find_one(_normalize_filter(filter), session=session)
         return _normalize(doc)
 
@@ -160,7 +115,6 @@ class StoreClient:
         limit: int = 100,
         session: AsyncClientSession | None = None,
     ) -> list[dict[str, Any]]:
-        """Return up to ``limit`` documents matching ``filter`` (default: all)."""
         query = _normalize_filter(filter) if filter else {}
         cursor = self._db[collection].find(query, session=session).limit(limit)
         return [doc for doc in [_normalize(d) async for d in cursor] if doc is not None]
@@ -174,11 +128,6 @@ class StoreClient:
         upsert: bool = False,
         session: AsyncClientSession | None = None,
     ) -> bool:
-        """Set fields in ``update`` on the first document matching ``filter``.
-
-        Returns ``True`` if a document was modified or (with ``upsert=True``)
-        newly inserted.
-        """
         result = await self._db[collection].update_one(
             _normalize_filter(filter), {"$set": update}, upsert=upsert, session=session
         )
@@ -191,8 +140,6 @@ class StoreClient:
         *,
         session: AsyncClientSession | None = None,
     ) -> bool:
-        """Delete the first document matching ``filter``. Returns ``True`` if
-        a document was actually deleted."""
         result = await self._db[collection].delete_one(_normalize_filter(filter), session=session)
         return result.deleted_count > 0
 
@@ -203,27 +150,11 @@ class StoreClient:
         *,
         session: AsyncClientSession | None = None,
     ) -> int:
-        """Count documents matching ``filter`` (default: all in collection)."""
         query = _normalize_filter(filter) if filter else {}
         return await self._db[collection].count_documents(query, session=session)
 
     @asynccontextmanager
-    async def transaction(self) -> AsyncIterator[AsyncClientSession]:
-        """Start a multi-document transaction. Commits on clean exit, aborts
-        on exception.
-
-        Requires the MongoDB deployment to be a replica set (or sharded
-        cluster) — a standalone ``mongod`` raises
-        ``pymongo.errors.OperationFailure`` immediately.
-
-        Usage::
-
-            async with client.transaction() as session:
-                await client.insert_one("orders", order_doc, session=session)
-                await client.update_one(
-                    "inventory", {"_id": sku}, {"stock": new_stock}, session=session
-                )
-        """
+    async def transaction(self) -> AsyncGenerator[AsyncClientSession]:
         async with (
             self._client.start_session() as session,
             await session.start_transaction(),
@@ -231,5 +162,4 @@ class StoreClient:
             yield session
 
     async def close(self) -> None:
-        """Close the underlying MongoDB client connection."""
         await self._client.close()

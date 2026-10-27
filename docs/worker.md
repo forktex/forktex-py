@@ -123,9 +123,13 @@ what tells you it finished.
 
 ## Errors
 
-`ImportError` naming the `[queue]` extra if arq is missing. `RuntimeError` from `run()` before
-`start()`, and from `arq_worker` before `start()`. Task failures are arq's business — use
-`@task(retries=...)`, and `queue.inspect_job` to see the outcome.
+| Raised | When | Catch? |
+|---|---|---|
+| `ImportError("Install 'forktex[queue]' (arq) to use forktex.queue")` | arq is not installed. | No — install the extra. |
+| `WorkerError` | `run()` before `start()`, or `arq_worker` before `start()`. Subclasses `AppError` (code `INTERNAL`) and `RuntimeError`, so `except RuntimeError` still works and a transport can render it. | No — a lifecycle mistake. |
+
+Task failures are arq's business — use `@task(retries=...)`, and `queue.inspect_job` to see the
+outcome.
 
 ## Gotchas
 

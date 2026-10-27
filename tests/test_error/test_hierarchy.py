@@ -21,17 +21,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Tests for the level-0 [error] extra: the AppError class hierarchy itself —
-the code hierarchy itself, message/details storage, exception chaining."""
 
 from __future__ import annotations
 
+from forktex.error import AppErrorCode
+from forktex.error import AppError
 import pytest
 
 from forktex.error import (
     AlreadyExistsError,
-    AppError,
-    AppErrorCode,
     BadRequestError,
     ConflictError,
     ForbiddenError,
@@ -56,45 +54,42 @@ _LEAF_SUBCLASSES = [
 
 
 @pytest.mark.parametrize("cls,expected_code", _LEAF_SUBCLASSES)
-def test_leaf_subclass_code(cls, expected_code):
+def test_leaf_subclass_code(cls: type[AppError], expected_code: AppErrorCode) -> None:
     error = cls("boom")
     assert error.code == expected_code
     assert isinstance(error, AppError)
 
 
-def test_already_exists_and_conflict_are_distinct_codes():
-    """Both would map to HTTP 409 in an HTTP transport — but AppError itself
-    carries no HTTP status; `code` is the only distinguishing signal."""
+def test_already_exists_and_conflict_are_distinct_codes() -> None:
     already_exists = AlreadyExistsError("dup")
     conflict = ConflictError("dup")
     assert already_exists.code != conflict.code
 
 
-def test_bad_request_vs_unprocessable_entity():
-    """Malformed/missing input vs. well-formed but semantically invalid — distinguished by code."""
+def test_bad_request_vs_unprocessable_entity() -> None:
     bad_request = BadRequestError("missing field")
     unprocessable = UnprocessableEntityError("value fails a business rule")
     assert bad_request.code != unprocessable.code
 
 
-def test_bare_apperror_defaults_to_internal():
+def test_bare_apperror_defaults_to_internal() -> None:
     error = AppError("unexpected")
     assert error.code == AppErrorCode.INTERNAL
 
 
-def test_message_and_details_stored():
+def test_message_and_details_stored() -> None:
     error = NotFoundError("user not found", details={"user_id": "abc"})
     assert error.message == "user not found"
     assert error.details == {"user_id": "abc"}
-    assert str(error) == "user not found"  # Exception.__init__(message) still works
+    assert str(error) == "user not found"
 
 
-def test_details_defaults_to_empty_dict_not_none():
+def test_details_defaults_to_empty_dict_not_none() -> None:
     error = BadRequestError("bad")
     assert error.details == {}
 
 
-def test_exception_chaining_preserved():
+def test_exception_chaining_preserved() -> None:
     original = ValueError("root cause")
     try:
         try:

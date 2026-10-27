@@ -12,7 +12,7 @@ The extra is required, but the failure is **lazy**: `import forktex.queue` succe
 
 ## Wiring
 
-Shape A — a module-level singleton. `await init(redis_url)` records the URL and drops any cached pool; the `ArqRedis` pool itself is created lazily on first use and reused for the module's lifetime. `await close()` closes it and clears the URL; it is idempotent.
+Shape A — a module-level default. `await init(redis_url)` builds a `Queue` and installs it, closing any previous handle's pool; the `ArqRedis` pool is created lazily on first use and reused for the handle's lifetime. `await close()` closes it and clears the default; it is idempotent. `Queue(redis_url)` is the same handle built directly, for a process that needs two queues or none of the global.
 
 ```python
 from contextlib import asynccontextmanager
@@ -98,12 +98,14 @@ if __name__ == "__main__":
 | `close()` | Close the pool, clear the URL. Idempotent. |
 | `enqueue(fn, *args, _queue_name=None, **kwargs) -> str` | Dispatch now; returns the arq job id. |
 | `enqueue_at(fn, *args, eta, _queue_name=None, **kwargs) -> str` | Dispatch at `eta` (must be timezone-aware). |
-| `inspect_job(job_id, *, queue_name="default") -> dict \| None` | `job_id`, `status`, `function`, `args`, `kwargs`, `enqueue_time`, `start_time`, `finish_time`, `result`, `error`, `tries`. `status` is `"queued"`, `"in_progress"`, `"complete"`, or `"not_found"`. |
+| `inspect_job(job_id, *, queue_name="default") -> JobInfo \| None` | Fields: `job_id`, `status`, `function`, `args`, `kwargs`, `enqueue_time`, `start_time`, `finish_time`, `result`, `error`, `tries`. `status` is a `JobStatus`. |
 | `cancel_job(job_id, *, queue_name="default") -> bool` | Signal abort, wait up to 1s for confirmation. |
-| `list_jobs(queue_name="default", *, status=None) -> list[dict]` | Jobs still in the queue's sorted set (queued or deferred), in `inspect_job` shape. |
-| `worker_health(redis_url=None, *, queue_name="default") -> dict[str, int]` | `{"pending", "in_flight", "failed"}`. |
+| `list_jobs(queue_name="default", *, status: JobStatus \| None = None) -> list[JobInfo]` | Jobs still in the queue's sorted set (queued or deferred). |
+| `worker_health(redis_url=None, *, queue_name="default") -> QueueHealth` | `pending`, `in_flight`, `failed`. |
 | `make_worker(redis_url, *, queue_name="default", max_jobs=10, job_timeout=300, handle_signals=True, drain_timeout=0) -> arq.Worker` | Build a worker over every registered `@task`, with `allow_abort_jobs=True`. `drain_timeout` reaches arq as `job_completion_wait` — see the gotcha below. |
 | `QueueError` | See below. |
+| `DEFAULT_QUEUE` | `"default"` — the queue a bare `enqueue` and `@task` use, and arq's own default. |
+| `require_default() -> Queue` | The default handle, or `QueueError`. `default()` returns `None` instead of raising. |
 
 ## Errors
 
@@ -153,9 +155,10 @@ Two consequences worth knowing:
 - **Registration is import-side-effect only.** If the worker entrypoint does not import the task modules, the worker starts with an empty function list and jobs sit in Redis forever. Keep the `# noqa: F401` import.
 - **Registries are per-process.** `storage`, `cache`, and `vector` clients registered in the API process do not exist in the worker; re-register them before consuming.
 - **`retry_delay` does not exist.** arq has no per-function retry-delay setting; an earlier version accepted the argument and silently ignored it. To control the gap between attempts, `raise arq.Retry(defer=seconds)` from the job body.
-- **`queue_name` must match everywhere.** `inspect_job`/`cancel_job` default to `"default"`, but arq's own `Job` defaults to `"arq:queue"`. A mismatch makes a live job report `"not_found"` and makes `cancel_job` return `False` regardless of its real state.
+- **`queue_name` must match everywhere.** `inspect_job`/`cancel_job` default to `"default"`, but arq's own `Job` defaults to `"arq:queue"`. A mismatch makes a live job report `JobStatus.NOT_FOUND` and makes `cancel_job` return `False` regardless of its real state.
 - **`cancel_job` returns `True` only for a job a worker is actively running** and confirms within 1s. A merely queued or deferred job, an already-completed one, and an unknown id all return `False`.
 - **`list_jobs` cannot see running or finished jobs.** It reads the queue's sorted set, which a worker removes from on claim. It truncates at 10,000 ids with a warning — do not call it in a hot path.
+- **`JobStatus` is ours, not arq's.** arq's `JobStatus` is a plain `str, Enum`, so `str()` on it is `"JobStatus.queued"`. `JobInfo.status` is a `StrEnum` of the documented values, so a filter compares equal.
 - **`worker_health`'s `failed` is cumulative and worker-published.** It comes from arq's health-check key, so it is `0` until a worker has recorded health. `pending`/`in_flight` are read straight from Redis.
 - **Duplicate task names overwrite.** The registry is keyed on `fn.__name__`; a second registration logs a warning and wins.
 - **Reuse Redis, not the database index.** Point `queue` at a different Redis DB index than `cache` so a `FLUSHDB` on one does not take the other.

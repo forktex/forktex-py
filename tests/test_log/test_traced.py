@@ -21,12 +21,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Tests for forktex.log.traced — the @traced decorator: entry/exit/
-exception logging + a scoped trace_id, for sync and async callables (worker
-job handlers, flow steps, CLI entry points)."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 
 import pytest
@@ -34,25 +32,25 @@ import pytest
 from forktex.log import get_root_trace_id, get_trace_id, log_context, traced
 
 
-def test_traced_sync_returns_value_and_scopes_trace_id():
+def test_traced_sync_returns_value_and_scopes_trace_id() -> None:
     seen_trace_ids = []
 
     @traced
-    def add(a, b):
+    def add(a: int, b: int) -> int:
         seen_trace_ids.append(get_trace_id())
         return a + b
 
     assert get_trace_id() is None
     assert add(2, 3) == 5
     assert seen_trace_ids[0] is not None
-    assert get_trace_id() is None  # restored after the call
+    assert get_trace_id() is None
 
 
-def test_traced_sync_fresh_trace_id_per_call():
+def test_traced_sync_fresh_trace_id_per_call() -> None:
     seen = []
 
     @traced
-    def fn():
+    def fn() -> None:
         seen.append(get_trace_id())
 
     fn()
@@ -60,9 +58,9 @@ def test_traced_sync_fresh_trace_id_per_call():
     assert seen[0] != seen[1]
 
 
-def test_traced_sync_reraises_and_logs_exception(caplog):
+def test_traced_sync_reraises_and_logs_exception(caplog: pytest.LogCaptureFixture) -> None:
     @traced
-    def boom():
+    def boom() -> None:
         raise ValueError("nope")
 
     with caplog.at_level(logging.ERROR):
@@ -71,9 +69,9 @@ def test_traced_sync_reraises_and_logs_exception(caplog):
     assert any("failed" in r.message for r in caplog.records)
 
 
-def test_traced_logs_start_and_finish(caplog):
+def test_traced_logs_start_and_finish(caplog: pytest.LogCaptureFixture) -> None:
     @traced
-    def fn():
+    def fn() -> int:
         return 1
 
     with caplog.at_level(logging.INFO):
@@ -83,9 +81,9 @@ def test_traced_logs_start_and_finish(caplog):
     assert any("finished" in m for m in messages)
 
 
-def test_traced_custom_name_and_level(caplog):
+def test_traced_custom_name_and_level(caplog: pytest.LogCaptureFixture) -> None:
     @traced(name="custom.label", level=logging.DEBUG)
-    def fn():
+    def fn() -> int:
         return 1
 
     with caplog.at_level(logging.DEBUG):
@@ -95,11 +93,11 @@ def test_traced_custom_name_and_level(caplog):
 
 
 @pytest.mark.asyncio
-async def test_traced_async_returns_value_and_scopes_trace_id():
+async def test_traced_async_returns_value_and_scopes_trace_id() -> None:
     seen_trace_ids = []
 
     @traced
-    async def add(a, b):
+    async def add(a: int, b: int) -> int:
         seen_trace_ids.append(get_trace_id())
         return a + b
 
@@ -109,9 +107,9 @@ async def test_traced_async_returns_value_and_scopes_trace_id():
 
 
 @pytest.mark.asyncio
-async def test_traced_async_reraises_and_logs_exception(caplog):
+async def test_traced_async_reraises_and_logs_exception(caplog: pytest.LogCaptureFixture) -> None:
     @traced
-    async def boom():
+    async def boom() -> None:
         raise ValueError("async nope")
 
     with caplog.at_level(logging.ERROR):
@@ -120,15 +118,15 @@ async def test_traced_async_reraises_and_logs_exception(caplog):
     assert any("failed" in r.message for r in caplog.records)
 
 
-def test_traced_nested_shares_root_trace_id():
+def test_traced_nested_shares_root_trace_id() -> None:
     results = {}
 
     @traced
-    def nested_inner():
+    def nested_inner() -> None:
         results["inner"] = (get_trace_id(), get_root_trace_id())
 
     @traced
-    def nested_outer():
+    def nested_outer() -> None:
         results["outer"] = (get_trace_id(), get_root_trace_id())
         nested_inner()
 
@@ -137,31 +135,28 @@ def test_traced_nested_shares_root_trace_id():
     assert results["outer"][1] == results["inner"][1]
 
 
-def test_traced_sync_returning_none():
+def test_traced_sync_returning_none() -> None:
     @traced
-    def fire_and_forget():
-        pass  # implicit None
+    def fire_and_forget() -> None:
+        pass
 
     assert fire_and_forget() is None
 
 
 @pytest.mark.asyncio
-async def test_traced_async_returning_none():
+async def test_traced_async_returning_none() -> None:
     @traced
-    async def fire_and_forget():
+    async def fire_and_forget() -> None:
         pass
 
     assert await fire_and_forget() is None
 
 
-def test_traced_nested_inside_log_context(capture_json):
-    """log_context()'s structured fields and @traced's trace_id scoping are
-    independent contextvars — nesting one inside the other shouldn't disturb
-    either."""
+def test_traced_nested_inside_log_context(capture_json: Callable[..., tuple[logging.Logger, list[dict]]]) -> None:
     log, captured = capture_json()
 
     @traced
-    def step():
+    def step() -> str | None:
         log.info("inside traced step")
         return get_trace_id()
 

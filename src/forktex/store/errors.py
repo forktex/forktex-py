@@ -22,30 +22,16 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""Store module errors.
-
-``AppError`` subclasses, so an HTTP transport renders them via the shared
-envelope rather than a masked 500 — see ``forktex.error``.
-"""
-
 from __future__ import annotations
 
 from forktex.error import AppError, AppErrorCode
 
 
 class StoreError(AppError):
-    """Base class for store errors."""
-
     code = AppErrorCode.INTERNAL
 
 
 class ClientNotRegisteredError(StoreError):
-    """Raised when ``get_client(name)`` is called for an unregistered name.
-
-    ``INTERNAL`` — a missing ``register()`` call is a wiring mistake, not
-    caller-fixable.
-    """
-
     code = AppErrorCode.INTERNAL
 
 

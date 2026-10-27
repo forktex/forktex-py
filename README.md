@@ -10,13 +10,14 @@ Fourteen modules, one library, one set of opinions. Import only what you need �
 module's third-party dependency is an optional extra, so a service that wants
 structured logging never pays for Qdrant.
 
-> **`forktex` 0.9.0 is a different package from `forktex` 0.8.x.** Up to 0.8.1 this
-> name shipped an agentic CLI. That tool now lives in [`backlog/`](backlog/) pending
-> republication under its own name. If you want the CLI, pin `forktex==0.8.1`.
-
 ```bash
 pip install forktex
 ```
+
+> **This is not the 0.8.x `forktex`.** Up to 0.8.1 the name shipped an agentic CLI,
+> which now lives in [`backlog/`](backlog/) pending republication under its own name.
+> If you want the CLI, pin `forktex==0.8.1`. Pre-1.0, minor versions may break — see
+> [CHANGELOG.md](CHANGELOG.md).
 
 ## Modules
 
@@ -60,7 +61,16 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from forktex.database import close_engine, init_engine, session_scope
+from forktex.database import (
+    close_engine,
+    create,
+    get_session,
+    init_engine,
+    savepoint,
+    session_scope,
+    unmanaged_session,
+    with_transactional_session,
+)
 from forktex.log import setup_logging
 
 setup_logging(service="my-api")
@@ -83,8 +93,44 @@ async def list_projects(session: AsyncSession = Depends(session_scope)):
 
 > `Depends(session_scope)` is the correct form. `get_session` is the same generator
 > wrapped in `asynccontextmanager` for `async with` use in service code — passing it
-> to `Depends` injects the context-manager object, not a session. See
-> [docs/database.md](docs/database.md).
+> to `Depends` injects the context-manager object, not a session.
+
+### Transactions
+
+The outermost caller owns the transaction. Whoever opens it commits it, once, and rolls
+it back on any exception:
+
+```python
+@with_transactional_session
+async def place_order(session: AsyncSession, *, reference: str) -> Order:
+    return await create(session, Order, reference=reference)
+
+
+await place_order(reference="A-1")           # opens a session, commits it
+
+async with get_session() as session:
+    order = await place_order(session, reference="A-2")   # joins this transaction
+    await add_line(session, order=order, sku="X")         # same one
+    raise PaymentFailed                                   # both roll back
+```
+
+- **Handed a session, a function joins that transaction** and gets no boundary of its
+  own, so it cannot half-apply.
+- **`commit()`, `rollback()` and `begin()` raise `TransactionBoundaryError`** on a
+  session the library opened. To abort, raise.
+- **`async with savepoint(session):`** for a part allowed to fail without taking the
+  rest with it — one bad row in a batch.
+- **`unmanaged_session()`** for work that is deliberately many transactions, and for
+  test fixtures that seed committed rows.
+
+See [docs/database.md](docs/database.md) for the whole contract.
+
+### No global state required
+
+`init_engine` / `cache.init` / `queue.init` configure one process-wide default, which is
+all most services want. Each is a thin shim over a handle you can build yourself —
+`Database(url)`, `Cache(url)`, `Queue(url)` — so a process can hold two of them, or use
+the module without the default at all.
 
 A module whose extra is missing raises an `ImportError` that names it:
 

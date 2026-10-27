@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Vector module value types."""
 
 from __future__ import annotations
 
@@ -35,29 +34,11 @@ SearchStrategy = Literal["dense", "multimodal", "hybrid", "sparse"]
 
 
 class SparseVector(BaseValueObject):
-    """Sparse vector for BM25/SPLADE keyword-based search.
-
-    ``indices`` and ``values`` must have the same length. Only non-zero
-    dimensions are stored — Qdrant's native sparse format.
-    """
-
     indices: list[int]
     values: list[float]
 
 
 class VectorPoint(BaseValueObject):
-    """A single point to upsert into a collection.
-
-    Args:
-        id: Unique identifier (str UUID or int).
-        vector: Dense text embedding (required).
-        payload: Arbitrary key/value metadata stored alongside the vector.
-        multimodal_vector: Optional CLIP/image embedding for the
-            ``"multimodal"`` named vector space.
-        sparse_vector: Optional sparse vector (BM25/SPLADE) for the
-            ``"sparse"`` named vector space, enabling hybrid search.
-    """
-
     id: str | int
     vector: list[float]
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -66,13 +47,6 @@ class VectorPoint(BaseValueObject):
 
 
 class SearchHit(BaseValueObject):
-    """A single result from a vector search.
-
-    ``collection`` is set by ``search_across`` to indicate which collection
-    this hit came from — frozen instances get a new ``collection`` via
-    ``.model_copy(update={"collection": name})`` rather than assignment.
-    """
-
     id: str | int
     score: float
     payload: dict[str, Any]
@@ -89,19 +63,6 @@ class CollectionInfo(BaseValueObject):
 
 
 class SearchQuery:
-    """Chainable builder for vector search queries.
-
-    Mirrors flow's ``InstanceQuery`` pattern — build by chaining, execute
-    by calling ``collection.search(query)`` or ``vector.search_across(...)``.
-
-        results = await coll.search(
-            SearchQuery(vector=embed(q))
-            .limit(10)
-            .using("hybrid")
-            .score_threshold(0.7)
-        )
-    """
-
     def __init__(self, vector: list[float]) -> None:
         self._vector = vector
         self._multimodal_vector: list[float] | None = None
@@ -116,40 +77,22 @@ class SearchQuery:
         return self
 
     def using(self, strategy: SearchStrategy) -> SearchQuery:
-        """Set the search strategy.
-
-        - ``"dense"``: text embedding similarity (default).
-        - ``"multimodal"``: CLIP/image vector space — pair with :meth:`multimodal`.
-        - ``"hybrid"``: dense prefetch + RRF fusion.
-        - ``"sparse"``: the sparse keyword space (BM25/SPLADE) alone — pair with
-          :meth:`sparse`, and note the collection must have been created with
-          ``ensure_collection(..., sparse=True)``.
-        """
         self._strategy = strategy
         return self
 
     def multimodal(self, vector: list[float]) -> SearchQuery:
-        """Set the CLIP/image query vector for multimodal strategy."""
         self._multimodal_vector = vector
         return self
 
     def sparse(self, vector: SparseVector) -> SearchQuery:
-        """Set the sparse (BM25/SPLADE) query vector for the ``"sparse"`` strategy.
-
-        Required by ``using("sparse")``: the sparse space is indexed separately from
-        the dense one, so a keyword search cannot be derived from the dense vector
-        this query was constructed with.
-        """
         self._sparse_vector = vector
         return self
 
     def filter(self, payload_filter: dict[str, Any]) -> SearchQuery:
-        """Apply a Qdrant payload filter dict."""
         self._payload_filter = payload_filter
         return self
 
     def score_threshold(self, threshold: float) -> SearchQuery:
-        """Only return hits with score >= threshold."""
         self._score_threshold = threshold
         return self
 

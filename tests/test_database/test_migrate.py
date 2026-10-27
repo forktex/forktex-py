@@ -21,10 +21,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Integration tests for db.migrate.SchemaMigrationRunner."""
 
 from __future__ import annotations
 
+from sqlalchemy.ext.asyncio import AsyncEngine
 import asyncio
 from pathlib import Path
 
@@ -42,6 +42,12 @@ CREATE TABLE IF NOT EXISTS "{schema}".test_items (
 """
 
 
+async def _table_exists(engine: AsyncEngine, schema: str, table: str) -> bool:
+    async with engine.connect() as conn:
+        found = await conn.execute(sa.select(sa.func.to_regclass(f'"{schema}".{table}')))
+        return found.scalar_one() is not None
+
+
 def _make_migrations_dir(tmp_path: Path) -> Path:
     mdir = tmp_path / "migrations"
     mdir.mkdir()
@@ -50,7 +56,7 @@ def _make_migrations_dir(tmp_path: Path) -> Path:
 
 
 @pytest.mark.asyncio
-async def test_apply_creates_schema_and_table(postgres_url_str: str, fresh_schema: str, tmp_path: Path):
+async def test_apply_creates_schema_and_table(postgres_url_str: str, fresh_schema: str, tmp_path: Path) -> None:
     from forktex.database.migrate import SchemaMigrationRunner
 
     engine = create_async_engine(postgres_url_str)
@@ -58,43 +64,38 @@ async def test_apply_creates_schema_and_table(postgres_url_str: str, fresh_schem
     runner = SchemaMigrationRunner(engine, schema=fresh_schema, migrations_dir=mdir)
     await runner.apply()
 
-    async with engine.connect() as conn:
-        rows = (await conn.execute(sa.text(f'SELECT 1 FROM "{fresh_schema}".test_items LIMIT 1'))).fetchall()
-    assert rows == [] or rows is not None  # table exists
+    assert await _table_exists(engine, fresh_schema, "test_items")
     await engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_apply_idempotent(postgres_url_str: str, fresh_schema: str, tmp_path: Path):
-    """Running apply() twice must not raise or re-apply migrations."""
+async def test_apply_idempotent(postgres_url_str: str, fresh_schema: str, tmp_path: Path) -> None:
     from forktex.database.migrate import SchemaMigrationRunner
 
     engine = create_async_engine(postgres_url_str)
     mdir = _make_migrations_dir(tmp_path)
     runner = SchemaMigrationRunner(engine, schema=fresh_schema, migrations_dir=mdir)
     await runner.apply()
-    await runner.apply()  # should be a no-op
+    await runner.apply()
 
     async with engine.connect() as conn:
         count = (await conn.execute(sa.text(f'SELECT COUNT(*) FROM "{fresh_schema}".schema_version'))).scalar_one()
-    assert count == 1  # only version 1 recorded
+    assert count == 1
     await engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_apply_concurrent_workers_safe(postgres_url_str: str, fresh_schema: str, tmp_path: Path):
-    """Two concurrent apply() calls must serialise via advisory lock — no DDL race."""
+async def test_apply_concurrent_workers_safe(postgres_url_str: str, fresh_schema: str, tmp_path: Path) -> None:
     from forktex.database.migrate import SchemaMigrationRunner
 
     mdir = _make_migrations_dir(tmp_path)
 
-    async def run_one():
+    async def run_one() -> None:
         engine = create_async_engine(postgres_url_str)
         runner = SchemaMigrationRunner(engine, schema=fresh_schema, migrations_dir=mdir)
         await runner.apply()
         await engine.dispose()
 
-    # Both workers start simultaneously
     await asyncio.gather(run_one(), run_one())
 
     engine = create_async_engine(postgres_url_str)
@@ -105,11 +106,9 @@ async def test_apply_concurrent_workers_safe(postgres_url_str: str, fresh_schema
 
 
 @pytest.mark.asyncio
-async def test_apply_migration_with_literal_braces_in_sql(postgres_url_str: str, fresh_schema: str, tmp_path: Path):
-    """Migration SQL routinely contains literal `{`/`}` (JSONB defaults,
-    PL/pgSQL blocks) alongside the {schema} placeholder — the runner must
-    plain-string-replace {schema}, not str.format() the whole file, or any
-    such content raises KeyError/IndexError from str.format's own parsing."""
+async def test_apply_migration_with_literal_braces_in_sql(
+    postgres_url_str: str, fresh_schema: str, tmp_path: Path
+) -> None:
     from forktex.database.migrate import SchemaMigrationRunner
 
     mdir = tmp_path / "migrations"
@@ -124,28 +123,23 @@ CREATE TABLE IF NOT EXISTS "{schema}".braces_items (
     )
     engine = create_async_engine(postgres_url_str)
     runner = SchemaMigrationRunner(engine, schema=fresh_schema, migrations_dir=mdir)
-    await runner.apply()  # must not raise
+    await runner.apply()
 
-    async with engine.connect() as conn:
-        rows = (await conn.execute(sa.text(f'SELECT 1 FROM "{fresh_schema}".braces_items LIMIT 1'))).fetchall()
-    assert isinstance(rows, list)
+    assert await _table_exists(engine, fresh_schema, "braces_items")
     await engine.dispose()
 
 
-def test_invalid_schema_identifier_raises(tmp_path: Path):
+def test_invalid_schema_identifier_raises(tmp_path: Path) -> None:
     from forktex.database.migrate import SchemaMigrationRunner
 
     mdir = tmp_path / "migrations"
     mdir.mkdir()
     engine = create_async_engine("postgresql+asyncpg://unused/unused")
-    # BadRequestError (an AppError) rather than a bare ValueError: the runner now
-    # uses the shared `database.identifiers` validators, so a bad schema name is
-    # reportable through the same envelope as any other caller-input error.
     with pytest.raises(BadRequestError, match="unsafe schema name"):
         SchemaMigrationRunner(engine, schema="bad; drop table x", migrations_dir=mdir)
 
 
-def test_missing_migrations_dir_raises(tmp_path: Path):
+def test_missing_migrations_dir_raises(tmp_path: Path) -> None:
     from forktex.database.migrate import SchemaMigrationRunner
 
     engine = create_async_engine("postgresql+asyncpg://unused/unused")
@@ -154,8 +148,7 @@ def test_missing_migrations_dir_raises(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_apply_target_schema_override(postgres_url_str: str, fresh_schema: str, tmp_path: Path):
-    """target_schema overrides where DDL runs."""
+async def test_apply_target_schema_override(postgres_url_str: str, fresh_schema: str, tmp_path: Path) -> None:
     from forktex.database.migrate import SchemaMigrationRunner
 
     engine = create_async_engine(postgres_url_str)
@@ -167,21 +160,12 @@ async def test_apply_target_schema_override(postgres_url_str: str, fresh_schema:
     runner = SchemaMigrationRunner(engine, schema="logical_name", migrations_dir=mdir, target_schema=target)
     await runner.apply()
 
-    async with engine.connect() as conn:
-        # Table should exist in target, not "logical_name"
-        rows = (await conn.execute(sa.text(f'SELECT 1 FROM "{target}".test_items LIMIT 1'))).fetchall()
-    assert isinstance(rows, list)
+    assert await _table_exists(engine, target, "test_items")
+    assert not await _table_exists(engine, "logical_name", "test_items")
     await engine.dispose()
 
 
-def test_version_table_ddl_is_built_by_core_not_string_interpolation():
-    """`data-access.md` rule 4: never build SQL by concatenation.
-
-    The runner used to interpolate `schema` and `version_table` into four
-    f-string statements behind a regex guard. Core's preparer *escapes* an
-    identifier instead of screening it, which is testable with no connection —
-    and the rule's own suggested check is one hostile-identifier case.
-    """
+def test_version_table_ddl_is_built_by_core_not_string_interpolation() -> None:
     import sqlalchemy as sa
     from sqlalchemy.dialects import postgresql
     from sqlalchemy.schema import CreateTable
@@ -198,27 +182,54 @@ def test_version_table_ddl_is_built_by_core_not_string_interpolation():
     rendered = str(CreateTable(table, if_not_exists=True).compile(dialect=postgresql.dialect()))
 
     assert "CREATE TABLE IF NOT EXISTS forktex_probe.schema_version" in rendered
-    # The version column must stay INTEGER — Core renders SERIAL for an integer
-    # primary key unless autoincrement is disabled.
     assert "version INTEGER NOT NULL" in rendered
     assert "SERIAL" not in rendered
     assert "TIMESTAMP WITH TIME ZONE" in rendered
 
 
-def test_lock_key_comes_from_the_shared_advisory_key_helper():
-    """`code-reuse.md` rule 6: the runner hand-rolled `zlib.crc32(...)` instead of
-    calling `advisory_key`, which is the one place that folds a digest into
-    Postgres's signed bigint range."""
-    import sqlalchemy as sa
-
-    from forktex.database.locks import advisory_key
+def test_runners_sharing_a_version_table_share_a_lock() -> None:
     from forktex.database.migrate import SchemaMigrationRunner
 
-    engine = sa.ext.asyncio.create_async_engine("postgresql+asyncpg://nobody@nowhere.invalid/x")
-    runner = SchemaMigrationRunner(
-        engine,
-        schema="forktex_probe",
-        migrations_dir=Path(__file__).parent,
+    engine = create_async_engine("postgresql+asyncpg://nobody@nowhere.invalid/x")
+    here = Path(__file__).parent
+    flow = SchemaMigrationRunner(engine, schema="forktex_flow", migrations_dir=here, target_schema="public")
+    grid = SchemaMigrationRunner(engine, schema="forktex_grid", migrations_dir=here, target_schema="public")
+    assert flow._lock_key == grid._lock_key
+
+
+@pytest.mark.asyncio
+async def test_a_migration_and_its_version_row_commit_in_one_transaction(
+    postgres_url_str: str, fresh_schema: str, tmp_path: Path
+) -> None:
+    from forktex.database.migrate import SchemaMigrationRunner
+
+    mdir = tmp_path / "migrations"
+    mdir.mkdir()
+    (mdir / "v0001__probe.sql").write_text(
+        'CREATE TABLE "{schema}".probe (txid bigint);\nINSERT INTO "{schema}".probe VALUES (txid_current());\n'
     )
-    assert runner._lock_key == advisory_key("forktex_probe", "schema_version", "migrations")
-    assert -(2**63) <= runner._lock_key < 2**63, "lock key must fit Postgres's signed bigint"
+    engine = create_async_engine(postgres_url_str)
+    await SchemaMigrationRunner(engine, schema=fresh_schema, migrations_dir=mdir).apply()
+
+    async with engine.connect() as conn:
+        script_txid = (await conn.execute(sa.text(f'SELECT txid FROM "{fresh_schema}".probe'))).scalar_one()
+        version_txid = (
+            await conn.execute(sa.text(f'SELECT xmin::text::bigint FROM "{fresh_schema}".schema_version'))
+        ).scalar_one()
+    assert script_txid == version_txid
+    await engine.dispose()
+
+
+@pytest.mark.parametrize("names", [["v1_missing_separator.sql"], ["v0001__a.sql", "v1__b.sql"]])
+def test_misnamed_or_duplicate_migrations_are_refused(tmp_path: Path, names: list[str]) -> None:
+    from forktex.database.migrate import SchemaMigrationRunner
+
+    for name in names:
+        (tmp_path / name).write_text("SELECT 1;")
+    runner = SchemaMigrationRunner(
+        create_async_engine("postgresql+asyncpg://nobody@nowhere.invalid/x"),
+        schema="forktex_probe",
+        migrations_dir=tmp_path,
+    )
+    with pytest.raises(BadRequestError, match="named|share version"):
+        runner._list_migrations()

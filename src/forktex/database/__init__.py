@@ -21,22 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""PostgreSQL async primitives — the foundation the substrate packages build on.
-
-Connection handling, base models, CRUD, migrations, locks, identifier
-validation, constraint-error translation, reflection, and DDL constructs.
-``grid``/``flow``/``space`` are expected to reuse these rather than
-reimplementing them.
-
-``ddl``, ``filters`` and ``reflect`` are imported as modules rather than flattened
-into this namespace, because names like ``CreateTable``/``columns``/``FilterOp`` read
-better qualified::
-
-    from forktex.database import ddl, filters, reflect
-
-    await conn.execute(ddl.AddColumn(col, if_not_exists=True))
-    present = await reflect.columns(session, "my_table", schema="public")
-"""
 
 from forktex.database import ddl, filters, reflect
 from forktex.database.connection import (
@@ -44,11 +28,12 @@ from forktex.database.connection import (
     close_engine,
     get_session,
     init_engine,
+    savepoint,
     session_scope,
+    unmanaged_session,
     with_transactional_session,
 )
 from forktex.database.crud import (
-    ConflictError,
     PageResponse,
     ScrollResponse,
     create,
@@ -58,7 +43,7 @@ from forktex.database.crud import (
     paginate,
     paginate_scroll,
 )
-from forktex.database.errors import DatabaseNotInitializedError
+from forktex.database.errors import DatabaseNotInitializedError, TransactionBoundaryError
 from forktex.database.identifiers import (
     is_identifier,
     validate_identifier,
@@ -95,7 +80,6 @@ from forktex.database.pagination import (
 __all__ = [
     "AuditMixin",
     "BaseDBModel",
-    "ConflictError",
     "Database",
     "DatabaseNotInitializedError",
     "JsonModelColumn",
@@ -106,6 +90,7 @@ __all__ = [
     "SchemaMigrationRunner",
     "ScrollResponse",
     "TimestampMixin",
+    "TransactionBoundaryError",
     "UtcDateTime",
     "advisory_key",
     "advisory_lock",
@@ -128,9 +113,11 @@ __all__ = [
     "paginate_scroll",
     "read_boundary",
     "reflect",
+    "savepoint",
     "session_scope",
     "substrate_base",
     "try_advisory_lock",
+    "unmanaged_session",
     "validate_identifier",
     "validate_relation",
     "validate_schema",
