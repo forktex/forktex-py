@@ -28,6 +28,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import overload
 
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -36,7 +37,11 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from forktex.database.errors import DatabaseNotInitializedError, TransactionBoundaryError
+from forktex.database.errors import (
+    DatabaseNotInitializedError,
+    DatabaseUnreachableError,
+    TransactionBoundaryError,
+)
 from forktex.log import get_logger
 
 logger = get_logger(__name__)
@@ -87,11 +92,18 @@ class Database:
     def open_session(self) -> AbstractAsyncContextManager[AsyncSession]:
         return _open_session(self._sessionmaker)
 
+    async def verify(self) -> None:
+        try:
+            async with self._engine.connect() as conn:
+                await conn.execute(sa.select(sa.literal(1)))
+        except Exception as exc:
+            raise DatabaseUnreachableError("database is not reachable") from exc
+
     async def dispose(self) -> None:
         await self._engine.dispose()
 
 
-def init_engine(
+async def init_engine(
     db_url: str,
     *,
     echo: bool = False,
@@ -99,16 +111,18 @@ def init_engine(
     **engine_kwargs: object,
 ) -> None:
     global _default
-    if _default is not None:
-        logger.warning(
-            "init_engine() replacing an existing default engine without disposing it; "
-            "call close_engine() first to release the old pool"
-        )
+    previous = _default
     _default = Database(db_url, echo=echo, schema_translate_map=schema_translate_map, **engine_kwargs)
+    if previous is not None:
+        await previous.dispose()
     logger.debug(
         "database engine initialised",
         extra={"schema_translate_map": schema_translate_map},
     )
+
+
+async def verify() -> None:
+    await require_default().verify()
 
 
 async def close_engine() -> None:
@@ -263,6 +277,7 @@ __all__ = [
     "require_default",
     "savepoint",
     "transactional_session",
+    "verify",
     "with_transactional_session",
     "yield_transactional_session",
 ]

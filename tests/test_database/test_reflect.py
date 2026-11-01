@@ -112,3 +112,19 @@ async def test_works_with_a_session_not_just_a_connection(
     async with maker() as session:
         names = await reflect.columns(session, "reflect_probe", schema=fresh_schema)
     assert "c_uuid" in names
+
+
+@pytest.mark.asyncio
+async def test_udt_names_reports_the_underlying_postgres_type(engine: AsyncEngine, fresh_schema: str) -> None:
+    """Exported and documented, and until now never called by a test — the only
+    way to tell a `timestamptz` from a `timestamp` by its real catalog name."""
+    async with engine.connect() as conn:
+        names = await reflect.udt_names(conn, "reflect_probe", schema=fresh_schema)
+
+    assert names["c_text"] == "text"
+    assert names["c_tstz"] == "timestamptz"
+    assert names["c_ts"] == "timestamp"
+    assert names["c_uuid"] == "uuid"
+
+    async with engine.connect() as conn:
+        assert await reflect.udt_names(conn, "no_such_table", schema=fresh_schema) == {}

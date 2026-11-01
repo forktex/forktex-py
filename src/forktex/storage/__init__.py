@@ -27,7 +27,12 @@ from __future__ import annotations
 from forktex.log import get_logger
 from forktex.registry import ClientRegistry
 from forktex.storage.client import PublicAccess, StorageClient, StorageConfig
-from forktex.storage.errors import ClientNotRegisteredError, ObjectNotFoundError, StorageError
+from forktex.storage.errors import (
+    ClientNotRegisteredError,
+    ObjectNotFoundError,
+    StorageError,
+    StorageUnreachableError,
+)
 from forktex.storage.policy import (
     BucketPolicy,
     BucketPolicyPrincipal,
@@ -100,18 +105,11 @@ async def init(
     region: str = "us-east-1",
     public_url: str | None = None,
 ) -> None:
-    candidate = StorageClient(
-        StorageConfig(
-            url=url,
-            bucket=bucket,
-            access_key=access_key,
-            secret_key=secret_key,
-            region=region,
-            public_url=public_url,
-        )
-    )
-    await candidate.verify()
-    _registry.set("default", candidate)
+    register("default", url, bucket, access_key, secret_key, region=region, public_url=public_url)
+
+
+async def verify() -> None:
+    await require_default().verify()
 
 
 async def close(name: str = "default") -> None:
@@ -180,6 +178,7 @@ __all__ = [
     "StorageClient",
     "StorageConfig",
     "StorageError",
+    "StorageUnreachableError",
     "close",
     "default",
     "delete",
@@ -195,4 +194,5 @@ __all__ = [
     "register",
     "require_default",
     "upload",
+    "verify",
 ]

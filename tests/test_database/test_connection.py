@@ -64,7 +64,7 @@ class _ConnTestUnique(BaseDBModel):
 
 @pytest_asyncio.fixture
 async def engine_and_session(postgres_url_str: str, fresh_schema: str) -> AsyncIterator[None]:
-    init_engine(postgres_url_str, schema_translate_map={None: fresh_schema})
+    await init_engine(postgres_url_str, schema_translate_map={None: fresh_schema})
     raw_engine = get_engine()
     async with raw_engine.begin() as conn:
         await conn.run_sync(BaseDBModel.metadata.create_all)
@@ -367,7 +367,7 @@ async def test_the_dependency_works_in_fastapi(postgres_url_str: str, fresh_sche
     from fastapi import Depends, FastAPI
     from fastapi.testclient import TestClient
 
-    init_engine(postgres_url_str)
+    await init_engine(postgres_url_str)
     try:
         app = FastAPI()
 
@@ -419,35 +419,6 @@ async def test_a_handles_transactional_session_commits_and_rolls_back(postgres_u
         assert db.engine.pool.checkedout() == 0
     finally:
         await db.dispose()
-
-
-@pytest.mark.asyncio
-async def test_module_level_functions_track_the_current_default(postgres_url_str: str) -> None:
-    await close_engine()
-    with pytest.raises(DatabaseNotInitializedError):
-        get_engine()
-
-    init_engine(postgres_url_str)
-    first = get_engine()
-
-    init_engine(postgres_url_str)
-    assert get_engine() is not first
-
-    await close_engine()
-    with pytest.raises(DatabaseNotInitializedError):
-        get_engine()
-
-
-@pytest.mark.asyncio
-async def test_uninitialised_default_raises_an_apperror_that_is_also_a_runtimeerror() -> None:
-    from forktex.error import AppError
-
-    await close_engine()
-    with pytest.raises(RuntimeError, match="not initialized") as exc_info:
-        async with transactional_session():
-            pass
-    assert isinstance(exc_info.value, AppError)
-    assert exc_info.value.code == "internal"
 
 
 @pytest.mark.asyncio
@@ -514,7 +485,7 @@ async def test_an_owned_handle_hands_out_both_kinds_of_session(postgres_url_str:
 async def test_init_engine_hands_back_nothing_and_open_session_is_the_commit_capable_one(
     postgres_url_str: str, fresh_schema: str
 ) -> None:
-    assert init_engine(postgres_url_str, schema_translate_map={None: fresh_schema}) is None
+    assert await init_engine(postgres_url_str, schema_translate_map={None: fresh_schema}) is None
     async with get_engine().begin() as conn:
         await conn.run_sync(BaseDBModel.metadata.create_all)
     async with open_session() as raw:

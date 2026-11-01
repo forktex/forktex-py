@@ -209,9 +209,6 @@ def test_database_setup_goes_through_conftest(construct: str, replacement: str) 
     )
 
 
-# A base the public models inherit, and the type its subclass hook narrows with:
-# both are evaluated while `BaseDBModel` itself is being created, so they cannot
-# follow it.
 _BASE_CLASS_EXEMPT = {
     ("database", "models.py", "_EagerDefaults"),
     ("database", "models.py", "_MapperArgsDirective"),
@@ -263,10 +260,9 @@ def test_every_module_ends_with_its_all(package: str) -> None:
     assert misplaced == [], f"forktex.{package}: {misplaced}"
 
 
-# Deregisters a per-call client and has nothing to await; it stays `async` so a
-# lifespan teardown reads the same for every facade.
 _AWAITS_NOTHING = {
     ("storage", "close"),
+    ("storage", "init"),
 }
 
 

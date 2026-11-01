@@ -25,6 +25,8 @@
 from __future__ import annotations
 
 import importlib
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -93,8 +95,6 @@ def test_database_exports_everything_the_standards_tell_consumers_to_use() -> No
         "TransactionBoundaryError",
         "BaseDBModel",
         "substrate_base",
-        # `UtcTimestamp` upstream: the standard still names it `UtcDateTime`, which
-        # collided with `forktex.types.UtcDateTime`, a Pydantic annotation.
         "UtcTimestamp",
         "AuditMixin",
         "TimestampMixin",
@@ -142,3 +142,37 @@ def test_connection_exports_no_name_that_is_not_defined_there() -> None:
     assert sorted(connection.__all__) == connection.__all__
     undefined = [name for name in connection.__all__ if not hasattr(connection, name)]
     assert undefined == []
+
+
+def test_the_package_root_refuses_a_name_it_does_not_have() -> None:
+    """The root resolves modules lazily, so a typo must raise AttributeError
+    rather than returning something or importing an arbitrary submodule."""
+    import forktex
+
+    with pytest.raises(AttributeError, match="no attribute 'nope'"):
+        forktex.nope  # noqa: B018
+
+    with pytest.raises(AttributeError):
+        forktex.subprocess  # noqa: B018
+
+    assert dir(forktex) == sorted(forktex.__all__)
+
+
+def test_importing_one_module_does_not_import_the_others() -> None:
+    """The root resolves modules on first access so a leaf import stays cheap:
+    an eager root made `from forktex.iso import to_iso` — stdlib `datetime` only —
+    pull FastAPI, SQLAlchemy, redis and botocore. Measured in a fresh interpreter
+    because an in-process check sees whatever earlier tests already imported."""
+    probe = (
+        "import sys\n"
+        "from forktex.iso import to_iso\n"
+        "heavy = [m for m in ('fastapi', 'sqlalchemy', 'redis', 'aioboto3') if m in sys.modules]\n"
+        "import forktex\n"
+        "resolved = forktex.database is sys.modules['forktex.database']\n"
+        "print(heavy, resolved)\n"
+    )
+    result = subprocess.run([sys.executable, "-I", "-c", probe], capture_output=True, text=True, check=True)
+    heavy, resolved = result.stdout.strip().rsplit(" ", 1)
+
+    assert heavy == "[]", f"forktex.iso dragged in {heavy}"
+    assert resolved == "True", "forktex.database did not resolve through the root"

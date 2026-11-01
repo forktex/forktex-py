@@ -35,8 +35,12 @@ class ObjectNotFoundError(StorageError):
     code = AppErrorCode.NOT_FOUND
 
 
+class StorageUnreachableError(StorageError):
+    code = AppErrorCode.UNAVAILABLE
+
+
 class ClientNotRegisteredError(StorageError):
     code = AppErrorCode.INTERNAL
 
 
-__all__ = ["ClientNotRegisteredError", "ObjectNotFoundError", "StorageError"]
+__all__ = ["ClientNotRegisteredError", "ObjectNotFoundError", "StorageError", "StorageUnreachableError"]

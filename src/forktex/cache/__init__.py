@@ -23,12 +23,12 @@
 
 
 from forktex.cache.cache import Cache
-from forktex.cache.connection import available, close, default, get_client, init, require_default
+from forktex.cache.connection import available, close, default, get_client, init, require_default, verify
 from forktex.cache.decorators import cached
 from forktex.cache.errors import (
     CacheError,
-    CacheInitializationError,
     CacheNotInitializedError,
+    CacheUnreachableError,
     InvalidCacheKeyError,
 )
 from forktex.cache.namespaces import CachePrefix, key_for
@@ -47,9 +47,9 @@ from forktex.cache.serialization import deserialize, serialize
 __all__ = [
     "Cache",
     "CacheError",
-    "CacheInitializationError",
     "CacheNotInitializedError",
     "CachePrefix",
+    "CacheUnreachableError",
     "InvalidCacheKeyError",
     "available",
     "cached",
@@ -69,4 +69,5 @@ __all__ = [
     "serialize",
     "set",
     "shutdown_background_tasks",
+    "verify",
 ]

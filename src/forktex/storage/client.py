@@ -36,7 +36,7 @@ from pydantic import Field
 
 from forktex.error import AppError
 from forktex.log import get_logger
-from forktex.storage.errors import ObjectNotFoundError, StorageError
+from forktex.storage.errors import ObjectNotFoundError, StorageError, StorageUnreachableError
 from forktex.storage.policy import (
     PostPolicy,
     PresignedPost,
@@ -140,7 +140,7 @@ class StorageClient:
             async with self._client() as s3:
                 await s3.head_bucket(Bucket=self._config.bucket)
         except (BotoCoreError, ClientError) as exc:
-            raise StorageError("storage bucket is not reachable") from exc
+            raise StorageUnreachableError("storage bucket is not reachable") from exc
 
     async def upload(
         self,
@@ -248,8 +248,6 @@ async def _driver_boundary(operation: str, **context: object) -> AsyncIterator[N
     except AppError:
         raise
     except Exception as exc:
-        # Anything the driver's HTTP layer raises mid-stream too: a caller was
-        # told to catch StorageError, and aiohttp reaches us only via aiobotocore.
         logger.error("storage: operation failed", extra={"operation": operation, **context})
         raise StorageError(f"storage {operation} failed") from exc
 

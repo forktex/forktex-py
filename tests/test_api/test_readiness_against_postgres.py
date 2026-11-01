@@ -45,7 +45,7 @@ def _app(postgres_url_str: str) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        init_engine(postgres_url_str)
+        await init_engine(postgres_url_str)
         yield
         await close_engine()
 

@@ -107,8 +107,6 @@ def test_no_doc_references_the_old_distribution(doc: Path) -> None:
 def test_every_exported_name_is_documented_on_its_page(package: str) -> None:
     module = importlib.import_module(f"forktex.{package}")
     page = (ROOT / "docs" / f"{package}.md").read_text(encoding="utf-8")
-    # A code span, not a bare word: `get`, `set`, `delete` and `default` are
-    # ordinary English, so a prose match certifies names that are undocumented.
     mentioned = set(re.findall(r"`([A-Za-z_][A-Za-z0-9_]*)", page))
     exported = list(getattr(module, "__all__", ()))
     missing = sorted(name for name in exported if name not in mentioned)

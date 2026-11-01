@@ -48,7 +48,7 @@ from forktex.database import close_engine, init_engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_engine(settings.db_url)
+    await init_engine(settings.db_url)
     yield
     await close_engine()
 

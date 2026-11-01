@@ -29,7 +29,8 @@ handful of names, are set aside in `backlog/facades/` with their tests and docs.
 - `session_scope()` → `yield_transactional_session()`.
 - `unmanaged_session()` → `open_session()`. The same three renames apply on `Database`.
 - `connection.engine` → `get_engine()`.
-- `init_engine()` returns `None`.
+- `init_engine()` is **async** and returns `None`: `await init_engine(...)`. It disposes the engine
+  it replaces, which previously leaked a live connection.
 - Use `open_session()` where you used `init_engine`'s factory.
 - `commit()`, `rollback()` and `begin()` raise `TransactionBoundaryError` inside
   `transactional_session` and the decorator. To abort, raise.
@@ -52,6 +53,16 @@ handful of names, are set aside in `backlog/facades/` with their tests and docs.
 **`forktex.cache`**
 
 - `key_for()` with a `None` part raises `InvalidCacheKeyError`, not `ValueError`.
+- `init()` no longer `PING`s; call `verify()`. `Cache.connect()` → `Cache.verify()`.
+- `CacheInitializationError` → `CacheUnreachableError`.
+
+**One lifecycle on every facade** — `init` performs no I/O and releases what it replaced;
+`verify()` is the explicit boot probe.
+
+- `storage.init()` no longer verifies the bucket; call `storage.verify()`.
+- `database.verify()`, `cache.verify()` and `storage.verify()` are new.
+- `DatabaseUnreachableError`, `CacheUnreachableError` and `StorageUnreachableError` all carry
+  `AppErrorCode.UNAVAILABLE`.
 
 ### Added
 
@@ -62,9 +73,8 @@ handful of names, are set aside in `backlog/facades/` with their tests and docs.
   `reflect`.
 - `InvalidKeysetError`, `InvalidAdvisoryKeyError`, `InvalidSchemaChangeError`, `MigrationError`,
   `InvalidCacheKeyError`.
-- `StorageClient.verify()` — a `head_bucket` reachability check that creates nothing.
-- `storage.init()` verifies before registering, so a bad endpoint or credential fails at boot and
-  a previously working default survives the failure.
+- `StorageClient.verify()` — a `head_bucket` reachability check that creates nothing. It catches
+  `BotoCoreError` as well as `ClientError`, so an unreachable endpoint no longer escapes raw.
 - `Cache(url)` — an explicit handle; the module functions are shims over one default.
 
 ### Fixed

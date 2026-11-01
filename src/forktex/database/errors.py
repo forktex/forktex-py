@@ -35,6 +35,10 @@ class TransactionBoundaryError(AppError, RuntimeError):
     code = AppErrorCode.INTERNAL
 
 
+class DatabaseUnreachableError(AppError, RuntimeError):
+    code = AppErrorCode.UNAVAILABLE
+
+
 class InvalidKeysetError(AppError, ValueError):
     code = AppErrorCode.INTERNAL
 
@@ -53,6 +57,7 @@ class MigrationError(AppError, RuntimeError):
 
 __all__ = [
     "DatabaseNotInitializedError",
+    "DatabaseUnreachableError",
     "InvalidAdvisoryKeyError",
     "InvalidKeysetError",
     "InvalidSchemaChangeError",

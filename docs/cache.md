@@ -7,6 +7,10 @@ The only startup failure is `init()` being unable to reach Redis.
 
 ## Wiring
 
+`init` performs no I/O: it installs the default and releases whatever it replaced. `verify()` is
+the explicit boot probe — call it in your lifespan, or wire it into `create_app`'s
+`readiness_probes`, if you want a bad configuration to fail fast rather than on first use.
+
 One Redis client per process, created by `init(url)` and torn down by `close()`. `Cache(url)` is
 the same handle built directly; the module-level functions are shims over one default instance.
 
@@ -44,6 +48,7 @@ helpers degrade to no-ops rather than raising, so a missing worker-side `init()`
 | `available()` | `True` if the client global is set. |
 | `default()` | The process-wide `Cache`, or `None` before `init()`. |
 | `require_default()` | The same, raising `CacheNotInitializedError` instead of returning `None`. |
+| `verify()` | Async. `PING`. Raises `CacheUnreachableError`. |
 | `get_client()` | The raw `redis.asyncio.Redis`. Raises if `init()` has not run. |
 | `get(key)` | Async. Value or `None`. |
 | `set(key, value, ex)` | Async. Write with a TTL in seconds. |
@@ -90,7 +95,7 @@ await invalidate_prefix(key_for(Prefix.ORG, org_id))
 
 | Raised | When | Catch? |
 |---|---|---|
-| `CacheInitializationError` | `init()` — `PING` failed. Any previously installed default stays in place. | At startup only. Let it stop the process unless the cache is genuinely optional. |
+| `CacheUnreachableError` | `verify()` — `PING` failed. | At startup only, if you call `verify()`. |
 | `CacheNotInitializedError` | `get_client()` before `init()`. | A wiring bug; do not catch. |
 | `InvalidCacheKeyError` | `key_for()` given a `None` part, which would collapse a per-entity key onto the shared prefix. | A wiring bug; do not catch. |
 

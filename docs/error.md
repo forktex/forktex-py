@@ -87,3 +87,5 @@ This package defines errors rather than raising them.
 - **`AppError` carries no `.status_code`** — map from `exc.code`.
 - The envelope's trace id comes from `forktex.log`'s contextvar, set by `TraceIDMiddleware`.
   Without that middleware the field is empty.
+- **`details` accepts any value and serialises it with a `str` fallback**, so a `UUID` or
+  `datetime` you put in reaches the client as a string. Put the shape you want on the wire.

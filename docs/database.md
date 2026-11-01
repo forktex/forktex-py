@@ -8,6 +8,10 @@ PostgreSQL over `asyncpg` (`postgresql+asyncpg://…`).
 
 ## Wiring
 
+`init` performs no I/O: it installs the default and releases whatever it replaced. `verify()` is
+the explicit boot probe — call it in your lifespan, or wire it into `create_app`'s
+`readiness_probes`, if you want a bad configuration to fail fast rather than on first use.
+
 ```python
 import uuid
 from contextlib import asynccontextmanager
@@ -30,7 +34,7 @@ class Order(BaseDBModel, TimestampMixin):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_engine("postgresql+asyncpg://user:pass@localhost/db", pool_size=10, pool_pre_ping=True)
+    await init_engine("postgresql+asyncpg://user:pass@localhost/db", pool_size=10, pool_pre_ping=True)
     yield
     await close_engine()
 
@@ -124,10 +128,11 @@ knows the module-level default, so a component owning a `Database` uses `db.tran
 
 | Name | What it is |
 | --- | --- |
-| `init_engine(db_url, *, echo=False, schema_translate_map=None, **engine_kwargs)` | Build the process-wide default engine. Returns `None`. |
+| `await init_engine(db_url, *, echo=False, schema_translate_map=None, **engine_kwargs)` | Build the process-wide default engine. Returns `None`. |
 | `close_engine()` | Dispose it and clear the handle. |
 | `default()` | The process-wide `Database`, or `None` before `init_engine`. |
 | `require_default()` | The same, raising `DatabaseNotInitializedError` instead of returning `None`. |
+| `verify()` | Async. Opens one connection and discards it. Raises `DatabaseUnreachableError`. |
 | `get_engine()` | The default `AsyncEngine` — what `advisory_lock` and DDL take. |
 | `Database(url, *, echo=False, schema_translate_map=None, **engine_kwargs)` | An engine and sessionmaker owned explicitly. `.engine`, `.sessionmaker`, `.dispose()`, plus the three session methods. |
 | `transactional_session()` | `async with` — one unit of work. |
@@ -237,6 +242,7 @@ await SchemaMigrationRunner(engine, schema="my_lib", migrations_dir=Path(__file_
 | `BadRequestError` | any other constraint violation; an unknown column; an invalid cursor, filter, sort or identifier; a stored value invalid for its type inside `read_boundary()` |
 | `TransactionBoundaryError` | `commit`/`rollback`/`begin` on a session whose boundary belongs to its opener |
 | `DatabaseNotInitializedError` | a module-level function before `init_engine` |
+| `DatabaseUnreachableError` | `verify()` could not open a connection |
 | `InvalidKeysetError` | a cursor passed without its keyset; `keyset_predicate` with no levels |
 | `InvalidAdvisoryKeyError` | `advisory_key()` with no parts; `key_from_uuid()` on a non-UUID |
 | `InvalidSchemaChangeError` | `AddColumn` on a column not attached to a `Table` |

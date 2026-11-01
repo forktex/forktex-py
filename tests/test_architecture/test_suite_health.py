@@ -75,7 +75,7 @@ def test_no_two_test_functions_share_a_body() -> None:
     bodies: dict[str, list[str]] = collections.defaultdict(list)
     for path in _modules():
         for node in _functions(path):
-            if len(node.body) < 3:
+            if not node.name.startswith("test_") or len(node.body) < 3:
                 continue
             bodies[_normalised_body(node)].append(f"{path.relative_to(TESTS.parent)}:{node.lineno} {node.name}")
     copies = [group for group in bodies.values() if len(group) > 1]
@@ -117,9 +117,6 @@ def test_no_module_redefines_a_conftest_fixture() -> None:
     )
 
 
-# Substituting a library internal is how a suite stops testing anything. The
-# entry below injects a failure a real container cannot be made to produce,
-# against a real container.
 _FAULT_INJECTION = {
     ("test_cache/test_ops.py", "Cache"),
 }

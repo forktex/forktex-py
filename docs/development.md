@@ -46,6 +46,10 @@ migration. Consumers that cannot create schemas route them to public with
 
 **`schema_translate_map` key for default-schema tables is `None`, not `"public"`.** Tables with `schema=None` (no explicit schema) are remapped by the `None` key. Using `"public"` as the key has no effect on those tables.
 
+**`AppError.details` is `dict[str, object]`, not `JsonObject`.** The envelope stringifies
+non-JSON values on the way out; `JsonObject` would reject them on the way in. Narrow the
+serializer's return type, never the field's.
+
 **`ContextVar` defaults must be immutable.** A mutable default (e.g. `ContextVar("x", default={})`) creates one shared dict for all coroutines that never set the var — mutations leak across task boundaries. Pattern: `ContextVar("x", default=None)` + factory in getter.
 
 **One name for the process-wide handle: `default()`**, returning `Handle | None`, with

@@ -33,7 +33,7 @@ from typing import Any
 import redis.asyncio as redis
 from pydantic import BaseModel
 
-from forktex.cache.errors import CacheInitializationError
+from forktex.cache.errors import CacheUnreachableError
 from forktex.cache.serialization import deserialize, serialize
 from forktex.log import get_logger
 
@@ -52,13 +52,11 @@ class Cache:
     def client(self) -> redis.Redis:
         return self._client
 
-    async def connect(self) -> None:
-        safe_url = _masked(self.url)
+    async def verify(self) -> None:
         try:
             await self._client.ping()
         except Exception as exc:
-            raise CacheInitializationError(f"Cache initialization failed ({safe_url}): {exc}") from exc
-        logger.info("Cache initialized: %s", safe_url)
+            raise CacheUnreachableError(f"cache is not reachable ({_masked(self.url)})") from exc
 
     async def close(self) -> None:
         logger.info("Closing cache connection")

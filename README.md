@@ -59,7 +59,7 @@ setup_logging(service="my-api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_engine(settings.db_url, pool_pre_ping=True, pool_recycle=1800)
+    await init_engine(settings.db_url, pool_pre_ping=True, pool_recycle=1800)
     yield
     await close_engine()
 

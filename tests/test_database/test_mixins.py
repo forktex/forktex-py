@@ -317,7 +317,6 @@ def test_a_subclass_does_not_steal_its_mapped_parents_polymorphic_identity() -> 
     assert sa.inspect(_PolyBranch).polymorphic_identity == "branch"
     assert sa.inspect(_PolyLeaf).polymorphic_identity != "branch"
 
-    # and the merge still has to do its job on every level
     assert sa.inspect(_PolyRoot).eager_defaults is True
     assert sa.inspect(_PolyBranch).eager_defaults is True
     assert sa.inspect(_PolyLeaf).eager_defaults is True

@@ -34,7 +34,7 @@ class CacheError(AppError, RuntimeError):
 class CacheNotInitializedError(CacheError): ...
 
 
-class CacheInitializationError(CacheError):
+class CacheUnreachableError(CacheError):
     code = AppErrorCode.UNAVAILABLE
 
 
@@ -42,4 +42,4 @@ class InvalidCacheKeyError(CacheError):
     code = AppErrorCode.INTERNAL
 
 
-__all__ = ["CacheError", "CacheInitializationError", "CacheNotInitializedError", "InvalidCacheKeyError"]
+__all__ = ["CacheError", "CacheNotInitializedError", "CacheUnreachableError", "InvalidCacheKeyError"]

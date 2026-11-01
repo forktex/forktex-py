@@ -85,9 +85,6 @@ async def test_async_trace_context_shares_root_across_nesting() -> None:
     assert get_root_trace_id() is None
 
 
-#
-
-
 def test_a_plain_thread_does_not_inherit_the_trace() -> None:
     import threading
 

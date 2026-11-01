@@ -9,9 +9,11 @@ content negotiation, no image processing — those belong in the consuming servi
 `register(name, ...)` builds a `StorageClient` and keeps it under that name; `get_client(name)`
 fetches it, `deregister(name)` drops it. Every module-level operation runs against `get_client()`.
 
-`init(...)` registers the default, but verifies the bucket first: a wrong endpoint, credential or
-bucket raises `StorageError` at boot rather than on the first upload, and the previous default (if
-any) stays in place. It takes no `public_access` — use `register` for that.
+`init` performs no I/O: it installs the default and releases whatever it replaced. `verify()` is
+the explicit boot probe — call it in your lifespan, or wire it into `create_app`'s
+`readiness_probes`, if you want a bad configuration to fail fast rather than on first use.
+
+`init(...)` takes no `public_access` — use `register` for that.
 
 ```python
 from contextlib import asynccontextmanager
@@ -51,7 +53,7 @@ of forgetting is `ClientNotRegisteredError` on the first job, not at boot.
 | `register(name, url, bucket, access_key, secret_key, *, region="us-east-1", public_url=None)` | Build and store a named client; returns it. |
 | `default()` | The `"default"` client — what the module-level operations use. |
 | `require_default()` | The same, raising `ClientNotRegisteredError` instead of returning `None`. |
-| `StorageClient.verify()` | `head_bucket` reachability check; creates nothing. Raises `StorageError`. |
+| `verify()` / `StorageClient.verify()` | Async. `head_bucket`; creates nothing. Raises `StorageUnreachableError`. |
 | `get_client(name="default")` | Look up a registered client. |
 | `deregister(name="default")` | Drop a name; returns the dropped client or `None`. Idempotent. |
 | `init(...)` | Async. `register("default", ...)` with the same arguments. |
@@ -118,7 +120,7 @@ Fields are snake_case in Python and serialise to AWS's own casing.
 |---|---|---|
 | `ClientNotRegisteredError` | `get_client(name)` or `require_default()` for an unregistered name. Message lists the registered names. | No — a wiring bug. |
 | `ObjectNotFoundError(key)` | `download()` on a missing key. | Yes, when a missing object is expected. |
-| `StorageError("storage bucket is not reachable")` | `init()` or `verify()` — wrong endpoint, credential or bucket. | At startup only. |
+| `StorageUnreachableError` | `verify()` — wrong endpoint, credential or bucket. | At startup only, if you call `verify()`. |
 | `StorageError("storage <operation> failed")` | any other failure in `upload`, `download`, `delete`, `exists`, `presign`, `presign_post` or `ensure_bucket`. | Yes, at a request boundary. |
 | `StorageError` | `direct_url()` on a bucket with `public_access="none"`; `presign()` given `content_type` for a `get_object` or `response_content_disposition` for a `put_object`. | No — a wiring bug. |
 

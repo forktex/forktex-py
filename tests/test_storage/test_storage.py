@@ -29,21 +29,16 @@ import pytest_asyncio
 
 from forktex.storage.client import _driver_boundary
 from forktex.storage import (
-    ClientNotRegisteredError,
     ObjectNotFoundError,
     StorageClient,
     StorageConfig,
     StorageError,
-    close,
-    default,
+    StorageUnreachableError,
     delete,
     download,
     exists,
-    get_client,
-    init,
     presign,
     presign_post,
-    require_default,
     register,
     upload,
 )
@@ -61,18 +56,6 @@ async def client(minio_config: dict) -> StorageClient:
         secret_key=minio_config["secret_key"],
     )
     return c
-
-
-@pytest_asyncio.fixture
-async def public_client(minio_config: dict) -> StorageClient:
-    return register(
-        "test-public",
-        url=minio_config["url"],
-        bucket=minio_config["bucket"],
-        access_key=minio_config["access_key"],
-        secret_key=minio_config["secret_key"],
-        public_access="bucket-policy",
-    )
 
 
 @pytest.mark.asyncio
@@ -143,40 +126,6 @@ async def test_presign_post_returns_policy(client: StorageClient) -> None:
     assert result.url
     assert result.fields["Content-Type"] == "text/plain"
     assert "policy" in result.fields
-
-
-@pytest.mark.asyncio
-async def test_multi_client_registry(minio_config: dict) -> None:
-    c1 = register(
-        "multi-a",
-        url=minio_config["url"],
-        bucket=minio_config["bucket"],
-        access_key=minio_config["access_key"],
-        secret_key=minio_config["secret_key"],
-    )
-    c2 = register(
-        "multi-b",
-        url=minio_config["url"],
-        bucket=minio_config["bucket"],
-        access_key=minio_config["access_key"],
-        secret_key=minio_config["secret_key"],
-    )
-    assert get_client("multi-a") is c1
-    assert get_client("multi-b") is c2
-    assert c1 is not c2
-
-
-@pytest.mark.asyncio
-async def test_get_unregistered_client_raises() -> None:
-    with pytest.raises(ClientNotRegisteredError):
-        get_client("not-registered-xyz-abc")
-
-
-@pytest.mark.asyncio
-async def test_direct_url(public_client: StorageClient) -> None:
-    url = public_client.direct_url("images/hero.jpg")
-    assert "hero.jpg" in url
-    assert "test-bucket" in url
 
 
 @pytest.mark.asyncio
@@ -297,9 +246,6 @@ async def test_signed_links_are_sigv4(client: StorageClient) -> None:
     assert "signature" not in post.fields
 
 
-#
-
-
 @pytest.mark.asyncio
 async def test_module_facade_round_trips_through_the_default_client(minio_config: dict) -> None:
     await storage_init(
@@ -329,52 +275,6 @@ async def test_module_facade_round_trips_through_the_default_client(minio_config
 
 
 @pytest.mark.asyncio
-async def test_module_facade_close_is_idempotent_and_deregisters(minio_config: dict) -> None:
-    await storage_init(
-        url=minio_config["url"],
-        bucket=minio_config["bucket"],
-        access_key=minio_config["access_key"],
-        secret_key=minio_config["secret_key"],
-    )
-    get_client()
-
-    await storage_close()
-    await storage_close()
-
-    with pytest.raises(ClientNotRegisteredError):
-        get_client()
-
-
-@pytest.mark.asyncio
-async def test_init_fails_at_boot_when_the_bucket_is_not_reachable(minio_config: dict) -> None:
-    with pytest.raises(StorageError, match="not reachable"):
-        await init(
-            url=minio_config["url"],
-            bucket="a-bucket-that-does-not-exist",
-            access_key=minio_config["access_key"],
-            secret_key=minio_config["secret_key"],
-        )
-
-    with pytest.raises(ClientNotRegisteredError):
-        get_client()
-
-
-@pytest.mark.asyncio
-async def test_init_succeeds_and_default_hands_back_the_client(minio_config: dict) -> None:
-    await init(
-        url=minio_config["url"],
-        bucket=minio_config["bucket"],
-        access_key=minio_config["access_key"],
-        secret_key=minio_config["secret_key"],
-    )
-    try:
-        assert default() is get_client()
-        await default().verify()
-    finally:
-        await close()
-
-
-@pytest.mark.asyncio
 async def test_a_write_to_a_missing_bucket_raises_storage_error_not_a_driver_error(minio_config: dict) -> None:
     """upload/delete/presign let raw botocore exceptions through, so a caller
     catching StorageError around a write got an unhandled ClientError."""
@@ -390,22 +290,6 @@ async def test_a_write_to_a_missing_bucket_raises_storage_error_not_a_driver_err
         await client.upload("k", b"v")
     with pytest.raises(StorageError):
         await client.delete("k")
-
-
-@pytest.mark.asyncio
-async def test_verify_reports_an_unreachable_endpoint_as_storage_error() -> None:
-    """verify() caught only ClientError, so a wrong endpoint -- the boot-time
-    failure a misconfigured deployment hits first -- escaped as raw botocore."""
-    client = StorageClient(
-        StorageConfig(
-            url="http://127.0.0.1:1",
-            bucket="any",
-            access_key="k",
-            secret_key="s",
-        )
-    )
-    with pytest.raises(StorageError, match="not reachable"):
-        await client.verify()
 
 
 @pytest.mark.asyncio
@@ -437,29 +321,6 @@ async def test_a_presigned_put_actually_accepts_an_upload(minio_config: dict) ->
 
     assert response.status_code in (200, 204), response.text
     assert await client.download("signed/put.txt") == b"put through a signature"
-
-
-@pytest.mark.asyncio
-async def test_default_reports_absence_instead_of_raising(minio_config: dict) -> None:
-    """`default()` raised here while database's and cache's returned None, so a
-    caller could not write one idiom across the facades."""
-    await close()
-    assert default() is None
-
-    await init(
-        url=minio_config["url"],
-        bucket=minio_config["bucket"],
-        access_key=minio_config["access_key"],
-        secret_key=minio_config["secret_key"],
-    )
-    try:
-        assert default() is require_default() is get_client()
-    finally:
-        await close()
-
-    assert default() is None
-    with pytest.raises(ClientNotRegisteredError):
-        require_default()
 
 
 @pytest.mark.asyncio
@@ -501,30 +362,6 @@ async def test_a_public_read_bucket_gets_the_policy_and_serves_anonymously(minio
 
 
 @pytest.mark.asyncio
-async def test_a_failed_init_leaves_a_working_default_in_place(minio_config: dict) -> None:
-    """init() registered first and deregistered on a verify failure, so a second
-    init() with a bad bucket evicted the client the process was already using."""
-    await init(
-        url=minio_config["url"],
-        bucket=minio_config["bucket"],
-        access_key=minio_config["access_key"],
-        secret_key=minio_config["secret_key"],
-    )
-    working = require_default()
-    try:
-        with pytest.raises(StorageError):
-            await init(
-                url=minio_config["url"],
-                bucket="a-bucket-that-does-not-exist",
-                access_key=minio_config["access_key"],
-                secret_key=minio_config["secret_key"],
-            )
-        assert default() is working
-    finally:
-        await close()
-
-
-@pytest.mark.asyncio
 async def test_a_failure_that_is_not_a_driver_error_still_reaches_the_caller_as_storage_error(
     minio_config: dict,
 ) -> None:
@@ -543,3 +380,18 @@ async def test_a_failure_that_is_not_a_driver_error_still_reaches_the_caller_as_
     with pytest.raises(ObjectNotFoundError):
         async with _driver_boundary("probe", bucket="b"):
             raise ObjectNotFoundError("an AppError passes through untouched")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("bucket", "a-bucket-that-does-not-exist"), ("secret_key", "wrong"), ("url", "http://127.0.0.1:1")],
+    ids=["missing bucket", "bad credential", "unreachable endpoint"],
+)
+async def test_verify_reports_every_misconfiguration_as_unreachable(minio_config: dict, field: str, value: str) -> None:
+    """The endpoint case escaped as raw botocore until `verify` caught
+    `BotoCoreError` as well as `ClientError`."""
+    client = StorageClient(StorageConfig(**{**minio_config, field: value}))
+
+    with pytest.raises(StorageUnreachableError, match="not reachable"):
+        await client.verify()

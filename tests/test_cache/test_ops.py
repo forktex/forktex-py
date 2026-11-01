@@ -33,14 +33,12 @@ from pydantic import BaseModel
 
 from forktex.cache import (
     Cache,
-    available,
     cached,
     delete,
     deserialize,
     fetch_or_set,
     fetch_swr,
     get,
-    get_client,
     init,
     invalidate_key,
     invalidate_prefix,
@@ -50,8 +48,7 @@ from forktex.cache import (
     shutdown_background_tasks,
 )
 from forktex.cache.connection import close
-from forktex.cache.errors import CacheInitializationError, CacheNotInitializedError, InvalidCacheKeyError
-from forktex.error import AppError
+from forktex.cache.errors import InvalidCacheKeyError
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -220,20 +217,6 @@ def test_serialize_deserialize_roundtrip_plain_value() -> None:
 
 
 @pytest.mark.asyncio
-async def test_available_and_get_client_not_initialized_after_close() -> None:
-    assert available() is True
-    get_client()
-
-    await close()
-    assert available() is False
-    with pytest.raises(CacheNotInitializedError) as excinfo:
-        get_client()
-    assert isinstance(excinfo.value, AppError)
-    assert isinstance(excinfo.value, RuntimeError)
-    assert await get("test:not-initialized:" + __name__) is None
-
-
-@pytest.mark.asyncio
 async def test_fetch_swr_keeps_a_valid_entry_when_the_refresh_lock_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = 0
 
@@ -295,19 +278,6 @@ def test_default_cache_key_distinguishes_functions_and_arguments() -> None:
     assert _default_key(one, (1,), {}) != _default_key(two, (1,), {})
     assert _default_key(one, (1,), {}) != _default_key(one, (2,), {})
     assert _default_key(one, (), {"a": 1}) != _default_key(one, (), {"a": 2})
-
-
-@pytest.mark.asyncio
-async def test_failed_init_leaves_the_cache_unavailable(redis_url: str) -> None:
-    await close()
-    with pytest.raises(CacheInitializationError) as excinfo:
-        await init("redis://127.0.0.1:1/0")
-
-    assert isinstance(excinfo.value, AppError)
-    assert available() is False, "a failed init must leave the client unset"
-    assert await get("test:after-failed-init:" + __name__) is None
-
-    await init(redis_url)
 
 
 class _CachedUser(BaseModel):

@@ -40,21 +40,12 @@ _BUILTIN_EXCEPTIONS = frozenset(
     name for name, obj in vars(builtins).items() if isinstance(obj, type) and issubclass(obj, BaseException)
 )
 
-# iso sits at the bottom of the layer DAG -- error imports types imports iso --
-# so a forktex.error leaf would close the cycle. Its stdlib raises are forced.
 _LAYER_FORCED = frozenset({"iso"})
 
-# A pydantic validator must raise ValueError: that is the protocol pydantic
-# converts into a ValidationError. An AppError here escapes as a 500 instead.
 _VALIDATOR_DECORATORS = frozenset({"field_validator", "model_validator"})
 
-# Functions whose exception type is dictated by the protocol they implement.
 _PROTOCOL_RAISES = {"__getattr__": "AttributeError"}
 
-# Raised while a module or a class body is being built, before any request
-# exists. Each entry is (relative path, exception, what the caller got wrong).
-# Declared so the two gates below cannot quietly shrink to nothing as packages
-# come and go: each skips a package that has no errors.py / no default().
 _PACKAGES_WITH_ERRORS = ["cache", "database", "storage"]
 _PACKAGES_WITH_A_DEFAULT = ["cache", "database", "storage"]
 
@@ -149,7 +140,6 @@ def test_default_and_require_default_mean_the_same_thing_on_every_facade() -> No
         returns = inspect.signature(facade.default).return_annotation
         if "None" not in str(returns):
             offenders.append(f"forktex.{package}.default() -> {returns}, which cannot report absence")
-        # Call it: an annotation saying `| None` is not evidence it returns one.
         if facade.default() is not None:
             offenders.append(f"forktex.{package}.default() returned a handle with nothing registered")
         try:

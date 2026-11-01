@@ -56,16 +56,14 @@ def get_client() -> redis.Redis:
 
 async def init(url: str) -> None:
     global _default
-    cache = Cache(url)
-    logger.info("Initializing cache: %s", cache.url.rsplit("@", 1)[-1])
-    try:
-        await cache.connect()
-    except Exception:
-        await cache.close()
-        raise
-    if _default is not None:
-        await _default.close()
-    _default = cache
+    previous = _default
+    _default = Cache(url)
+    if previous is not None:
+        await previous.close()
+
+
+async def verify() -> None:
+    await require_default().verify()
 
 
 async def close() -> None:

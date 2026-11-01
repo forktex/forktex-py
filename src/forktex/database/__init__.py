@@ -33,6 +33,7 @@ from forktex.database.connection import (
     require_default,
     savepoint,
     transactional_session,
+    verify,
     with_transactional_session,
     yield_transactional_session,
 )
@@ -48,6 +49,7 @@ from forktex.database.crud import (
 )
 from forktex.database.errors import (
     DatabaseNotInitializedError,
+    DatabaseUnreachableError,
     InvalidAdvisoryKeyError,
     InvalidKeysetError,
     InvalidSchemaChangeError,
@@ -92,6 +94,7 @@ __all__ = [
     "BaseDBModel",
     "Database",
     "DatabaseNotInitializedError",
+    "DatabaseUnreachableError",
     "InvalidAdvisoryKeyError",
     "InvalidKeysetError",
     "InvalidSchemaChangeError",
@@ -141,6 +144,7 @@ __all__ = [
     "validate_relation",
     "validate_schema",
     "validate_slug",
+    "verify",
     "with_transactional_session",
     "xact_lock",
     "yield_transactional_session",

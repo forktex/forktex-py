@@ -335,13 +335,13 @@ def test_middleware_are_usable_on_a_plain_asgi_app_without_create_app() -> None:
 
 
 def test_downstream_package_errors_render_with_their_real_status() -> None:
-    from forktex.cache.errors import CacheInitializationError
+    from forktex.cache.errors import CacheUnreachableError
     from forktex.database.errors import TransactionBoundaryError
     from forktex.storage.errors import ObjectNotFoundError
 
     cases = [
         (ObjectNotFoundError("object 'a/b.png' is absent"), 404),
-        (CacheInitializationError("redis is unreachable"), 503),
+        (CacheUnreachableError("redis is unreachable"), 503),
         (TransactionBoundaryError("commit() is not available here"), 500),
     ]
     for error, expected_status in cases:
