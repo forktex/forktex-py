@@ -21,27 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""DDL as SQLAlchemy constructs, not hand-built SQL strings.
-
-The library creates and alters real Postgres objects at runtime (grid's
-promoted-column sidecars and payload indexes, flow's extension columns).
-Historically that meant f-string SQL guarded by an identifier regex. This
-module replaces it, because SQLAlchemy constructs are strictly better here:
-
-- **Quoting is the dialect's job.** The compiler's ``IdentifierPreparer``
-  escapes and quotes every name, so a hostile identifier renders as data
-  rather than syntax. A regex guard can only *reject*; quoting is correct even
-  for names the guard would have to allow.
-- **They compile without a database.** ``str(stmt.compile(dialect=...))`` is a
-  pure function of the construct, so DDL is unit-testable with no container —
-  which is the whole point of moving off strings.
-- **They respect ``schema_translate_map``.** f-string SQL had to interpolate
-  the runtime schema by hand, which is precisely why those f-strings existed.
-
-SQLAlchemy 2.0 already covers most of the surface natively, so this module
-mostly re-exports it and adds only what Core genuinely lacks: ``ALTER TABLE …
-ADD/DROP COLUMN``, for which there is no built-in construct.
-"""
 
 from __future__ import annotations
 
@@ -58,47 +37,20 @@ from sqlalchemy.schema import (
 )
 from sqlalchemy.sql.compiler import DDLCompiler
 
-__all__ = [
-    "AddColumn",
-    "CreateIndex",
-    "CreateSchema",
-    "CreateTable",
-    "DropColumn",
-    "DropIndex",
-    "DropSchema",
-    "DropTable",
-]
+from forktex.database.errors import InvalidSchemaChangeError
 
 
 class AddColumn(DDLElement):
-    """``ALTER TABLE <table> ADD COLUMN [IF NOT EXISTS] <col> <type> [NOT NULL]``.
-
-    Core has ``CreateTable``/``CreateIndex`` but no ``ADD COLUMN`` construct —
-    that lives in alembic's operations layer, which is a migration-authoring
-    tool rather than a runtime dependency. This is the minimal equivalent.
-
-    The column must be attached to a ``Table`` so the compiler can render its
-    name and resolve the type; pass ``if_not_exists=True`` for the idempotent
-    reconcile-style usage this library needs.
-    """
-
     inherit_cache = False
 
     def __init__(self, column: Column, *, if_not_exists: bool = False) -> None:
-        if column.table is None:  # pragma: no cover - guards a programming error
-            raise ValueError("AddColumn requires a column attached to a Table")
+        if column.table is None:
+            raise InvalidSchemaChangeError("AddColumn requires a column attached to a Table")
         self.column = column
         self.if_not_exists = if_not_exists
 
 
 class DropColumn(DDLElement):
-    """``ALTER TABLE <table> DROP COLUMN [IF EXISTS] <col>``.
-
-    Takes the column *name* rather than a ``Column``, because the reconcile
-    path drops columns that are no longer declared — so by definition there is
-    no live ``Column`` object for them.
-    """
-
     inherit_cache = False
 
     def __init__(
@@ -127,9 +79,7 @@ def _compile_add_column(element: AddColumn, compiler: DDLCompiler, **kw: object)
     table = column.table
     target = _qualified(compiler, table.name, table.schema)
     exists = "IF NOT EXISTS " if element.if_not_exists else ""
-    coltype = compiler.dialect.type_compiler.process(column.type)
-    nullability = "" if column.nullable else " NOT NULL"
-    return f"ALTER TABLE {target} ADD COLUMN {exists}{compiler.preparer.format_column(column)} {coltype}{nullability}"
+    return f"ALTER TABLE {target} ADD COLUMN {exists}{compiler.get_column_specification(column)}"
 
 
 @compiles(DropColumn)
@@ -137,3 +87,15 @@ def _compile_drop_column(element: DropColumn, compiler: DDLCompiler, **kw: objec
     target = _qualified(compiler, element.table_name, element.schema)
     exists = "IF EXISTS " if element.if_exists else ""
     return f"ALTER TABLE {target} DROP COLUMN {exists}{compiler.preparer.quote(element.column_name)}"
+
+
+__all__ = [
+    "AddColumn",
+    "CreateIndex",
+    "CreateSchema",
+    "CreateTable",
+    "DropColumn",
+    "DropIndex",
+    "DropSchema",
+    "DropTable",
+]

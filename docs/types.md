@@ -1,14 +1,12 @@
 # forktex.types
 
-Base Pydantic models and JSON type aliases: the wire-shape opinion (`BaseAppModel`), the domain-shape opinion (`BaseValueObject`), their combination, and the `UtcDateTime`/`UtcDate` field types that keep timestamps consistent with the rest of the library.
+Base Pydantic models and JSON type aliases: the base models, the JSON type aliases, and the `UtcDateTime`/`UtcDate` field types that keep timestamps consistent with the rest of the library.
 
-## Install
-
-Always bundled — `types` is a level-0 extra with no packages behind it. `pip install forktex` is enough; `forktex[types]` resolves but installs nothing extra. Depends on `pydantic` (a core dependency) and on `forktex.iso`, a level-0 sibling. Nothing here ever raises `ImportError` for a missing extra.
+Builds on `pydantic` and `forktex.iso`.
 
 ## Wiring
 
-Shape C — plain classes and type aliases. Nothing to initialise, nothing global, no teardown. Import a base and subclass it.
+Import a base and subclass it.
 
 ```python
 from forktex.types import BaseAppModel, BaseValueObject, BaseWireValueObject, UtcDate, UtcDateTime
@@ -43,7 +41,7 @@ class Money(BaseWireValueObject):      # frozen + hashable + camel aliases
 
 | Name | What it is |
 | --- | --- |
-| `BaseAppModel` | `BaseModel` with `alias_generator=to_camel`, `validate_by_name=True`, `validate_by_alias=True`, `serialize_by_alias=True`. For anything crossing a boundary: HTTP body, JSON storage, queue payload. |
+| `BaseAppModel` | `BaseModel` with `alias_generator=to_camel`, `validate_by_name=True`, `validate_by_alias=True`, `serialize_by_alias=True`. For anything crossing a boundary: HTTP body, JSON storage, JSON column. |
 | `BaseValueObject` | `BaseModel` with `frozen=True` — immutable after construction, auto `__hash__` on field values, structural equality. Internal domain primitives. |
 | `BaseWireValueObject` | `BaseValueObject` plus `BaseAppModel`'s alias config. A value object that also crosses a boundary. |
 | `UtcDateTime` | `Annotated[datetime, PlainSerializer(to_iso, return_type=str)]` — a field type, not a base class. |
@@ -61,9 +59,8 @@ This module defines no exceptions. Everything that can fail is Pydantic's: `pyda
 ## Gotchas
 
 - **`UtcDateTime` normalises on the way out, not in.** Validating `"2026-01-01T12:00:00+05:00"` keeps that offset on the in-memory value; UTC conversion happens when the model is serialized. `PlainSerializer` runs in both dump modes, so `model_dump()` and `model_dump(mode="json")` both yield the canonical string.
-- **A plain `datetime` field drifts.** Pydantic's own default is `Z`-suffixed, offset-preserving and not UTC-forced — it disagrees with the text `log`, `grid`, `flow`, and `database` all produce through `iso.to_iso()`. Annotate wire-facing datetimes as `UtcDateTime`.
+- **A plain `datetime` field drifts.** Pydantic's own default is `Z`-suffixed, offset-preserving and not UTC-forced — it disagrees with the text `log`'s JSON and `database`'s JSON columns both produce through `iso.to_iso()`. Annotate wire-facing datetimes as `UtcDateTime`.
 - **`frozen=True` does not deep-freeze.** A `list`/`dict` field on a `BaseValueObject` subclass can still be mutated in place, changing the instance's hash or leaking a shared reference between instances. Prefer `tuple` / `frozenset` / nested `BaseValueObject`.
 - **`BaseValueObject` has no aliases.** camelCase input raises `ValidationError`; that is the point of the split. Reach for `BaseWireValueObject` when the value crosses a boundary.
-- **`UtcDate` exists for symmetry.** A plain `date` field already serializes as `YYYY-MM-DD`, and Pydantic rejects a `datetime` with a nonzero time where a `date` is expected. `UtcDate` fixes no live bug.
+- **`UtcDate` is a convenience.** A plain `date` field already serializes as `YYYY-MM-DD`.
 - **Some type checkers do not see the generated `__hash__`.** Using a frozen model as a dict key is correct at runtime even when pyright complains.
-- **Internal adoption is thin.** Outside `error.ErrorEnvelope` and `space.config`, most `forktex` modules subclass `pydantic.BaseModel` directly — do not expect these bases everywhere in the repo.

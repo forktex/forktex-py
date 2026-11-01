@@ -21,62 +21,17 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Canonical ISO-8601 date/time handling for ForkTex Python services.
-
-Zero extra dependencies — stdlib only. The one place that decides how a
-datetime becomes text and back: always UTC, always ``datetime.isoformat()``'s
-default precision/offset shape (``+00:00``, microseconds only when nonzero).
-A naive input is assumed to already be UTC rather than raising, since that's
-the shape every existing caller in this codebase already relied on before
-this module existed — it isn't a new leniency being introduced. Pass
-``strict=True`` to ``to_iso()``/``from_iso()`` to raise on naive input
-instead — useful for a caller with no such existing assumption to preserve
-(e.g. an external consumer of this library).
-
-``log`` (JSON timestamps), ``grid`` (canonical stored/indexed temporal text),
-``flow`` (pagination cursors, retry timestamps), and ``database`` (JSON-column
-datetime fields) all delegate here instead of each hand-rolling the same
-UTC-normalization dance — before this module existed they had drifted (some
-forced UTC, some didn't; none agreed on precision).
-
-    from forktex.iso import now, to_iso, from_iso
-
-    now()                          # datetime.now(timezone.utc)
-    to_iso(now())                  # "2026-08-12T10:30:00.123456+00:00"
-    from_iso("2026-08-12T10:30:00+00:00")  # naive input is assumed UTC too
-
-Argument errors here are stdlib ``TypeError``/``ValueError``, not ``AppError``
-subclasses — a deliberate, recorded exception to this library's error contract.
-``forktex.error`` imports ``forktex.types``, which imports this module, so an
-``iso -> error`` edge would close a cycle between three level-0 primitives. The
-alternative (moving ``ErrorEnvelope`` or ``UtcDateTime`` to break it) restructures
-two primitives to retype three argument guards, and ``error-envelope.md`` scopes
-its rule to errors that cross a transport boundary — which these do not: every one
-signals a caller passing the wrong *type*, catchable as the builtin any Python
-caller already expects.
-
-"""
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-__all__ = ["from_date_iso", "from_iso", "now", "to_date_iso", "to_iso"]
-
 
 def now() -> datetime:
-    """The one canonical "current time" call — always UTC-aware."""
     return datetime.now(UTC)
 
 
 def to_iso(value: datetime, *, strict: bool = False) -> str:
-    """Canonical ISO-8601 text for a datetime: naive is assumed UTC, aware is
-    converted to UTC, then rendered via ``datetime.isoformat()``.
-
-    Pass ``strict=True`` to raise ``ValueError`` on naive input instead of
-    assuming UTC — useful for a caller with no existing "naive means UTC"
-    assumption to preserve.
-    """
     if not isinstance(value, datetime):
         raise TypeError(f"{value!r} is not a datetime — use to_date_iso() for date values")
     if value.tzinfo is None:
@@ -87,11 +42,6 @@ def to_iso(value: datetime, *, strict: bool = False) -> str:
 
 
 def from_iso(value: str, *, strict: bool = False) -> datetime:
-    """Parse ISO-8601 text back to a UTC-aware datetime (see :func:`to_iso`).
-
-    Pass ``strict=True`` to raise ``ValueError`` if ``value`` has no offset
-    (would otherwise be assumed UTC).
-    """
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
         if strict:
@@ -101,17 +51,13 @@ def from_iso(value: str, *, strict: bool = False) -> datetime:
 
 
 def to_date_iso(value: date) -> str:
-    """Canonical ISO-8601 text for a calendar date (``YYYY-MM-DD``).
-
-    ``datetime`` is a subclass of ``date``, so a full ``datetime`` is
-    accepted too — its date component is used (``datetime.isoformat()``
-    on a ``datetime`` would otherwise emit the full timestamp, not just
-    ``YYYY-MM-DD``)."""
     if isinstance(value, datetime):
         value = value.date()
     return value.isoformat()
 
 
 def from_date_iso(value: str) -> date:
-    """Parse ``YYYY-MM-DD`` text back to a :class:`date`."""
     return date.fromisoformat(value)
+
+
+__all__ = ["from_date_iso", "from_iso", "now", "to_date_iso", "to_iso"]

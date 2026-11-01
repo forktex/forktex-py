@@ -22,46 +22,29 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""``create_app`` — a preconfigured FastAPI instance.
-
-Composes the opt-in middleware stack (trace-id, CORS, security headers), the
-``AppError`` → ``ErrorEnvelope`` mapping (plus an optional catch-all), and the
-``/health`` + ``/health/ready`` probes from an :class:`AppConfig`. Returns the
-FastAPI instance for consumers to extend with routers and auth.
-"""
-
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from forktex.api.middleware import ExceptionEnvelopeMiddleware, SecurityHeadersMiddleware
 from forktex.log import TraceIDMiddleware, get_logger
 from forktex.types import BaseAppModel
 
-if TYPE_CHECKING:
-    from fastapi import FastAPI
-
 logger = get_logger(__name__)
 
 
 class LivenessResponse(BaseAppModel):
-    """``/health`` — the process is up and serving."""
-
     status: str = "ok"
 
 
 class ReadinessResponse(BaseAppModel):
-    """``/health/ready`` — every declared dependency answered.
-
-    A ``BaseAppModel`` like every other body this library puts on the wire, so
-    the health endpoints cannot drift from the error envelope's conventions —
-    they used to be hand-built dicts with no schema at all.
-    """
-
     status: str
     checks: dict[str, bool] = Field(default_factory=dict)
 
@@ -74,19 +57,6 @@ side-effect-free; readiness checks fire on every probe call."""
 
 
 class AppConfig(BaseModel):
-    """Inputs to :func:`create_app`.
-
-    Every capability is opt-in/opt-out so a service takes only what it needs
-    (e.g. a purely API-key API leaves ``cors_origins`` unset and gets no CORS).
-    Consumers can still attach further routers/middleware to the returned app.
-
-    Unknown fields are rejected. Pydantic's default is to drop them silently,
-    which turns a version skew into a wrong app rather than an error: a service
-    written against a newer forktex and deployed against an older one had its
-    setting quietly ignored and served a route table nobody asked for. Failing
-    at config time names the field and the version mismatch immediately.
-    """
-
     model_config = ConfigDict(extra="forbid")
 
     title: str = "ForkTex Service"
@@ -94,11 +64,6 @@ class AppConfig(BaseModel):
     description: str = ""
     debug: bool = False
 
-    #: Mount everything this factory owns — health probes, docs, OpenAPI — under
-    #: a prefix. For a service behind a gateway that routes ``/api/*`` to it
-    #: *without stripping the prefix*, the root-mounted defaults are unreachable
-    #: in production; the alternative is each service re-registering the routes
-    #: and re-running ``app.setup()`` by hand. Empty means mount at the root.
     api_prefix: str = ""
 
     @field_validator("api_prefix")
@@ -108,48 +73,23 @@ class AppConfig(BaseModel):
             raise ValueError("api_prefix must start with '/' and not end with one, e.g. '/api'")
         return value
 
-    # Middleware toggles.
-    enable_trace_id: bool = True  # wire forktex.log.TraceIDMiddleware
+    enable_trace_id: bool = True
     enable_security_headers: bool = True
-    enable_exception_handler: bool = True  # AppError → ErrorEnvelope
-    handle_unexpected: bool = True  # also map uncaught Exception → 500 envelope
+    enable_exception_handler: bool = True
+    handle_unexpected: bool = True
 
-    # CORS — installed only when origins are provided (None ⇒ no CORS).
     cors_origins: list[str] | None = None
     cors_allow_credentials: bool = True
     cors_allow_methods: list[str] = Field(default_factory=lambda: ["*"])
     cors_allow_headers: list[str] = Field(default_factory=lambda: ["*"])
 
-    # ASGI lifespan passed straight through to FastAPI (startup/shutdown).
     lifespan: Callable[[Any], Any] | None = None
 
-    # Pluggable readiness checks. ``/health/ready`` returns 503 when any named
-    # probe returns False, raises, or exceeds ``readiness_timeout``.
     readiness_probes: dict[str, HealthProbe] = Field(default_factory=dict)
-    #: Per-call budget for the whole probe set. A probe that hangs (a TCP connect to
-    #: a dead host with no timeout of its own is the usual culprit) would otherwise
-    #: hang readiness indefinitely, and an orchestrator reads no answer as unhealthy
-    #: without ever telling you which dependency stalled.
     readiness_timeout: float = 5.0
 
 
 def create_app(config: AppConfig | None = None) -> FastAPI:
-    """Build a preconfigured FastAPI application.
-
-    Wires the opt-in cross-cutting middleware (trace-id, CORS, security
-    headers), installs the ``AppError`` → ``ErrorEnvelope`` middleware (plus an
-    optional catch-all), mounts liveness + readiness endpoints, and returns the
-    FastAPI instance for consumers to extend (routers, auth, more middleware).
-
-    Raises:
-        ImportError: if the ``[api]`` extra (fastapi) is not installed.
-    """
-    try:
-        from fastapi import FastAPI
-        from fastapi.responses import JSONResponse
-    except ImportError as exc:
-        raise ImportError("Install 'forktex[api]' (fastapi) to use forktex.api") from exc
-
     cfg = config or AppConfig()
 
     prefix = cfg.api_prefix
@@ -160,31 +100,17 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         description=cfg.description,
         debug=cfg.debug,
         lifespan=cfg.lifespan,
-        # FastAPI builds its doc routes during __init__, so the prefix has to be
-        # applied here — a consumer cannot move them afterwards without editing
-        # `app.router.routes` and calling `setup()` again.
         docs_url=f"{prefix}/docs",
         redoc_url=f"{prefix}/redoc",
         openapi_url=f"{prefix}/openapi.json",
-        # Not derived from docs_url by FastAPI, so it needs the prefix too —
-        # otherwise one route stays at the root and the gateway cannot reach it.
         swagger_ui_oauth2_redirect_url=f"{prefix}/docs/oauth2-redirect",
     )
 
-    # add_middleware applies in REVERSE (last added = outermost). Target stack,
-    # outermost → innermost: security-headers · CORS · trace-id · envelope.
-    # The envelope middleware sits INSIDE trace-id so the log trace-id
-    # contextvar is still live when it builds the error body (so `traceId` ==
-    # the `X-Request-ID` header == the log records). Security headers are
-    # outermost so they stamp every response, including errors and CORS
-    # preflights.
     if cfg.enable_exception_handler:
         app.add_middleware(ExceptionEnvelopeMiddleware, handle_unexpected=cfg.handle_unexpected)
     if cfg.enable_trace_id:
         app.add_middleware(TraceIDMiddleware)
     if cfg.cors_origins is not None:
-        from fastapi.middleware.cors import CORSMiddleware
-
         app.add_middleware(
             CORSMiddleware,
             allow_origins=cfg.cors_origins,
@@ -199,17 +125,10 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     async def _liveness() -> LivenessResponse:
         return LivenessResponse()
 
-    # `response_model=None` keeps the `-> JSONResponse` annotation (for typing)
-    # from being turned into an OpenAPI response schema, which pydantic cannot
-    # build for a Response type.
     @app.get(f"{prefix}/health/ready", tags=["health"], response_model=None)
     async def _readiness() -> JSONResponse:
         async def _check(name: str, probe: HealthProbe) -> bool:
             try:
-                # Per-probe budget, not one shared deadline: a single shared timeout
-                # discards the results of probes that already answered, so one hung
-                # dependency would report every other as unhealthy too and hide
-                # which one actually stalled.
                 return bool(await asyncio.wait_for(probe(), timeout=cfg.readiness_timeout))
             except TimeoutError:
                 logger.warning(
@@ -218,15 +137,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 )
                 return False
             except Exception:
-                # A raising probe and a probe returning False are both "not ready",
-                # but only one of them is a bug — log so they stay distinguishable
-                # instead of collapsing into the same silent false.
                 logger.exception("readiness probe raised", extra={"probe": name})
                 return False
 
-        # Concurrently: probes are independent, so running them in sequence made the
-        # endpoint's latency the *sum* of its dependencies and pushed a
-        # multi-dependency service past its own probe deadline.
         names = list(cfg.readiness_probes)
         outcomes = await asyncio.gather(*(_check(n, cfg.readiness_probes[n]) for n in names))
         results = dict(zip(names, outcomes, strict=True))

@@ -22,48 +22,50 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""ForkTex — the shared Python substrate for ForkTex services.
-
-Fourteen modules, one library, one set of opinions. Import only what you need;
-each module's third-party dependency is an optional extra.
-
-Primitives — always available, no extra required:
-
-    log      — structured JSON logging (Loki-ready), trace_id contextvar
-    error    — AppError hierarchy + ErrorEnvelope
-    types    — base Pydantic models, frozen value objects
-    iso      — canonical ISO-8601 date/time formatting and parsing
-
-Role facades — one per piece of infrastructure:
-
-    database — async Postgres engine, session, ORM bases, CRUD, advisory locks
-    cache    — async Redis client, @cached, namespaced keys
-    queue    — arq background-job queue                      [queue]
-    storage  — S3/MinIO object storage (aioboto3)            [storage]
-    store    — schemaless document records (pymongo)         [store]
-    vector   — Qdrant vector search                          [vector]
-    vault    — Fernet encryption, EncryptedJSON column type  [vault]
-    graph    — typed multi-edge in-memory graph algebra
-
-Bootstrap — process-level wiring:
-
-    api      — FastAPI app factory: middleware, error envelope, health   [api]
-    worker   — queue-consumer hosts: standalone, embedded, process pool [worker]
-
-A module whose extra is missing raises ``ImportError`` naming it, e.g.
-``Install 'forktex[vector]' (qdrant-client) to use forktex.vector``.
-"""
-
+import importlib
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
+from types import ModuleType
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from forktex import api, cache, database, error, iso, log, storage, types
 
 try:
     __version__ = _pkg_version("forktex")
-except PackageNotFoundError:  # running from a source tree with no install
+except PackageNotFoundError:
     __version__ = "0.0.0+unknown"
 
-# Nothing is re-exported here on purpose: importing the root must stay cheap.
-# Reach for the module you need — ``from forktex import database`` — so a
-# service that only wants ``log`` never pays for sqlalchemy or redis.
 
-__all__ = ["__version__"]
+__all__ = [
+    "__version__",
+    "api",
+    "cache",
+    "database",
+    "error",
+    "iso",
+    "log",
+    "storage",
+    "types",
+]
+
+_MODULES = frozenset(__all__) - {"__version__"}
+
+
+def __getattr__(name: str) -> ModuleType:
+    """Resolve `forktex.<module>` on first access.
+
+    `import forktex` exposes all eight, but importing one must not drag in the
+    others: `forktex.iso` is stdlib-only and `forktex.error` is pure Pydantic,
+    while `api`, `cache`, `database` and `storage` pull FastAPI, redis,
+    SQLAlchemy and botocore between them.
+    """
+    if name not in _MODULES:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module = importlib.import_module(f"{__name__}.{name}")
+    globals()[name] = module
+    return module
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)

@@ -21,19 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Every temporal column in the library must be timezone-aware.
-
-`forktex.iso` guarantees every datetime it produces is UTC-aware, so a
-naive ``timestamp`` column contradicts the business-logic layer. This is not
-cosmetic: asyncpg *refuses* to write an aware datetime into a naive column, so
-such a column is a latent crash for any code that assigns ``iso.now()`` instead
-of relying on a server-side default.
-
-These tests are the standing guard for that invariant — one over the declared
-ORM metadata (no container), one over the physically-created schema (via
-``database.reflect``, which returns type objects and therefore preserves the
-``timezone`` flag that a type-*name* round-trip would lose).
-"""
 
 from __future__ import annotations
 
@@ -42,11 +29,10 @@ from datetime import datetime
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
-from forktex.database.models import AuditMixin, BaseDBModel, TimestampMixin, UtcDateTime
+from forktex.database.models import AuditMixin, BaseDBModel, TimestampMixin, UtcTimestamp
 
 
 def _naive_temporal_columns(metadata: sa.MetaData) -> list[str]:
-    """Every ``DateTime`` column in ``metadata`` that is not timezone-aware."""
     offenders = []
     for table in metadata.tables.values():
         for col in table.columns:
@@ -56,20 +42,12 @@ def _naive_temporal_columns(metadata: sa.MetaData) -> list[str]:
     return sorted(offenders)
 
 
-# ---------------------------------------------------------------------------
-# Declared metadata (no container)
-# ---------------------------------------------------------------------------
+def test_the_canonical_type_is_timezone_aware() -> None:
+    assert isinstance(UtcTimestamp, sa.TIMESTAMP)
+    assert UtcTimestamp.timezone is True
 
 
-def test_the_canonical_type_is_timezone_aware():
-    assert isinstance(UtcDateTime, sa.TIMESTAMP)
-    assert UtcDateTime.timezone is True
-
-
-def test_a_bare_mapped_datetime_declares_a_tz_aware_column():
-    """`type_annotation_map` makes the correct thing the default, so a model
-    author cannot accidentally declare a naive column by writing the obvious
-    `Mapped[datetime]`."""
+def test_a_bare_mapped_datetime_declares_a_tz_aware_column() -> None:
 
     class _ProbeBare(BaseDBModel):
         __tablename__ = "_probe_bare_datetime"
@@ -79,10 +57,7 @@ def test_a_bare_mapped_datetime_declares_a_tz_aware_column():
     assert _ProbeBare.__table__.c.at.type.timezone is True
 
 
-def test_timestamp_and_audit_mixins_declare_tz_aware_columns():
-    """Regression guard: `TimestampMixin` used to emit
-    `TIMESTAMP WITHOUT TIME ZONE` while `AuditMixin.archived_at` in the same
-    family was aware — the mixins disagreed with each other."""
+def test_timestamp_and_audit_mixins_declare_tz_aware_columns() -> None:
 
     class _ProbeAudit(BaseDBModel, AuditMixin):
         __tablename__ = "_probe_audit_tz"
@@ -95,9 +70,13 @@ def test_timestamp_and_audit_mixins_declare_tz_aware_columns():
         __tablename__ = "_probe_ts_tz"
         id: Mapped[int] = mapped_column(primary_key=True)
 
-    assert _naive_temporal_columns(_ProbeTs.metadata) == []
+    assert _naive_temporal_columns(sa.MetaData()) == [], "the helper must report nothing for nothing"
+    assert [c.name for c in _ProbeTs.__table__.c if isinstance(c.type, sa.DateTime)] == [
+        "created_at",
+        "updated_at",
+    ]
+    assert all(c.type.timezone for c in _ProbeTs.__table__.c if isinstance(c.type, sa.DateTime))
 
 
-def test_no_declared_model_in_the_library_has_a_naive_temporal_column():
-    """The whole shared registry, in one assertion."""
+def test_no_declared_model_in_the_library_has_a_naive_temporal_column() -> None:
     assert _naive_temporal_columns(BaseDBModel.metadata) == []

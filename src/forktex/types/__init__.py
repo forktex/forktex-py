@@ -21,24 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Level-0 ``[types]`` extra — base Pydantic models + frozen value objects.
-
-The wire-shape opinion lives in ``BaseAppModel`` (snake↔camel). The
-domain-shape opinion lives in ``BaseValueObject`` (frozen, hashable,
-equality on values not identity). Together they cover the two model
-shapes consumer code hits hardest:
-
-  - cross-boundary payloads → ``BaseAppModel``
-  - immutable in-process values (UUIDs, currency amounts, percentages,
-    timestamps) → ``BaseValueObject``
-
-This is a Level-0 primitive: it depends only on ``forktex.iso`` (for
-``UtcDateTime``'s canonical UTC serialization) — a Level-0 sibling, not a
-facade or substrate module, same as ``forktex.log``'s dependency on
-``iso``. Specific value types (``Currency``, ``Percentage``, etc.) ship as
-separate modules under ``forktex.types.*`` once they're consolidated
-from consumer code.
-"""
 
 from __future__ import annotations
 
@@ -50,23 +32,10 @@ from pydantic.alias_generators import to_camel
 
 from forktex.iso import to_date_iso, to_iso
 
-#: A JSON scalar — the leaves of any JSON document.
 type JsonScalar = str | int | float | bool | None
 
-#: Any value that survives a JSON round-trip.
-#:
-#: The honest type for the many places this library moves caller-defined data
-#: through a JSON/JSONB boundary — a grid cell's canonical form, a flow run's
-#: state and metadata, a queue payload, an extension's config. Those were all
-#: annotated ``Any``, which said "unknown" where the truth is "JSON-shaped":
-#: a `dict[str, Any]` payload could hold a socket, and nothing would object.
-#:
-#: Use ``object`` instead where a value is genuinely arbitrary and only
-#: inspected or passed through (e.g. what a caller hands to a normaliser
-#: *before* it becomes JSON).
 type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
 
-#: A JSON object — the common case of :data:`JsonValue` at a payload boundary.
 type JsonObject = dict[str, JsonValue]
 
 UtcDateTime = Annotated[datetime, PlainSerializer(to_iso, return_type=str)]
@@ -100,69 +69,25 @@ fix a live bug::
 
 
 class BaseAppModel(BaseModel):
-    """App-wide model base: accept snake+camel input, emit camel aliases.
-
-    The wire-shape opinion every forktex API surface inherits: snake_case
-    in Python, camelCase on the wire, with both input shapes accepted so
-    curl-from-the-shell and TypeScript clients can each use their native
-    conventions. Use it for any model that crosses a service boundary
-    (HTTP body, JSON storage, queue payload); internal-only domain models
-    can use plain ``BaseModel``.
-    """
-
     model_config = ConfigDict(
         alias_generator=to_camel,
         validate_by_name=True,
         validate_by_alias=True,
-        # Without this, the camelCase promise held only for callers that
-        # remembered `by_alias=True` — so a plain `model_dump()` emitted
-        # snake_case and contradicted the error envelope on the same wire.
         serialize_by_alias=True,
     )
 
 
 class BaseValueObject(BaseModel):
-    """Immutable, hashable value object base.
-
-    Pydantic-validated like ``BaseModel`` but with ``frozen=True`` so
-    instances are read-only after construction and ``__hash__`` is
-    defined on the model fields. Use this for domain primitives where
-    *equality is structural* — two values with the same fields are the
-    same value (UUID wrappers, monetary amounts, timestamps with
-    timezone, etc.).
-
-    Wire-format opinions (camelCase aliases) live on ``BaseAppModel``;
-    value objects are internal and use plain Python field names.
-
-    The frozen/hashable guarantee covers this class's own immutability
-    contract (you can't reassign a field after construction) — it doesn't
-    make a subclass's field *values* immutable. A subclass that adds a
-    ``list``/``dict`` field can still construct an instance whose hash
-    changes if that mutable value is mutated in place, or whose fields are
-    shared (aliased) across instances despite ``frozen=True``. Prefer
-    ``tuple``/``frozenset``/nested ``BaseValueObject`` fields over
-    ``list``/``dict`` when a value object needs to actually be safe to hash
-    and share.
-    """
-
     model_config = ConfigDict(frozen=True)
 
 
 class BaseWireValueObject(BaseValueObject):
-    """Frozen value object that *also* speaks the wire-shape convention.
-
-    Use when a value object crosses a service boundary (e.g., a typed
-    ``Money`` field appearing in an HTTP response). Combines
-    ``BaseValueObject``'s frozen+hashable semantics with
-    ``BaseAppModel``'s snake↔camel alias generator.
-    """
-
     model_config = ConfigDict(
         frozen=True,
         alias_generator=to_camel,
         validate_by_name=True,
         validate_by_alias=True,
-        serialize_by_alias=True,  # same reason as `BaseAppModel`'s
+        serialize_by_alias=True,
     )
 
 

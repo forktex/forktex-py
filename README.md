@@ -6,21 +6,18 @@
 
 <p align="center"><em>The shared Python substrate for ForkTex services.</em></p>
 
-Fourteen modules, one library, one set of opinions. Import only what you need — each
-module's third-party dependency is an optional extra, so a service that wants
-structured logging never pays for Qdrant.
-
-> **`forktex` 0.9.0 is a different package from `forktex` 0.8.x.** Up to 0.8.1 this
-> name shipped an agentic CLI. That tool now lives in [`backlog/`](backlog/) pending
-> republication under its own name. If you want the CLI, pin `forktex==0.8.1`.
+One install, no extras: `import forktex` resolves every module.
 
 ```bash
 pip install forktex
 ```
 
+> **This is not the 0.8.x `forktex`**, which was an agentic CLI — for that, pin
+> `forktex==0.8.1`. Pre-1.0, minor versions may break; see [CHANGELOG.md](CHANGELOG.md).
+
 ## Modules
 
-**Primitives** — always available, no extra required:
+**Primitives**
 
 | Module | What it is |
 | --- | --- |
@@ -31,26 +28,20 @@ pip install forktex
 
 **Role facades** — one per piece of infrastructure:
 
-| Module | Extra | What it is |
-| --- | --- | --- |
-| [`database`](docs/database.md) | — | Async Postgres/SQLAlchemy: sessions, ORM bases, CRUD, advisory locks, migrations |
-| [`cache`](docs/cache.md) | — | Async Redis: `@cached`, namespaced keys, invalidation |
-| [`graph`](docs/graph.md) | — | Typed multi-edge in-memory graph algebra (BFS/DFS, subgraphs) |
-| [`queue`](docs/queue.md) | `[queue]` | arq background jobs: `@task`, `enqueue`, `make_worker` |
-| [`storage`](docs/storage.md) | `[storage]` | S3/MinIO objects: presigned URLs, bucket lifecycle |
-| [`store`](docs/store.md) | `[store]` | Schemaless documents (MongoDB) |
-| [`vector`](docs/vector.md) | `[vector]` | Qdrant vector search: collections, hybrid/dense/sparse |
-| [`vault`](docs/vault.md) | `[vault]` | Fernet encryption at rest, `EncryptedJSON` column type |
+| Module | What it is |
+| --- | --- |
+| [`database`](docs/database.md) | Async Postgres/SQLAlchemy: sessions, ORM bases, CRUD, advisory locks, migrations |
+| [`cache`](docs/cache.md) | Async Redis: `@cached`, namespaced keys, invalidation |
+| [`storage`](docs/storage.md) | S3/MinIO objects: presigned URLs, bucket lifecycle |
 
 **Bootstrap** — process-level wiring:
 
-| Module | Extra | What it is |
-| --- | --- | --- |
-| [`api`](docs/api.md) | `[api]` | FastAPI app factory: middleware stack, error envelope, health probes |
-| [`worker`](docs/worker.md) | `[worker]` | Queue-consumer hosts: standalone process, embedded in a lifespan, process pool |
+| Module | What it is |
+| --- | --- |
+| [`api`](docs/api.md) | FastAPI app factory: middleware stack, error envelope, health probes |
 
-Install extras as needed — `pip install "forktex[storage,vector]"`, or
-`pip install "forktex[all]"` for everything.
+`graph`, `queue`, `store`, `vault` and `vector` are set aside in
+`backlog/facades/` until a consumer needs them.
 
 ## Quick start
 
@@ -60,7 +51,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from forktex.database import close_engine, init_engine, session_scope
+from forktex.database import close_engine, init_engine, yield_transactional_session
 from forktex.log import setup_logging
 
 setup_logging(service="my-api")
@@ -68,7 +59,7 @@ setup_logging(service="my-api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_engine(settings.db_url, pool_pre_ping=True, pool_recycle=1800)
+    await init_engine(settings.db_url, pool_pre_ping=True, pool_recycle=1800)
     yield
     await close_engine()
 
@@ -77,37 +68,56 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/projects")
-async def list_projects(session: AsyncSession = Depends(session_scope)):
+async def list_projects(session: AsyncSession = Depends(yield_transactional_session)):
     ...
 ```
 
-> `Depends(session_scope)` is the correct form. `get_session` is the same generator
-> wrapped in `asynccontextmanager` for `async with` use in service code — passing it
-> to `Depends` injects the context-manager object, not a session. See
-> [docs/database.md](docs/database.md).
+### Transactions
 
-A module whose extra is missing raises an `ImportError` that names it:
+The outermost caller owns the transaction: whoever opens it commits it once, and rolls it back on
+any exception.
 
+```python
+@with_transactional_session
+async def place_order(session: AsyncSession, *, reference: str) -> Order:
+    return await create(session, Order, reference=reference)
+
+
+await place_order(reference="A-1")                       # opens a session, commits it
+
+async with transactional_session() as session:
+    order = await place_order(session, reference="A-2")   # joins this transaction
+    await add_line(session, order=order, sku="X")         # the same one
+    raise PaymentFailed                                   # both roll back
 ```
-ImportError: Install 'forktex[vector]' (qdrant-client) to use forktex.vector
-```
+
+| | |
+|:---|:---|
+| `transactional_session()` | `async with` — the library commits |
+| `yield_transactional_session` | the same unit of work as a generator, for `Depends` |
+| `open_session()` | no boundary — you commit |
+| `savepoint(session)` | a part allowed to fail without the rest |
+
+Inside the first two, `commit()`, `rollback()` and `begin()` raise `TransactionBoundaryError`.
+To abort, raise. Full contract in [docs/database.md](docs/database.md).
+
+`init_engine` / `cache.init` / `storage.init` configure one process-wide default; `Database(url)`,
+`Cache(url)` and `StorageClient(config)` build handles directly, so a process can hold several.
 
 ## Documentation
 
-One page per module under [`docs/`](docs/), each covering install, wiring, the public
-surface, the error contract, and measured gotchas.
-[`docs/development.md`](docs/development.md) is the contributor guide.
+One page per module under [`docs/`](docs/): wiring, the public surface, the error contract,
+the gotchas. [`docs/development.md`](docs/development.md) is the contributor guide.
 
 ## Development
 
 ```bash
-make install     # poetry install --with dev --all-extras
+make install     # poetry install --with dev
 make test        # pytest with the coverage floor
 make ci          # format-check · lint · license-check · typecheck · audit · test · build · smoke
 ```
 
-Integration tests run against real Postgres, Redis, MinIO, Qdrant and MongoDB via
-testcontainers — Docker must be available.
+Integration tests use testcontainers, so Docker must be available.
 
 ## License
 

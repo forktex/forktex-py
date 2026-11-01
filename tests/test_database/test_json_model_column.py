@@ -22,14 +22,6 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-"""`JsonModelColumn` — the round-trip helper for JSON columns holding Pydantic models.
-
-Exported from `forktex.database` and documented as the way to store a list of models
-in a JSON column, but it had no test at all until the package moved: `serialize` is
-where a `datetime` or an `Enum` silently becomes the wrong shape, and it is the half
-that runs on the write path.
-"""
-
 from __future__ import annotations
 
 import enum
@@ -50,44 +42,37 @@ class _Tag(BaseModel):
     weight: int
 
 
-def test_serialize_pydantic_models_to_json_ready_dicts():
+def test_serialize_pydantic_models_to_json_ready_dicts() -> None:
     out = JsonModelColumn.serialize([_Tag(name="a", weight=1), _Tag(name="b", weight=2)])
     assert out == [{"name": "a", "weight": 1}, {"name": "b", "weight": 2}]
-    assert all(isinstance(d, dict) for d in out)
 
 
-def test_serialize_accepts_plain_dicts_and_unwraps_enums():
-    """A caller may hand over dicts rather than models; an `Enum` in one must come out
-    as its *value*, or the column holds `<Colour.red: 'red'>` and fails to round-trip."""
+def test_serialize_accepts_plain_dicts_and_unwraps_enums() -> None:
     out = JsonModelColumn.serialize([{"colour": _Colour.red, "n": 1}])
     assert out == [{"colour": "red", "n": 1}]
 
 
-def test_serialize_renders_datetimes_through_iso():
-    """Temporal values go through `iso.to_iso`, so a JSON column never holds a
-    `datetime` repr — and the text matches what the rest of the library writes."""
+def test_serialize_renders_datetimes_through_iso() -> None:
     at = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     out = JsonModelColumn.serialize([{"at": at}])
     assert out == [{"at": "2026-01-01T12:00:00+00:00"}]
 
 
-def test_serialize_passes_other_values_through_untouched():
+def test_serialize_passes_other_values_through_untouched() -> None:
     out = JsonModelColumn.serialize([{"s": "x", "n": 3, "f": 1.5, "b": True, "none": None, "l": [1, 2]}])
     assert out == [{"s": "x", "n": 3, "f": 1.5, "b": True, "none": None, "l": [1, 2]}]
 
 
-def test_deserialize_rebuilds_models():
+def test_deserialize_rebuilds_models() -> None:
     tags = JsonModelColumn.deserialize([{"name": "a", "weight": 1}], _Tag)
     assert tags == [_Tag(name="a", weight=1)]
-    assert isinstance(tags[0], _Tag)
 
 
-def test_deserialize_treats_none_as_empty():
-    """A JSON column defaults to NULL, so the read path must not blow up on it."""
-    assert JsonModelColumn.deserialize(None, _Tag) == []  # type: ignore[arg-type]
+def test_deserialize_treats_none_as_empty() -> None:
+    assert JsonModelColumn.deserialize(None, _Tag) == []
     assert JsonModelColumn.deserialize([], _Tag) == []
 
 
-def test_round_trip_is_lossless_for_model_lists():
+def test_round_trip_is_lossless_for_model_lists() -> None:
     original = [_Tag(name="a", weight=1), _Tag(name="b", weight=2)]
     assert JsonModelColumn.deserialize(JsonModelColumn.serialize(original), _Tag) == original

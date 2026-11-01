@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Unit tests for forktex.database.identifiers — no container required."""
 
 from __future__ import annotations
 
@@ -39,50 +38,47 @@ from forktex.error import BadRequestError
 
 
 @pytest.mark.parametrize("name", ["a", "_a", "Name", "camelCase", "with_1_digits", "A" * MAX_IDENT])
-def test_valid_identifiers(name):
-    validate_identifier(name)  # must not raise
+def test_valid_identifiers(name: str) -> None:
+    validate_identifier(name)
 
 
 @pytest.mark.parametrize(
     "name",
     [
-        "",  # empty
+        "",
         "1leading_digit",
         "has-hyphen",
         "has space",
         'quote"inside',
         "semi;colon",
-        "A" * (MAX_IDENT + 1),  # too long
+        "A" * (MAX_IDENT + 1),
     ],
 )
-def test_invalid_identifiers_raise_badrequest(name):
+def test_invalid_identifiers_raise_badrequest(name: str) -> None:
     with pytest.raises(BadRequestError):
         validate_identifier(name)
 
 
-def test_identifier_profile_allows_mixed_case_but_schema_profile_does_not():
-    """The two profiles exist precisely because they disagree: grid quotes every
-    identifier it emits (so mixed case is fine), while a physical schema name
-    follows Postgres's unquoted-folding rule and stays lower-case."""
-    validate_identifier("MixedCase")  # fine
+def test_identifier_profile_allows_mixed_case_but_schema_profile_does_not() -> None:
+    validate_identifier("MixedCase")
     with pytest.raises(BadRequestError):
         validate_schema("MixedCase")
-    validate_schema("lower_case_1")  # fine
+    validate_schema("lower_case_1")
 
 
 @pytest.mark.parametrize("slug", ["people", "my-table", "a_b-c", "0start"])
-def test_valid_slugs(slug):
+def test_valid_slugs(slug: str) -> None:
     validate_slug(slug)
 
 
 @pytest.mark.parametrize("slug", ["", "-leading-hyphen", "has space", "A" * (MAX_IDENT + 1)])
-def test_invalid_slugs(slug):
+def test_invalid_slugs(slug: str) -> None:
     with pytest.raises(BadRequestError):
         validate_slug(slug)
 
 
 @pytest.mark.parametrize("relation", ["table", "schema.table", "S.T"])
-def test_valid_relations(relation):
+def test_valid_relations(relation: str) -> None:
     validate_relation(relation)
 
 
@@ -90,15 +86,12 @@ def test_valid_relations(relation):
     "relation",
     ["", ".", "a.", ".b", "a.b.c", "a b.c", 'a."b'],
 )
-def test_invalid_relations(relation):
+def test_invalid_relations(relation: str) -> None:
     with pytest.raises(BadRequestError):
         validate_relation(relation)
 
 
-def test_is_identifier_is_the_predicate_form():
-    """A predicate is required where a bad name must be *skipped* rather than
-    raised on — grid's sidecar reconciler drops columns whose names predate
-    current validation."""
+def test_is_identifier_is_the_predicate_form() -> None:
     assert is_identifier("ok_name") is True
     assert is_identifier("has space") is False
     assert is_identifier("") is False

@@ -21,9 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""``@traced`` — wrap a callable with entry/exit/exception logging + a
-scoped trace_id, for any sync or async function (worker job handler, flow
-step, CLI entry point)."""
 
 from __future__ import annotations
 
@@ -32,48 +29,50 @@ import inspect
 import logging
 import time
 from collections.abc import Callable
+from typing import cast, overload
 
 from forktex.log._context import async_trace_context, trace_context
 
 
-def traced(
-    fn: Callable | None = None,
+@overload
+def traced[**P, R](
+    fn: Callable[P, R],
     *,
     name: str | None = None,
     level: int = logging.INFO,
-) -> Callable:
-    """Wrap ``fn`` to log one entry line, one exit line (with duration) on
-    success, or an ``exception()`` line (then re-raise) on failure — scoping
-    a fresh ``trace_id`` for the call via :func:`trace_context`/
-    :func:`async_trace_context` (nested under any already-established
-    ``root_trace_id``, so a traced step inside a traced job still correlates
-    with it).
+) -> Callable[P, R]: ...
 
-    Usable bare or parametrized, on sync or async callables::
 
-        @traced
-        async def process_job(job_id: str) -> None: ...
+@overload
+def traced[**P, R](
+    fn: None = None,
+    *,
+    name: str | None = None,
+    level: int = logging.INFO,
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
-        @traced(name="ingest.step", level=logging.DEBUG)
-        def compute() -> int: ...
 
-    A standalone primitive — compose it with other decorators (e.g.
-    ``queue.task()``) rather than expecting either to special-case the
-    other::
+def traced[**P, R](
+    fn: Callable[P, R] | None = None,
+    *,
+    name: str | None = None,
+    level: int = logging.INFO,
+) -> Callable[..., object]:
 
-        @queue.task()
-        @traced()
-        async def handler(ctx) -> None: ...
-    """
-
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         label = name or func.__qualname__
         log = logging.getLogger(func.__module__)
+
+        if inspect.isasyncgenfunction(func) or inspect.isgeneratorfunction(func):
+            raise TypeError(
+                f"@traced cannot wrap the generator {func.__qualname__}: the scope would close "
+                f"at the first yield, timing construction instead of iteration"
+            )
 
         if inspect.iscoroutinefunction(func):
 
             @functools.wraps(func)
-            async def async_wrapper(*args: object, **kwargs: object) -> object:
+            async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> object:
                 async with async_trace_context():
                     log.log(level, "%s started", label)
                     start = time.monotonic()
@@ -86,10 +85,10 @@ def traced(
                     log.log(level, "%s finished", label, extra={"duration_ms": duration_ms})
                     return result
 
-            return async_wrapper
+            return cast(Callable[P, R], async_wrapper)
 
         @functools.wraps(func)
-        def sync_wrapper(*args: object, **kwargs: object) -> object:
+        def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             with trace_context():
                 log.log(level, "%s started", label)
                 start = time.monotonic()
@@ -100,7 +99,7 @@ def traced(
                     raise
                 duration_ms = round((time.monotonic() - start) * 1000, 2)
                 log.log(level, "%s finished", label, extra={"duration_ms": duration_ms})
-                return result
+                return cast(R, result)
 
         return sync_wrapper
 

@@ -21,11 +21,16 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Redis-backed async cache: connection, operations, decorator, namespaces."""
 
-from forktex.cache.connection import available, close, get_client, init
+from forktex.cache.cache import Cache
+from forktex.cache.connection import available, close, default, get_client, init, require_default, verify
 from forktex.cache.decorators import cached
-from forktex.cache.errors import CacheError, CacheInitializationError, CacheNotInitializedError
+from forktex.cache.errors import (
+    CacheError,
+    CacheNotInitializedError,
+    CacheUnreachableError,
+    InvalidCacheKeyError,
+)
 from forktex.cache.namespaces import CachePrefix, key_for
 from forktex.cache.ops import (
     delete,
@@ -40,13 +45,16 @@ from forktex.cache.ops import (
 from forktex.cache.serialization import deserialize, serialize
 
 __all__ = [
+    "Cache",
     "CacheError",
-    "CacheInitializationError",
     "CacheNotInitializedError",
     "CachePrefix",
+    "CacheUnreachableError",
+    "InvalidCacheKeyError",
     "available",
     "cached",
     "close",
+    "default",
     "delete",
     "deserialize",
     "fetch_or_set",
@@ -57,7 +65,9 @@ __all__ = [
     "invalidate_key",
     "invalidate_prefix",
     "key_for",
+    "require_default",
     "serialize",
     "set",
     "shutdown_background_tasks",
+    "verify",
 ]

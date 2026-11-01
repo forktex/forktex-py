@@ -4,27 +4,16 @@ Thin async S3/MinIO connector for opaque binary objects: upload, download, delet
 checks, presigned GET/PUT URLs and presigned browser POST policies. No path conventions, no
 content negotiation, no image processing — those belong in the consuming service.
 
-## Install
-
-```bash
-pip install forktex[storage]   # aioboto3
-```
-
-The import is deferred to `StorageClient.__init__`, which `register()` (and therefore `init()`)
-calls. So a missing extra raises **at `register()`/`init()`**, not at `import forktex.storage`:
-
-```
-ImportError: Install 'forktex[storage]' (aioboto3) to use forktex.storage
-```
-
-`botocore` (pulled in by `aioboto3`) is imported inside the methods that classify its errors.
-
 ## Wiring
 
-**Shape B — named-client registry.** `register(name, ...)` builds a `StorageClient` and stores it
-in a module dict; `get_client(name)` fetches it; `deregister(name)` drops it. `init(...)` is
-`register("default", ...)`, and the module-level `upload`/`download`/`delete`/`exists`/`presign`/
-`presign_post` functions all operate on `get_client()` — i.e. the `"default"` client.
+`register(name, ...)` builds a `StorageClient` and keeps it under that name; `get_client(name)`
+fetches it, `deregister(name)` drops it. Every module-level operation runs against `get_client()`.
+
+`init` performs no I/O: it installs the default and releases whatever it replaced. `verify()` is
+the explicit boot probe — call it in your lifespan, or wire it into `create_app`'s
+`readiness_probes`, if you want a bad configuration to fail fast rather than on first use.
+
+`init(...)` takes no `public_access` — use `register` for that.
 
 ```python
 from contextlib import asynccontextmanager
@@ -59,30 +48,12 @@ of forgetting is `ClientNotRegisteredError` on the first job, not at boot.
 
 ## Public surface
 
-```python
-from forktex.storage import (
-    ClientNotRegisteredError,
-    ObjectNotFoundError,
-    StorageClient,
-    StorageConfig,
-    StorageError,
-    close,
-    delete,
-    deregister,
-    download,
-    exists,
-    get_client,
-    init,
-    presign,
-    presign_post,
-    register,
-    upload,
-)
-```
-
 | Name | Description |
 |---|---|
 | `register(name, url, bucket, access_key, secret_key, *, region="us-east-1", public_url=None)` | Build and store a named client; returns it. |
+| `default()` | The `"default"` client — what the module-level operations use. |
+| `require_default()` | The same, raising `ClientNotRegisteredError` instead of returning `None`. |
+| `verify()` / `StorageClient.verify()` | Async. `head_bucket`; creates nothing. Raises `StorageUnreachableError`. |
 | `get_client(name="default")` | Look up a registered client. |
 | `deregister(name="default")` | Drop a name; returns the dropped client or `None`. Idempotent. |
 | `init(...)` | Async. `register("default", ...)` with the same arguments. |
@@ -91,13 +62,14 @@ from forktex.storage import (
 | `download(key)` | Async. Returns `bytes`. |
 | `delete(key)` | Async. `delete_object`; a missing key is a no-op. |
 | `exists(key)` | Async. `head_object` → `bool`. |
-| `presign(key, expires_in=3600, *, method="get_object", content_type=None, response_content_disposition=None)` | Async. Presigned URL. |
-| `presign_post(key, *, expires_in=3600, content_type=None, max_size_bytes=None)` | Async. `{"url", "fields"}` for a browser form upload. |
-| `StorageClient` | Per-bucket client. Same six operations plus `ensure_bucket(*, public_read=False)` and `direct_url(key)`. |
-| `StorageConfig` | Frozen Pydantic value object: `url`, `bucket`, `access_key`, `secret_key`, `region`, `public_url`. |
+| `presign(key, expires_in=3600, *, method: PresignMethod = "get_object", content_type=None, response_content_disposition=None)` | Async. Presigned URL. `content_type` signs a `put_object` and `response_content_disposition` a `get_object`; the other pairing raises. |
+| `presign_post(key, *, expires_in=3600, content_type=None, max_size_bytes=None)` | Async. A `PresignedPost` for a browser form upload. |
+| `StorageClient` | Per-bucket client. The same six operations plus `ensure_bucket()`, `verify()` and `direct_url(key)`. |
+| `StorageConfig` | Frozen Pydantic value object: `url`, `bucket`, `access_key`, `secret_key`, `region`, `public_url`, `public_access`. |
 | `StorageError` | Base error, `AppErrorCode.INTERNAL`. |
 | `ObjectNotFoundError` | `AppErrorCode.NOT_FOUND`. |
 | `ClientNotRegisteredError` | `AppErrorCode.INTERNAL`. |
+| `PublicAccess` | `Literal["none", "bucket-policy", "credentialed-proxy"]` — the type of `register(..., public_access=...)`. |
 
 Presigned PUT for an untrusted uploader — the S3 signature *is* the token, no extra auth header:
 
@@ -120,32 +92,46 @@ policy = await get_client("media").presign_post(
     content_type="application/pdf",
     max_size_bytes=10 * 1024 * 1024,
 )
-# policy["url"] + policy["fields"] → browser posts them alongside the file
+# policy.url + policy.fields → browser posts them alongside the file
 ```
+
+### Bucket policy
+
+`public_access="bucket-policy"` makes `ensure_bucket` send this document, and these are the types
+it is built from — construct one yourself to grant something narrower.
+
+| Name | What it is |
+|:---|:---|
+| `BucketPolicy` | The document. `to_json()` is what `PutBucketPolicy` takes. Frozen. |
+| `BucketPolicyStatement` | One statement: `action`, `resource`, `effect`, `principal`. |
+| `BucketPolicyPrincipal` | Who it applies to; defaults to everyone (`{"AWS": ["*"]}`). |
+| `public_read_policy(bucket)` | Anonymous `s3:GetObject` on every object — what `ensure_bucket` applies. |
+| `object_arn(bucket, key_pattern="*")` | `arn:aws:s3:::<bucket>/<pattern>`. |
+| `PostPolicy` | The conditions and form fields behind `presign_post`. |
+| `PresignedPost` | `url` + `fields`, returned by `presign_post`. |
+| `PresignParams` | The `Params` behind `presign`; unset values are omitted. |
+| `PresignMethod` | `"get_object" | "put_object"`. |
+
+Fields are snake_case in Python and serialise to AWS's own casing.
 
 ## Errors
 
-All three error classes subclass `AppError`, so an HTTP transport renders them with a real status
-instead of a masked 500.
-
 | Raised | When | Catch? |
 |---|---|---|
-| `ImportError` | `register()`/`init()` without `aioboto3`. | No — install the extra. |
-| `ClientNotRegisteredError` | `get_client(name)` for an unregistered name. Message lists the registered names. | No — a wiring bug. |
+| `ClientNotRegisteredError` | `get_client(name)` or `require_default()` for an unregistered name. Message lists the registered names. | No — a wiring bug. |
 | `ObjectNotFoundError(key)` | `download()` on a missing key. | Yes, when a missing object is expected. |
-| `StorageError("storage download failed")` | `download()` on any other S3/network failure. | Yes, at a request boundary. |
-| `StorageError("storage existence check failed")` | `exists()` on any non-404 failure. | Yes, at a request boundary. |
-| `botocore.exceptions.ClientError`, unwrapped | `ensure_bucket()` when `head_bucket` fails with anything other than 404/`NoSuchBucket`. | Only if you call `ensure_bucket` outside startup. |
+| `StorageUnreachableError` | `verify()` — wrong endpoint, credential or bucket. | At startup only, if you call `verify()`. |
+| `StorageError("storage <operation> failed")` | any other failure in `upload`, `download`, `delete`, `exists`, `presign`, `presign_post` or `ensure_bucket`. | Yes, at a request boundary. |
+| `StorageError` | `direct_url()` on a bucket with `public_access="none"`; `presign()` given `content_type` for a `get_object` or `response_content_disposition` for a `put_object`. | No — a wiring bug. |
 
-`StorageError` messages are deliberately fixed strings: a botocore message can quote request ids,
-ARNs and headers, so the detail is logged (with the AWS error code) and reaches the caller only via
-`__cause__`.
+`_driver_boundary` wraps every method, so nothing the driver raises escapes as a botocore type.
+The message is the operation name only; the detail is logged with the AWS code and reaches the
+caller as `__cause__`.
 
 ## Gotchas
 
-- **`close()` closes nothing.** It just deregisters. Boto clients are created per call and closed
-  by their own context manager, so there is no long-lived connection to release. The `async` shape
-  exists for callers that already `await` it.
+- **`close()` only deregisters.** Boto clients are created and closed per call, so there is no
+  long-lived connection to release.
 - **`exists()` returns `False` for a missing key** — it does not raise `ObjectNotFoundError`. Only
   `download()` does.
 - **`upload()` overwrites silently.** There is no conditional-put or if-none-match option.
@@ -157,10 +143,14 @@ ARNs and headers, so the detail is logged (with the AWS error code) and reaches 
 - **`content_type` only enters the signature for `method="put_object"`**, and
   `response_content_disposition` only for `method="get_object"`; the other combination is dropped
   without warning.
-- **`direct_url()` performs no auth check.** It is only correct against a bucket with a public-read
-  policy. The key is URL-encoded with `urllib.parse.quote`.
-- **`ensure_bucket(public_read=True)` makes the bucket world-readable** and logs at `warning` level
-  when it applies the policy.
+- **`direct_url()` raises unless the bucket declares `public_access`.** It performs no auth check
+  otherwise. The key is URL-encoded with `urllib.parse.quote`.
+- **`public_access="bucket-policy"` makes the bucket world-readable.** `ensure_bucket()` applies the
+  policy and logs at `warning` level when it does. It is the only call in the module that is not
+  plain S3 — Garage answers `PutBucketPolicy` with 501 — so a bucket that does not need anonymous
+  readers should leave `public_access` at `"none"`.
+- **Presigned URLs are SigV4, path-style.** SigV2 links are honoured by MinIO and rejected by
+  Garage, R2 and current AWS regions.
 - **`ensure_bucket()` only creates on a genuine 404/`NoSuchBucket`.** A 403 from `head_bucket`
   propagates rather than being reinterpreted as "create it".
 - **Credentials are `repr`-suppressed.** `StorageConfig.access_key`/`secret_key` use

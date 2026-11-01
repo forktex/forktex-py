@@ -21,59 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Structured logging for ForkTex Python services.
-
-Zero extra dependencies — stdlib only. Works everywhere: FastAPI services,
-CLI workers, forktex-py scripts, background processes.
-
-Features:
-- JSON output (Loki-compatible) in production; human-readable in dev
-- Coroutine-safe trace_id via ``contextvars``, scoped to any block of code —
-  HTTP request, worker job, CLI run — via ``trace_context()``/``async_trace_context()``
-- Structured extra fields via ``log_context()`` / ``async_log_context()``
-- One-call ``setup_logging()`` replaces every service's bespoke logging_config.py
-- Optional pure-ASGI ``TraceIDMiddleware`` for FastAPI/Starlette/any ASGI app (zero deps),
-  sanitizes the inbound trace id before trusting it
-- ``$FORKTEX_LOG_LEVEL`` / ``$FORKTEX_LOG_DEBUG`` / ``$FORKTEX_LOG_JSON`` env vars override
-  ``setup_logging()``'s defaults when the caller leaves the argument unset
-- ``setup_logging(queue=True)`` moves log I/O to a background thread
-  (stdlib ``QueueHandler``/``QueueListener``, no extra dependency)
-- ``setup_logging(handlers=[...])`` to plug in any transport (file, syslog, …)
-  while still getting the context filter + formatter + level applied
-
-Quickstart::
-
-    from forktex.log import setup_logging, get_logger
-
-    setup_logging(service="network")          # JSON to stdout, INFO level
-    log = get_logger(__name__)
-    log.info("service started")
-    # → {"timestamp":"...","level":"INFO","logger":"...","service":"network","message":"service started"}
-
-    setup_logging(service="network", debug=True)
-    # → 2026-05-02 14:30:00 | INFO     | network.crm | service started
-
-FastAPI middleware::
-
-    from forktex.log import setup_logging, TraceIDMiddleware
-    app.add_middleware(TraceIDMiddleware, header="X-Request-ID")
-
-Structured context::
-
-    from forktex.log import async_log_context, get_logger
-    log = get_logger(__name__)
-
-    async with async_log_context(org_id=str(org_id), user_id=str(user_id)):
-        log.info("processing")
-        # → {..."org_id": "...", "user_id": "..."}
-
-Scoped trace_id — any process, not just HTTP (CLI / workers)::
-
-    from forktex.log import trace_context
-    with trace_context(f"job-{job_id}"):
-        log.info("job started")    # → {..."trace_id": "job-..."}
-    # trace_id is restored automatically on exit — nothing to clear manually
-"""
 
 from __future__ import annotations
 
@@ -102,51 +49,20 @@ from forktex.log._context import (
 from forktex.log._decorators import traced
 from forktex.log._formatter import HumanFormatter, JsonFormatter
 
-# Minimal ASGI protocol aliases — so the middleware needs no starlette/asgiref dep.
 _Scope = dict[str, Any]
 _Message = dict[str, Any]
 _Receive = Callable[[], Awaitable[_Message]]
 _Send = Callable[[_Message], Awaitable[None]]
 _ASGIApp = Callable[[_Scope, _Receive, _Send], Awaitable[None]]
 
-# An inbound X-Request-ID is untrusted client input. Restrict it to a safe
-# charset before trusting it as trace_id — otherwise a client can splice
-# control characters (e.g. "\n") into it and forge log lines wherever a
-# formatter (HumanFormatter) writes trace_id into a raw text line.
 _TRACE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
-#: The listener started by ``setup_logging(queue=True)``, so a second call can
-#: stop the previous one and :func:`shutdown_logging` can drain the queue. Held
-#: at module level because the queue handler on the root logger is what feeds it:
-#: both are process-global, so the listener has to be too.
 _queue_listener: logging.handlers.QueueListener | None = None
 
-# Python's convention for libraries: attach a no-op handler to our own namespace so
-# a consumer who never configured logging gets silence from us, instead of our
-# records escaping to `logging.lastResort` as unformatted stderr lines. It does not
-# touch the root logger — `setup_logging` is the only thing that does, and only when
-# a consumer asks for it.
 logging.getLogger("forktex").addHandler(logging.NullHandler())
 
 
 class ContextFilter(logging.Filter):
-    """Injects contextvar state onto every ``LogRecord`` before formatting.
-
-    ``setup_logging`` attaches this for you. Attach it yourself when you own the
-    handlers and do not want ``setup_logging`` (which clears ``root.handlers``) —
-    an application embedding this library, or a test capturing records::
-
-        handler.addFilter(ContextFilter(service="orders"))
-
-    It is what actually sets ``trace_id``, ``root_trace_id``, ``run_id`` and
-    ``service`` on the record. Without it those fields are simply absent, so a
-    formatter referencing ``%(trace_id)s`` raises rather than printing nothing.
-
-    Must run on the *emitting* side. With ``setup_logging(queue=True)`` it is
-    attached to the ``QueueHandler``, not the listener's handlers, because the
-    contextvars only exist in the context that logged the record.
-    """
-
     def __init__(self, service: str | None = None) -> None:
         super().__init__()
         self._service = service
@@ -154,36 +70,20 @@ class ContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.trace_id = get_trace_id()
         record.root_trace_id = get_root_trace_id()
-        # Always present, so every line is attributable to a process invocation
-        # even when no trace scope was open. See `get_run_id`.
         record.run_id = get_run_id()
         record.service = self._service
         record._forktex_extra = get_extra_fields()
         return True
 
 
-#: Kept as a private alias: the class was private through 0.10.0.
 _ContextFilter = ContextFilter
 
 
 class _InProcessQueueHandler(logging.handlers.QueueHandler):
-    """``QueueHandler`` that hands records to the queue untouched.
-
-    The stdlib default ``prepare()`` pre-formats the message and strips
-    ``exc_info``/``args`` — a precaution for handlers backed by a
-    multiprocessing queue that has to pickle records across a process
-    boundary. Our queue is an in-process ``queue.SimpleQueue``, so there is no
-    pickling boundary and stripping would only destroy the exception info
-    ``JsonFormatter``/``HumanFormatter`` need on the listener side.
-    """
-
     def prepare(self, record: logging.LogRecord) -> logging.LogRecord:
         return record
 
 
-#: Third-party loggers that are noisy at INFO by default. Extended (not
-#: replaced) by ``setup_logging(quiet=...)``; pass ``quiet_defaults=False`` to
-#: opt out of these entirely (e.g. a worker that wants ``httpx`` debug output).
 DEFAULT_QUIET_LOGGERS: list[str] = [
     "uvicorn.access",
     "uvicorn.error",
@@ -215,40 +115,6 @@ def setup_logging(
     handlers: list[logging.Handler] | None = None,
     queue: bool = False,
 ) -> None:
-    """Configure the root logger for a ForkTex Python process.
-
-    Call once at process startup (e.g. in ``main.py`` or FastAPI lifespan).
-    Safe to call multiple times — idempotent: existing handlers are cleared and
-    any listener a previous ``queue=True`` call started is stopped first, so
-    repeated calls do not accumulate threads. Pair ``queue=True`` with
-    :func:`shutdown_logging` so queued records are flushed at exit.
-
-    Args:
-        service: Service name included in every log record (e.g. ``"network"``).
-                 Appears as a Loki label and in the JSON ``service`` field.
-        level: Root log level. Default ``INFO`` (or ``$FORKTEX_LOG_LEVEL`` if set).
-               Overridden to ``DEBUG`` when ``debug`` is true.
-        debug: If True, sets level to DEBUG and switches to human-readable
-               format (unless ``json=True`` forces JSON in debug mode).
-               Default: ``$FORKTEX_LOG_DEBUG`` if set, else ``False``.
-        json: Force JSON output (True) or human-readable output (False).
-              Default: ``$FORKTEX_LOG_JSON`` if set, else JSON when not debug,
-              human-readable when debug.
-        quiet: Additional logger names to set to ``quiet_level``.
-        quiet_level: Level for quietened loggers. Default ``WARNING``.
-        quiet_defaults: If False, skip silencing ``DEFAULT_QUIET_LOGGERS``
-               (only ``quiet`` is applied). Default ``True``.
-        fmt: Override ``HumanFormatter``'s line format (human/debug mode only).
-        datefmt: Override ``HumanFormatter``'s date format (human/debug mode only).
-        handlers: Attach these handlers instead of the default
-               ``StreamHandler(stdout)``. ``setup_logging`` still applies the
-               context filter, level, and formatter to each — callers only
-               supply the transport (e.g. a ``RotatingFileHandler``).
-        queue: If True, route records through a stdlib
-               ``QueueHandler``/``QueueListener`` pair so log I/O happens on a
-               background thread instead of blocking the caller (useful under
-               load in an async FastAPI process). No extra dependency.
-    """
     if debug is None:
         debug = _env_bool("FORKTEX_LOG_DEBUG") or False
     if json is None:
@@ -261,8 +127,6 @@ def setup_logging(
 
     effective_json = (not debug) if json is None else json
 
-    # A new configuration is a new run: re-mint so restarts are distinguishable
-    # in a long-lived process that reconfigures (tests, a supervisor re-init).
     reset_run_id()
 
     root = logging.getLogger()
@@ -270,9 +134,6 @@ def setup_logging(
 
     root.setLevel(level)
     root.handlers.clear()
-    # Handlers were just cleared, so a listener from a previous call now feeds a
-    # queue nothing writes to. Stop it here or its thread lives until the process
-    # exits — `setup_logging` is documented as safe to call more than once.
     if _queue_listener is not None:
         _queue_listener.stop()
         _queue_listener = None
@@ -303,15 +164,6 @@ def setup_logging(
 
 
 def shutdown_logging() -> None:
-    """Drain and stop the queue listener started by ``setup_logging(queue=True)``.
-
-    Call from your shutdown path (a FastAPI lifespan's teardown, a worker's
-    ``finally``). With ``queue=True`` log records are handed to a background
-    thread, so records still in the queue when the process exits are **lost** —
-    ``QueueListener.stop()`` is what flushes them.
-
-    Idempotent, and a no-op when logging was configured without ``queue=True``.
-    """
     global _queue_listener
     if _queue_listener is not None:
         _queue_listener.stop()
@@ -319,33 +171,10 @@ def shutdown_logging() -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Return a standard ``logging.Logger`` for ``name``.
-
-    Thin wrapper over ``logging.getLogger`` — exists so consumers can import
-    from one place::
-
-        from forktex.log import get_logger
-        log = get_logger(__name__)
-    """
     return logging.getLogger(name)
 
 
 class TraceIDMiddleware:
-    """Pure-ASGI middleware that binds a trace id for the whole request.
-
-    Reads ``header`` (default ``X-Request-ID``) from the request or mints a
-    time-ordered ``uuid7``, stores it in the log trace-id contextvar for the *entire* ASGI
-    call — so the endpoint, a streaming body, and background tasks all log with
-    it — and echoes it back on the response. Pure ASGI: works with any ASGI app
-    (FastAPI, Starlette, raw) and adds no third-party dependency.
-
-    Usage (FastAPI/Starlette; optional — plain Python callers don't need it)::
-
-        from forktex.log import TraceIDMiddleware
-        app.add_middleware(TraceIDMiddleware)                    # X-Request-ID
-        app.add_middleware(TraceIDMiddleware, header="X-Trace-ID")
-    """
-
     def __init__(self, app: _ASGIApp, *, header: str = "X-Request-ID") -> None:
         self._app = app
         self._header = header.lower().encode()

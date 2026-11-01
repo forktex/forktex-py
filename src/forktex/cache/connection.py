@@ -21,66 +21,56 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Redis async connection management."""
+
+from __future__ import annotations
 
 import redis.asyncio as redis
 
-from forktex.cache.errors import CacheInitializationError, CacheNotInitializedError
+from forktex.cache.cache import Cache
+from forktex.cache.errors import CacheNotInitializedError
 from forktex.log import get_logger
 
 logger = get_logger(__name__)
 
-_redis_client: redis.Redis | None = None
+_default: Cache | None = None
+
+
+def default() -> Cache | None:
+    return _default
+
+
+def require_default() -> Cache:
+    if _default is None:
+        logger.error("Cache client requested but not initialized")
+        raise CacheNotInitializedError("Cache not initialized — call init() first")
+    return _default
 
 
 def available() -> bool:
-    """Check if the Redis client is initialized."""
-    return _redis_client is not None
+    return _default is not None
 
 
 def get_client() -> redis.Redis:
-    """Return the initialized Redis client.
-
-    Raises :class:`CacheNotInitializedError` if :func:`init` has not run.
-    """
-    if _redis_client is None:
-        logger.error("Cache client requested but not initialized")
-        raise CacheNotInitializedError("Cache not initialized — call init() first")
-    return _redis_client
+    return require_default().client
 
 
 async def init(url: str) -> None:
-    """Initialize the async Redis client from a URL.
+    global _default
+    previous = _default
+    _default = Cache(url)
+    if previous is not None:
+        await previous.close()
 
-    Args:
-        url: Redis connection URL (e.g. ``redis://localhost:6379/0``).
-    """
-    global _redis_client
-    # Mask credentials in log: show only host portion after "@"
-    safe_url = url.rsplit("@", 1)[-1] if "@" in url else url
-    logger.info("Initializing cache: %s", safe_url)
-    _redis_client = redis.from_url(url, encoding="utf-8", decode_responses=True)
-    try:
-        await _redis_client.ping()
-        logger.info("Cache initialized: %s", safe_url)
-    except Exception as exc:
-        _redis_client = None
-        raise CacheInitializationError(f"Cache initialization failed ({safe_url}): {exc}") from exc
+
+async def verify() -> None:
+    await require_default().verify()
 
 
 async def close() -> None:
-    """Close the Redis connection."""
-    global _redis_client
-    if _redis_client:
-        logger.info("Closing cache connection")
-        try:
-            # `aclose()`, not the deprecated `close()` alias — matches `queue`.
-            await _redis_client.aclose()
-            logger.info("Cache closed successfully")
-        except Exception as e:
-            logger.exception("Error closing cache: %s", e)
-        finally:
-            _redis_client = None
+    global _default
+    if _default is not None:
+        await _default.close()
+        _default = None
 
 
-__all__ = ["available", "close", "get_client", "init"]
+__all__ = ["available", "close", "default", "get_client", "init", "require_default"]

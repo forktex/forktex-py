@@ -3,20 +3,16 @@
 Async Redis cache: connection lifecycle, plain get/set/delete, a `@cached` decorator with
 optional stale-while-revalidate, namespaced keys, and Pydantic-aware JSON serialisation.
 
-## Install
-
-```bash
-pip install forktex          # redis[hiredis] is a core dependency
-pip install forktex[cache]   # same thing — the extra exists for symmetry and declares nothing
-```
-
-No optional extra is involved, so there is no `ImportError` path. The only startup failure
-is `init()` being unable to reach Redis.
+The only startup failure is `init()` being unable to reach Redis.
 
 ## Wiring
 
-**Shape A — module-level singleton.** One Redis client per process, held in a module global,
-created by `init(url)` and torn down by `close()`. There are no named clients.
+`init` performs no I/O: it installs the default and releases whatever it replaced. `verify()` is
+the explicit boot probe — call it in your lifespan, or wire it into `create_app`'s
+`readiness_probes`, if you want a bad configuration to fail fast rather than on first use.
+
+One Redis client per process, created by `init(url)` and torn down by `close()`. `Cache(url)` is
+the same handle built directly; the module-level functions are shims over one default instance.
 
 ```python
 from contextlib import asynccontextmanager
@@ -37,42 +33,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 ```
 
-The singleton is **per-process**. A worker process must call `init()` in its own startup hook;
-it does not inherit the API process's client. Without `init()`, the read/write helpers degrade
-to no-ops rather than raising (see Gotchas), so a missing worker-side `init()` is silent.
+The default is **per-process**: a worker must call `init()` in its own startup hook. Without it the
+helpers degrade to no-ops rather than raising, so a missing worker-side `init()` is silent.
 
-`shutdown_background_tasks()` awaits any in-flight stale-while-revalidate refresh tasks; call it
-before `close()` so a refresh does not write against a closed client.
+`shutdown_background_tasks()` awaits in-flight stale-while-revalidate refreshes; call it before
+`close()`.
 
 ## Public surface
-
-```python
-from forktex.cache import (
-    CachePrefix,
-    available,
-    cached,
-    close,
-    delete,
-    deserialize,
-    fetch_or_set,
-    fetch_swr,
-    get,
-    get_client,
-    init,
-    invalidate_key,
-    invalidate_prefix,
-    key_for,
-    serialize,
-    set,
-    shutdown_background_tasks,
-)
-```
 
 | Name | Description |
 |---|---|
 | `init(url)` | Async. Create the client from a Redis URL and `PING` it. |
 | `close()` | Async. Close the client and clear the global. Idempotent. |
 | `available()` | `True` if the client global is set. |
+| `default()` | The process-wide `Cache`, or `None` before `init()`. |
+| `require_default()` | The same, raising `CacheNotInitializedError` instead of returning `None`. |
+| `verify()` | Async. `PING`. Raises `CacheUnreachableError`. |
 | `get_client()` | The raw `redis.asyncio.Redis`. Raises if `init()` has not run. |
 | `get(key)` | Async. Value or `None`. |
 | `set(key, value, ex)` | Async. Write with a TTL in seconds. |
@@ -91,8 +67,8 @@ from forktex.cache import (
 `cached` signature:
 
 ```python
-@cached(
-    ttl=300,                      # seconds; with stale_ttl set, the refresh threshold instead
+@cached(                          # keyword-only
+    ttl=60,                       # seconds; with stale_ttl set, the refresh threshold instead
     stale_ttl=None,               # set → stale-while-revalidate
     key_builder=None,             # callable(*args, **kwargs) -> str
     response_model=None,          # pydantic model for deserialisation
@@ -119,37 +95,33 @@ await invalidate_prefix(key_for(Prefix.ORG, org_id))
 
 | Raised | When | Catch? |
 |---|---|---|
-| `CacheInitializationError` | `init()` — `PING` failed. The client is reset to `None` first, so `available()` keeps reporting `False`. | At startup only. Let it stop the process unless the cache is genuinely optional. |
+| `CacheUnreachableError` | `verify()` — `PING` failed. | At startup only, if you call `verify()`. |
 | `CacheNotInitializedError` | `get_client()` before `init()`. | A wiring bug; do not catch. |
-| `ValueError` | `key_for(prefix, ...)` with a `None` part. | A wiring bug; do not catch. |
+| `InvalidCacheKeyError` | `key_for()` given a `None` part, which would collapse a per-entity key onto the shared prefix. | A wiring bug; do not catch. |
 
-Both derive from `CacheError`, which subclasses **both** `AppError` and `RuntimeError`. `AppError` is
-what your error boundary catches (see [error.md](error.md)); `RuntimeError` stays in the bases so
-call sites written against the older bare-`RuntimeError` behaviour keep working.
-
-Everything in `ops` (`get`/`set`/`delete`/`invalidate_prefix` and the two `fetch_*` primitives)
-catches Redis exceptions, logs them via `logger.exception`, and returns a neutral value. Consumers
-do not need `try/except` around ordinary cache reads and writes.
-
-The URL is masked in logs: only the portion after `@` is printed.
+All three derive from `CacheError`, which subclasses `AppError` ([error.md](error.md)) and
+`RuntimeError`.
 
 ## Gotchas
 
-- **Failures are swallowed by design.** If `init()` never ran, or Redis dies mid-request, `get`
-  returns `None`, `set`/`delete` no-op, and `invalidate_prefix` returns `0`. A misconfigured
-  cache looks exactly like a 100% miss rate — check `available()` at startup if you need certainty.
+- **`@cached` returns the JSON round-trip of your value, on a miss as well as a hit.** A cache can
+  only store JSON, so a `datetime` comes back as a string and a `tuple` as a list — on every call,
+  not just the cached ones. Pass `response_model=` to get a model back; for anything else, cache
+  the serialisable shape and convert at the call site.
+
+- **Failures are swallowed.** Without `init()`, or if Redis dies mid-request, `get` returns `None`,
+  `set`/`delete` no-op and `invalidate_prefix` returns `0` — a misconfigured cache looks like a 100%
+  miss rate. Check `available()` at startup.
 - **`invalidate_prefix("")` scans every key** in the database and deletes all of them. Non-empty
   prefixes match on the `:` delimiter, so `invalidate_prefix("user")` hits `"user"` and `"user:123"`
   but never `"username:foo"`.
-- **`key_for` rejects `None` parts** rather than dropping them — a dropped part would collapse a
-  per-entity key onto the bare, shared `prefix` key. Empty-string parts *are* dropped.
-- **`stale_ttl=0` still selects SWR.** Only `stale_ttl=None` picks plain `fetch_or_set`; `0` is a
-  valid TTL and refreshes on every read.
-- **The default key builder hashes `f"{module}.{name}:{args}:{kwargs}"`** with SHA-256. Argument
-  values must have a stable `repr` or the key changes between equivalent calls; pass `key_builder`
-  for anything non-trivial.
-- **SWR refresh is Redis-locked** under `lock:<key>` with a 10-second TTL, so only one process
-  refreshes at a time — but the refresh task itself is a bare `asyncio.Task`. Call
-  `shutdown_background_tasks()` before `close()`.
+- **`key_for` rejects `None` parts**, which would collapse a per-entity key onto the shared
+  `prefix` key. Empty-string parts *are* dropped.
+- **A non-positive `ttl` or `stale_ttl` stores nothing**, so every read refetches. `stale_ttl=0`
+  still selects SWR — only `stale_ttl=None` picks plain `fetch_or_set`.
+- **The default key builder SHA-256s the qualified name, the args and the sorted kwargs**, so arguments need a
+  stable `repr`. Pass `key_builder` for anything non-trivial.
+- **SWR refresh is Redis-locked** under `lock:<key>` for 10 s, so one process refreshes at a time.
+  The refresh itself is a bare `asyncio.Task`: call `shutdown_background_tasks()` before `close()`.
 - **`set` requires `ex`** — there is no way to write a key without a TTL through this module.
 - **`cache.set` shadows the builtin** when imported bare; prefer `import forktex.cache as cache`.

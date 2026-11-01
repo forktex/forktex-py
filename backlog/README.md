@@ -16,7 +16,9 @@ It is expected to return, package by package, in later cycles.
 | `tests/py/` | The CLI's 76 test entries | Follow their code. |
 | `tests/core/` | `test_grid`, `test_flow`, `test_space`, `test_catalog`, `test_stories`, `test_architecture` (the level-DAG guards), plus two files split out of surviving suites (see below) | Follow their code. |
 | `client/`, `codegen/` | React Grid Studio UI + its API-client generator | Belong to `core/grid/`. |
-| `docs/` | `flow.md`, `grid.md`, `grid-binding-design.md`, `space.md`, and the CLI's own docs | Follow their code. |
+| `docs/` | `graph.md`, `queue.md`, `store.md`, `vault.md`, `vector.md` for the parked facades; `flow.md`, `grid.md`, `grid-binding-design.md`, `space.md` and the CLI's own docs | Follow their code. |
+| `facades/` | `graph/`, `queue/`, `store/`, `vault/`, `vector/` | Set aside for 0.13.0. `graph` and `store` had no consumer anywhere in the fleet; `queue`, `vault` and `vector` had one each, using 2-5 of their exported names, and their defects clustered in the surface nobody called. Parking them dropped `arq`, `pymongo`, `cryptography` and `qdrant-client`. |
+| `tests/facades/` | `test_graph`, `test_queue`, `test_store`, `test_vault`, `test_vector` | Follow their code. All five ran against real containers; `store`'s needed a Mongo replica set. |
 | `README-agent-cli.md`, `CHANGELOG-agent-cli.md` | The CLI's README and changelog | Preserved verbatim; the repo root now documents the library. |
 
 ## Landmines — read before reviving anything
@@ -76,53 +78,37 @@ Only `grid/`, `flow/`, `space/` and `catalog/` remain out of the box.
 `test_public_surface.py` was kept (at `tests/test_architecture/`), rewritten to source
 its package list from an explicit literal instead of the catalog.
 
-## Known debt in the *shipped* library (not backlogged code)
+## Debt in the shipped library
 
-Two `data-access.md` rules the published `forktex` 0.9.0 does not yet satisfy. Both predate the
-migration, both are behaviour changes that deserve their own cycle, and both are recorded here so
-they are not rediscovered as new findings.
+Verified, judged non-blocking, left alone deliberately — recorded so they are not
+rediscovered as new findings.
 
-**1. `database/pagination.py:keyset_predicate` builds an OR-chain, not a row-value comparison.**
-`data-access.md:51-82` requires `sa.tuple_(*sort_columns) > sa.tuple_(*boundary_values)`: Postgres
+**`database/pagination.py:keyset_predicate` builds an OR-chain, not a row-value comparison.**
+`database:keyset-row-comparison` (`database-design.json`) requires `sa.tuple_(*sort_columns) > sa.tuple_(*boundary_values)`: Postgres
 compiles that to an `Index Cond` (a seek to the page boundary). The current
 `sa.or_(*disjuncts)` form — `a > x OR (a = x AND id > y)` — compiles to a `Filter`, which scans from
 the start of the index and degrades linearly with page depth. Correct, just slower the deeper you
 page. The fix needs care: row comparison with `NULL` yields `NULL`, so it requires `NOT NULL` sort
 keys or explicit `NULLS FIRST/LAST` handling, otherwise rows silently drop from results.
 
-**2. `limit + 1` is hand-rolled at `database/crud.py:301`.**
-`data-access.md:135-140` — "a shared mechanic is called, not copied". `database.pagination` owns the
-cursor codec and the predicate but not the fetch-one-extra-and-truncate step, which is why the
-mechanic reappeared in `crud`. The standard's own note on this: if two call sites need the same
-mechanic, the shared module is incomplete — extend it rather than copying. Related trap it calls out
-(`:159`): `len(rows) == limit` is the wrong `has_more` test on an exactly-full page.
+**`limit + 1` is hand-rolled in `database/crud.py`.** `reuse:extend-the-shared-module`
+(`code-reuse.json`): when two call sites re-implement the same step next to a module that owns the
+rest of that concern, the module is extended. `database.pagination` owns the cursor codec and the
+predicate but not the fetch-one-extra-and-truncate step, which is why it reappeared in `crud`.
 
-## Audit findings deferred past 0.9.0
+**`crud._paginate_query` always issues `COUNT(*)`.** `pagination.Page` documents
+`total` as opt-in "because counting is a second full predicate evaluation", and the
+offset path contradicts that. Related: `crud.create` does add+flush+refresh where
+`pg_insert(...).returning()` is one round trip.
 
-From the package-by-package audit against `../docs/engineering`. Each was verified,
-judged non-blocking, and left alone deliberately — recorded so they are not
-rediscovered as new findings.
-
-**Typing erasure on decorators.** `@cached` (`cache/decorators.py`) and `@traced`
-(`log/_decorators.py`) are annotated with bare `Callable`, so every decorated
-function loses its signature and return type at the call site. `with_transactional_session`
-(`database/connection.py`) has the same shape. The fix is `ParamSpec`/`TypeVar`
-overloads on each; it is a pure typing change but touches three public decorators,
-so it wants its own pass. (`cache.deserialize`'s erasure — the one that made
-`response_model=` useless — was fixed in 0.9.0.)
-
-**`dict[str, Any]` where `JsonObject` is the named type.** `python-lint.md` names
-`forktex.types.JsonValue`/`JsonObject` as the replacement for a JSON boundary.
-Present in `error.AppError.details`, `ErrorEnvelope.details`, `vault.encrypt`/
-`decrypt`, `store`'s document parameters, and `vector`'s payloads. Note ruff's
-ANN401 does **not** flag these (it targets bare `Any`), so CI passes today — this
-is a consistency item, not a gate failure.
+## Fix before reviving a parked facade
 
 **`store._to_query_id` cannot disambiguate a 24-hex-char custom id.** A
 caller-supplied string id that happens to be valid ObjectId hex is coerced to an
-`ObjectId` and will never match the string it was stored as. Documented in the
-function, unenforced. Fix: reject such ids at `insert_one` time, or store them
-coerced.
+`ObjectId` and will never match the string it was stored as, so `insert_one`
+returns an id that can never fetch, update or delete the row. Verified against a
+live MongoDB. **Fix this before `store/` returns**: coerce symmetrically on
+insert, or stop coercing on read.
 
 **`vector` reads `SearchQuery`'s private attributes across modules.**
 `collection.py` reaches into `query._vector`/`._limit`/`._strategy`/
@@ -136,21 +122,46 @@ only ever rebuilds once — appending directly after a read leaves `has_node`
 answering `False` for a present node. Fix: read-only properties, or a dirty flag.
 Also `dfs`/`cycles` recurse without a depth guard.
 
-**`crud._paginate_query` always issues `COUNT(*)`.** `pagination.Page` documents
-`total` as opt-in "because counting is a second full predicate evaluation", and the
-offset path contradicts that. Related: `crud.create` does add+flush+refresh where
-`pg_insert(...).returning()` is one round trip.
+**`vault` has no known-answer test**, so nothing in the repository pins the
+output of `_derive_fernet_key`. A change to it would stay green and silently
+orphan every credential already encrypted at rest. Add a fixed-KEK /
+fixed-ciphertext / expected-plaintext vector before `vault/` returns. Also:
+`Vault(kek="")` is accepted and derives `sha256(b"")`, a publicly computable key,
+and `tests/facades/test_vault/test_vault.py` asserts that as correct.
 
-**`crud.paginate_scroll` does not enforce that `keyset` matches `order_by`.** Both
-module docstrings state the invariant; nothing checks it, and a disagreement
-silently skips or repeats rows. `keyset` should derive `order_by`.
+**`vault`'s key handling blocks its own biggest consumer.** It SHA-256s whatever
+it is handed, while `cloud` generates a raw Fernet key and passes it straight to
+`Fernet(...)` in seven hand-rolled places. The two are therefore key-incompatible:
+adopting `forktex.vault` in `cloud` is a data migration, not an import. Decide
+whether `Vault` should accept an already-valid 32-byte urlsafe-b64 key verbatim.
 
 **`vault.encrypt` uses `json.dumps(default=str)`.** A `Decimal`/`datetime`/`UUID`
 is silently stringified, so `decrypt(encrypt(x)) != x` with no error — in a
 credential store round-tripping through a SQLAlchemy column. Either drop
 `default=str` and fail loudly, or make the coercion the documented contract.
-`cache.serialization` has the same asymmetry.
+`cache.serialization` stringifies the same way, but its round-trip is symmetric: a
+`@cached` miss returns what a hit would.
 
 **`vault` imports `sqlalchemy` unconditionally** while gating `cryptography`
 lazily, so `import forktex.vault` fails without SQLAlchemy even for a caller who
 only wants `Vault`. The `[vault]` extra declares only `cryptography`.
+
+## Driver gotchas for the parked facades
+
+Carried over from `docs/development.md` when `queue`, `vector`, `store`, `vault` and `graph`
+were set aside. Each cost a debugging session; none is discoverable from the driver's docs.
+
+### Qdrant: point IDs
+
+Point IDs must be unsigned integers or UUID strings; an arbitrary string is a 400. Use `int` or
+`str(uuid.uuid7())`.
+
+### Qdrant: `AsyncQdrantClient` has no `async with`
+
+The `AsyncQdrantClient` in qdrant-client ≥ 1.14 does not implement `__aenter__`/`__aexit__`. Use explicit `try/finally` + `await q.close()`.
+
+### arq 0.28 API changes
+
+- `arq.worker.WorkerSettings` doesn't exist — use `arq.Worker` directly
+- `arq.Job` doesn't exist at the top level — use `arq.jobs.Job`
+- `Worker.async_run()` for programmatic burst mode; `arq` CLI uses `arq module.WorkerSettings`

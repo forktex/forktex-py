@@ -21,43 +21,26 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Generic async CRUD utilities for SQLAlchemy.
 
-Provides paginated queries (page-based and cursor-based), single-record
-lookups, and creation helpers with conflict detection.
-"""
-
+import uuid
 from collections.abc import Callable
+from datetime import date, datetime
+from decimal import Decimal
 from math import ceil
 from typing import Any
 
 from pydantic import AliasChoices, Field
-from sqlalchemy import ColumnElement, Select, func, select
+from sqlalchemy import ColumnElement, Select, SQLColumnExpression, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
+from forktex.database.errors import InvalidKeysetError
 from forktex.database.integrity import integrity_boundary
 from forktex.database.pagination import Page, decode_cursor, encode_cursor, keyset_predicate
-from forktex.error import BadRequestError, ConflictError
-from forktex.log import get_logger
-
-logger = get_logger(__name__)
+from forktex.error import BadRequestError
 
 
 class PageResponse[T](Page[T]):
-    """Offset-pagination response: :class:`Page` plus page-number metadata.
-
-    A ``Page`` subclass rather than a parallel model — it used to be one of four
-    disagreeing page shapes. ``data`` and ``total_count`` are kept as the accepted
-    and serialised names, because that is what offset-paginating callers already
-    read; ``items`` and ``total`` are the canonical Python names shared with every
-    other page in the library.
-
-    Prefer :class:`forktex.database.pagination.Page` directly for new code;
-    this shape exists for the offset metadata (``current_page`` / ``total_pages``),
-    which keyset pagination has no equivalent of.
-    """
-
     items: list[T] = Field(
         default_factory=list,
         validation_alias=AliasChoices("items", "data"),
@@ -74,12 +57,10 @@ class PageResponse[T](Page[T]):
 
     @property
     def data(self) -> list[T]:
-        """Alias of :attr:`items`."""
         return self.items
 
     @property
     def total_count(self) -> int | None:
-        """Alias of :attr:`total`."""
         return self.total
 
     def apply_to_page_data[U](self, map_func: Callable[[T], U]) -> PageResponse[U]:
@@ -94,13 +75,6 @@ class PageResponse[T](Page[T]):
 
 
 class ScrollResponse[T](Page[T]):
-    """Keyset ("scroll") pagination response. See :func:`paginate_scroll`.
-
-    Structurally :class:`Page` with the echoed ``limit`` added — it was a verbatim
-    re-declaration of the same four fields before. ``data`` stays the accepted and
-    serialised name, as in :class:`PageResponse`.
-    """
-
     items: list[T] = Field(
         default_factory=list,
         validation_alias=AliasChoices("items", "data"),
@@ -110,7 +84,6 @@ class ScrollResponse[T](Page[T]):
 
     @property
     def data(self) -> list[T]:
-        """Alias of :attr:`items`."""
         return self.items
 
     def apply_to_scroll_data[U](self, map_func: Callable[[T], U]) -> ScrollResponse[U]:
@@ -130,9 +103,8 @@ async def get[T](
     key: str = "id",
     options: list | None = None,
 ) -> T | None:
-    """Retrieve a single record by column value (default: primary key)."""
     if not hasattr(model, key):
-        raise AttributeError(f"{model.__name__} has no attribute '{key}'")
+        raise BadRequestError(f"unknown column {key!r} on {model.__name__}")
 
     stmt = select(model).where(getattr(model, key) == value)
     if options:
@@ -146,7 +118,6 @@ async def find_one_by[T](
     model: type[T],
     **filters: object,
 ) -> T | None:
-    """Find a single record matching all keyword filters."""
     stmt = select(model).filter_by(**filters)
     res = await session.execute(stmt)
     return res.scalar_one_or_none()
@@ -158,7 +129,6 @@ async def list_all[T](
     *,
     options: list | None = None,
 ) -> list[T]:
-    """Return all records of a model (use sparingly on large tables)."""
     stmt = select(model)
     if options:
         stmt = stmt.options(*options)
@@ -171,21 +141,15 @@ async def create[T](
     model: type[T],
     **values: object,
 ) -> T:
-    """Create a new record.
-
-    Constraint violations are translated by
-    :func:`forktex.database.integrity.integrity_boundary`: a unique
-    violation raises ``AlreadyExistsError``, other violations (FK, NOT NULL,
-    CHECK) raise ``BadRequestError``. This previously mapped *every*
-    ``IntegrityError`` to ``ConflictError`` and embedded the raw driver message
-    — which could quote user data — in the user-facing error.
-    """
     obj = model(**values)
     session.add(obj)
     async with integrity_boundary():
         await session.flush()
     await session.refresh(obj)
     return obj
+
+
+_DEFAULT_PAGE_SIZE = 100
 
 
 async def paginate[T](
@@ -198,7 +162,6 @@ async def paginate[T](
     joins: list[InstrumentedAttribute] | None = None,
     options: list | None = None,
 ) -> PageResponse[T]:
-    """Page-based pagination with total count."""
     stmt = select(model)
 
     if options:
@@ -227,17 +190,10 @@ async def paginate_scroll[T](
     cursor: str | None = None,
     ascending: bool = True,
 ) -> ScrollResponse[T]:
-    """Keyset ("scroll") pagination. Fetches ``limit+1`` to detect ``has_more``.
-
-    Pass ``keyset`` — the ordering expressions, most-significant first, ending
-    in a unique tiebreaker — to get a working ``next_cursor``, then hand that
-    back as ``cursor`` for the following page. ``keyset`` must match
-    ``order_by`` or pages will skip or repeat rows.
-
-    Without ``keyset`` this degrades to "first page only": that was the previous
-    behaviour, which accepted no cursor and never populated ``next_cursor``
-    despite being documented as cursor-based, so it could never advance.
-    """
+    if cursor is not None and not keyset:
+        raise InvalidKeysetError("a cursor needs the keyset it was built from")
+    if keyset and order_by:
+        raise InvalidKeysetError("the keyset is the ordering; pass one or the other, not both")
     stmt = select(model)
 
     if options:
@@ -248,10 +204,11 @@ async def paginate_scroll[T](
     if conditions:
         stmt = stmt.where(*conditions)
     if keyset and cursor is not None:
-        boundary = decode_cursor(cursor, expected_length=len(keyset))
-        stmt = stmt.where(keyset_predicate(list(zip(keyset, boundary, strict=True)), ascending=ascending))
+        stmt = stmt.where(keyset_predicate(_resume_after(keyset, cursor), ascending=ascending))
     if order_by:
         stmt = stmt.order_by(*order_by)
+    elif keyset:
+        stmt = stmt.order_by(*(expr.asc() if ascending else expr.desc() for expr in keyset))
 
     return await _paginate_scroll_query(session, stmt, limit, keyset=keyset)
 
@@ -260,12 +217,12 @@ async def _paginate_query[T](
     session: AsyncSession,
     query: Select[tuple[T]] | Select[Any],
     page: int = 1,
-    page_size: int = 100,
+    page_size: int = _DEFAULT_PAGE_SIZE,
 ) -> PageResponse[T]:
     if page < 1:
         page = 1
     if page_size < 1:
-        page_size = 10
+        page_size = _DEFAULT_PAGE_SIZE
 
     total_count_stmt = select(func.count()).select_from(query.subquery())
     total_count = (await session.execute(total_count_stmt)).scalar_one()
@@ -276,7 +233,7 @@ async def _paginate_query[T](
     data = list(result.scalars().all())
 
     has_more = (page * page_size) < total_count
-    total_pages = ceil(total_count / page_size) if page_size else 1
+    total_pages = ceil(total_count / page_size)
 
     return PageResponse(
         items=data,
@@ -307,11 +264,14 @@ async def _paginate_scroll_query[T](
         data = data[:limit]
 
     next_cursor: str | None = None
-    if has_more and data and keyset:
-        # The boundary is the last row's value for each ordering expression, so
-        # the next page resumes exactly where this one stopped.
-        last = data[-1]
-        next_cursor = encode_cursor([_value_of(last, expr) for expr in keyset])
+    if has_more and keyset:
+        boundary = [_value_of(data[-1], expr) for expr in keyset]
+        if boundary[-1] is None:
+            raise InvalidKeysetError(
+                "the last keyset level is the tiebreaker and must not be NULL — "
+                "end the keyset on a non-nullable column such as the primary key"
+            )
+        next_cursor = encode_cursor(boundary)
 
     return ScrollResponse(
         items=data,
@@ -321,13 +281,41 @@ async def _paginate_scroll_query[T](
     )
 
 
-def _value_of(row: object, expr: ColumnElement) -> object:
-    """Read the value an ordering expression selected, off a fetched row.
+def _resume_after(keyset: list[ColumnElement], cursor: str) -> list[tuple[SQLColumnExpression[Any], Any]]:
+    boundary = decode_cursor(cursor, expected_length=len(keyset))
+    return [(expr, _typed_cursor_value(expr, value)) for expr, value in zip(keyset, boundary, strict=True)]
 
-    Works for a mapped attribute (``Model.col``), which is what keyset ordering
-    uses in practice; a computed expression has no attribute to read and is
-    rejected rather than silently producing a cursor that cannot resume.
-    """
+
+def _parse_cursor_text(python_type: type, text: str) -> object:
+    if python_type is datetime:
+        return datetime.fromisoformat(text)
+    if python_type is date:
+        return date.fromisoformat(text)
+    if python_type is uuid.UUID:
+        return uuid.UUID(text)
+    if python_type is Decimal:
+        return Decimal(text)
+    return text
+
+
+def _typed_cursor_value(expr: ColumnElement, value: object) -> object:
+    python_type = _python_type(expr)
+    if python_type is None or not isinstance(value, str):
+        return value
+    try:
+        return _parse_cursor_text(python_type, value)
+    except ValueError, ArithmeticError:
+        raise BadRequestError("invalid cursor") from None
+
+
+def _python_type(expr: ColumnElement) -> type | None:
+    try:
+        return expr.type.python_type
+    except NotImplementedError:
+        return None
+
+
+def _value_of(row: object, expr: ColumnElement) -> object:
     key = getattr(expr, "key", None) or getattr(expr, "name", None)
     if key is None or not hasattr(row, str(key)):
         raise BadRequestError("keyset ordering must use mapped columns so a cursor can be built")
@@ -335,7 +323,6 @@ def _value_of(row: object, expr: ColumnElement) -> object:
 
 
 __all__ = [
-    "ConflictError",
     "PageResponse",
     "ScrollResponse",
     "create",

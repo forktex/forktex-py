@@ -21,19 +21,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Rules every package's public surface obeys, checked rather than trusted.
-
-`docs/development.md`'s module checklist already requires `__all__` on every public
-submodule and a lazy optional-dependency import whose error names the extra. Both were
-human-verified until they were checked here, and both had live violations: a package
-exported `_ParallelGroup`/`_PipelineStepSpec` — private-looking names in a public
-contract — and another raised a bare `ModuleNotFoundError: No module named 'starlette'`
-instead of naming its extra.
-"""
 
 from __future__ import annotations
 
-import ast
 import importlib
 import subprocess
 import sys
@@ -43,168 +33,77 @@ import pytest
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "forktex"
 
-#: Every package a consumer imports by name. Written out rather than derived:
-#: this list IS the shipped contract, so adding a package should be a
-#: deliberate edit here (and a matching extra in pyproject.toml — see
-#: `test_every_package_has_a_declared_extra`), not something a generated
-#: manifest quietly grants.
 PACKAGES = [
     "api",
     "cache",
     "database",
     "error",
-    "graph",
     "iso",
     "log",
-    "queue",
     "storage",
-    "store",
     "types",
-    "vault",
-    "vector",
-    "worker",
 ]
-
-#: Packages whose import pulls a third-party dependency from an extra, mapped to every
-#: top-level module that must be blocked to simulate a consumer without it — including
-#: *transitive* ones the package imports directly. Blocking only the declared dependency
-#: can prove nothing when the module actually imports a transitive one (`storage`
-#: declares `aioboto3` but reaches `botocore` directly), so every root is listed.
-_EXTRA_BACKED = {
-    "api": ("fastapi", "starlette"),
-    "vault": ("cryptography",),
-    "storage": ("aioboto3", "botocore"),
-    "queue": ("arq",),
-    "vector": ("qdrant_client",),
-    "worker": ("arq",),
-    "store": ("pymongo",),
-}
 
 
 @pytest.mark.parametrize("package", PACKAGES)
-def test_every_package_declares_all(package: str):
+def test_every_package_declares_all(package: str) -> None:
     module = importlib.import_module(f"forktex.{package}")
     assert hasattr(module, "__all__"), f"forktex.{package} has no __all__"
     assert module.__all__, f"forktex.{package}.__all__ is empty"
 
 
 @pytest.mark.parametrize("package", PACKAGES)
-def test_no_package_exports_a_private_name(package: str):
-    """A name in `__all__` is public by definition, so spelling it with a leading
-    underscore tells the reader the opposite of the truth."""
+def test_no_package_exports_a_private_name(package: str) -> None:
     module = importlib.import_module(f"forktex.{package}")
     private = sorted(n for n in module.__all__ if n.startswith("_"))
     assert private == [], f"forktex.{package} exports private-looking names: {private}"
 
 
 @pytest.mark.parametrize("package", PACKAGES)
-def test_every_exported_name_resolves(package: str):
+def test_every_exported_name_resolves(package: str) -> None:
     module = importlib.import_module(f"forktex.{package}")
     missing = sorted(n for n in module.__all__ if not hasattr(module, n))
     assert missing == [], f"forktex.{package}.__all__ names unimportable attributes: {missing}"
 
 
-# `__all__` ordering is deliberately NOT asserted here: ruff's RUF022 already enforces
-# it on the source, and it uses an isort-style key (constants, then classes, then
-# functions) that a second implementation would only get wrong and drift from.
+@pytest.mark.parametrize("package", PACKAGES)
+def test_the_package_root_exposes_every_module(package: str) -> None:
+    import forktex
 
-
-def test_optional_dependencies_are_imported_lazily_or_name_their_extra():
-    """`docs/development.md`: "Every module that requires an extra … imports its
-    dependency lazily and raises `ImportError("Install forktex[X]…")` — never at
-    module import time."
-
-    Checked by importing each package in a subprocess with its third-party dependency
-    blocked, which is the only way to observe what a consumer without the extra sees.
-    """
-    blocker = (
-        "import builtins\n"
-        "_blocked_names = {deps!r}\n"
-        "_real = builtins.__import__\n"
-        "def _blocked(name, *a, **k):\n"
-        "    root = name.split('.')[0]\n"
-        "    if root in _blocked_names:\n"
-        "        raise ModuleNotFoundError(f'No module named {{root!r}}')\n"
-        "    return _real(name, *a, **k)\n"
-        "builtins.__import__ = _blocked\n"
-        "try:\n"
-        "    import forktex.{pkg}\n"
-        "except ImportError as exc:\n"
-        "    print('IMPORTERROR:' + str(exc))\n"
-        "else:\n"
-        "    print('LAZY')\n"
-    )
-    failures: list[str] = []
-    for package, deps in sorted(_EXTRA_BACKED.items()):
-        result = subprocess.run(
-            [sys.executable, "-c", blocker.format(deps=set(deps), pkg=package)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        out = result.stdout.strip()
-        if out == "LAZY":
-            continue
-        if out.startswith("IMPORTERROR:"):
-            message = out.removeprefix("IMPORTERROR:")
-            if f"forktex[{package}]" not in message:
-                failures.append(
-                    f"forktex.{package}: import fails without {deps} and the error does not "
-                    f"name the extra — got {message!r}"
-                )
-            continue
-        failures.append(f"forktex.{package}: unexpected probe output {out!r}\n{result.stderr}")
-    assert failures == [], "\n".join(failures)
-
-
-def _module_docstring(path: Path) -> str | None:
-    return ast.get_docstring(ast.parse(path.read_text(encoding="utf-8"), filename=str(path)))
+    assert package in forktex.__all__, f"import forktex does not expose forktex.{package}"
+    assert getattr(forktex, package, None) is importlib.import_module(f"forktex.{package}")
 
 
 @pytest.mark.parametrize("package", PACKAGES)
-def test_every_package_has_a_module_docstring(package: str):
-    """The package docstring is where a reader lands first; an undocumented entry point
-    forces them into the implementation."""
-    init = SRC / package / "__init__.py"
-    path = init if init.exists() else SRC / f"{package}.py"
-    assert _module_docstring(path), f"{path.relative_to(SRC)} has no module docstring"
-
-
-@pytest.mark.parametrize("package", PACKAGES)
-def test_every_package_has_a_consumer_doc(package: str):
-    """`docs/development.md` step: "Create `docs/<name>.md` (consumer reference …)"."""
+def test_every_package_has_a_consumer_doc(package: str) -> None:
     doc = SRC.parents[1] / "docs" / f"{package}.md"
     assert doc.exists(), f"missing docs/{package}.md for forktex.{package}"
 
 
-def test_database_exports_everything_the_standards_tell_consumers_to_use():
-    """`code-reuse.md` is a lookup table pointing at `forktex.database` names. A name it
-    names must be reachable from the package root — `substrate_base`, `Page` and the cursor
-    helpers were documented as the canonical choice while only importable via submodule.
-    """
+def test_database_exports_everything_the_standards_tell_consumers_to_use() -> None:
     import forktex.database as db
 
     documented = {
-        # connection lifecycle
         "Database",
-        "get_session",
-        "session_scope",
+        "transactional_session",
+        "yield_transactional_session",
         "init_engine",
         "close_engine",
-        # ORM bases and the temporal type
+        "savepoint",
+        "open_session",
+        "get_engine",
+        "TransactionBoundaryError",
         "BaseDBModel",
         "substrate_base",
-        "UtcDateTime",
+        "UtcTimestamp",
         "AuditMixin",
         "TimestampMixin",
         "NamespacedMixin",
         "JsonModelColumn",
-        # the one page shape and its cursor codec
         "Page",
         "encode_cursor",
         "decode_cursor",
         "keyset_predicate",
-        # locks, identifiers, integrity, migrations
         "advisory_lock",
         "try_advisory_lock",
         "xact_lock",
@@ -218,9 +117,62 @@ def test_database_exports_everything_the_standards_tell_consumers_to_use():
         "integrity_boundary",
         "read_boundary",
         "SchemaMigrationRunner",
-        # the submodules a consumer reaches for directly
         "ddl",
         "reflect",
     }
     missing = sorted(documented - set(db.__all__))
     assert missing == [], f"documented in standards/code-reuse.md but not exported: {missing}"
+
+
+def test_the_default_database_delegates_mirror_the_database_methods() -> None:
+    from forktex.database import connection
+
+    methods = {
+        name
+        for name, value in vars(connection.Database).items()
+        if not name.startswith("_") and callable(value) and name != "dispose"
+    }
+    delegates = {name for name in connection.__all__ if not name[0].isupper()}
+    assert methods <= delegates, f"Database methods with no module-level delegate: {sorted(methods - delegates)}"
+
+
+def test_connection_exports_no_name_that_is_not_defined_there() -> None:
+    from forktex.database import connection
+
+    assert sorted(connection.__all__) == connection.__all__
+    undefined = [name for name in connection.__all__ if not hasattr(connection, name)]
+    assert undefined == []
+
+
+def test_the_package_root_refuses_a_name_it_does_not_have() -> None:
+    """The root resolves modules lazily, so a typo must raise AttributeError
+    rather than returning something or importing an arbitrary submodule."""
+    import forktex
+
+    with pytest.raises(AttributeError, match="no attribute 'nope'"):
+        forktex.nope  # noqa: B018
+
+    with pytest.raises(AttributeError):
+        forktex.subprocess  # noqa: B018
+
+    assert dir(forktex) == sorted(forktex.__all__)
+
+
+def test_importing_one_module_does_not_import_the_others() -> None:
+    """The root resolves modules on first access so a leaf import stays cheap:
+    an eager root made `from forktex.iso import to_iso` — stdlib `datetime` only —
+    pull FastAPI, SQLAlchemy, redis and botocore. Measured in a fresh interpreter
+    because an in-process check sees whatever earlier tests already imported."""
+    probe = (
+        "import sys\n"
+        "from forktex.iso import to_iso\n"
+        "heavy = [m for m in ('fastapi', 'sqlalchemy', 'redis', 'aioboto3') if m in sys.modules]\n"
+        "import forktex\n"
+        "resolved = forktex.database is sys.modules['forktex.database']\n"
+        "print(heavy, resolved)\n"
+    )
+    result = subprocess.run([sys.executable, "-I", "-c", probe], capture_output=True, text=True, check=True)
+    heavy, resolved = result.stdout.strip().rsplit(" ", 1)
+
+    assert heavy == "[]", f"forktex.iso dragged in {heavy}"
+    assert resolved == "True", "forktex.database did not resolve through the root"

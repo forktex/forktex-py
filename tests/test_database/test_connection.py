@@ -21,188 +21,321 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Integration tests for forktex.database.connection — requires Postgres container."""
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 import pytest
 import pytest_asyncio
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.exc import PendingRollbackError
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
 from forktex.database import (
     BaseDBModel,
+    Database,
+    DatabaseNotInitializedError,
     TimestampMixin,
+    TransactionBoundaryError,
     close_engine,
-    get_session,
+    get_engine,
     init_engine,
-    session_scope,
+    open_session,
+    savepoint,
+    transactional_session,
+    yield_transactional_session,
     with_transactional_session,
 )
-import forktex.database.connection as _db_conn
+from tests.conftest import sessions_for
 
 
 class _ConnTestWidget(BaseDBModel, TimestampMixin):
-    """Module-level model to avoid SQLAlchemy annotation resolution issues."""
-
     __tablename__ = "conn_test_widget"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(sa.String(100))
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+class _ConnTestUnique(BaseDBModel):
+    __tablename__ = "conn_test_unique"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(sa.String(50), unique=True)
 
 
 @pytest_asyncio.fixture
-async def engine_and_session(postgres_url_str: str, fresh_schema: str):
-    """Init the global engine with schema translation for isolation."""
-    # Map both public (conn_test_widget) and forktex_grid (GridEntity etc.)
-    # to fresh_schema so create_all doesn't fail on missing schemas.
-    # None → fresh_schema remaps schema=None (default) tables.
-    # "forktex_grid" → fresh_schema remaps the data module's tables.
-    init_engine(
-        postgres_url_str,
-        schema_translate_map={None: fresh_schema, "forktex_grid": fresh_schema},
-    )
-    # _db_conn.engine is the AsyncEngine set by init_engine
-    raw_engine = _db_conn.engine
-    async with raw_engine.connect() as conn:
-        await conn.execute(sa.text(f'CREATE SCHEMA IF NOT EXISTS "{fresh_schema}"'))
-        await conn.commit()
+async def engine_and_session(postgres_url_str: str, fresh_schema: str) -> AsyncIterator[None]:
+    await init_engine(postgres_url_str, schema_translate_map={None: fresh_schema})
+    raw_engine = get_engine()
     async with raw_engine.begin() as conn:
         await conn.run_sync(BaseDBModel.metadata.create_all)
     yield
     await close_engine()
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
-async def test_get_session_commits_on_success(engine_and_session):
-    async with get_session() as session:
+async def test_a_transactional_session_commits_on_success(engine_and_session: None) -> None:
+    async with transactional_session() as session:
         session.add(_ConnTestWidget(name="alpha"))
-    async with get_session() as session:
+    async with transactional_session() as session:
         result = await session.execute(sa.select(_ConnTestWidget).where(_ConnTestWidget.name == "alpha"))
         assert result.scalar_one_or_none() is not None
 
 
 @pytest.mark.asyncio
-async def test_get_session_rollback_on_error(engine_and_session):
+async def test_a_transactional_session_rolls_back_on_error(engine_and_session: None) -> None:
     with pytest.raises(ValueError):
-        async with get_session() as session:
+        async with transactional_session() as session:
             session.add(_ConnTestWidget(name="beta"))
             raise ValueError("intentional rollback")
-    async with get_session() as session:
+    async with transactional_session() as session:
         result = await session.execute(sa.select(_ConnTestWidget).where(_ConnTestWidget.name == "beta"))
         assert result.scalar_one_or_none() is None
 
 
+def _checked_out_connections() -> int:
+    return get_engine().pool.checkedout()
+
+
 @pytest.mark.asyncio
-async def test_get_session_before_init_engine_raises():
-    await close_engine()  # ensure no leftover global engine from another test
-    with pytest.raises(RuntimeError, match="not initialized"):
-        async with get_session():
+async def test_a_transactional_session_returns_its_connection_as_soon_as_the_block_raises(
+    engine_and_session: None,
+) -> None:
+    with pytest.raises(ValueError):
+        async with transactional_session() as session:
+            session.add(_ConnTestWidget(name="raised"))
+            await session.flush()
+            raise ValueError("boom")
+    assert _checked_out_connections() == 0
+
+
+@pytest.mark.asyncio
+async def test_the_dependency_rolls_back_when_the_route_raises(engine_and_session: None) -> None:
+    dependency = yield_transactional_session()
+    session = await anext(dependency)
+    session.add(_ConnTestWidget(name="raised"))
+    await session.flush()
+    with pytest.raises(ValueError):
+        await dependency.athrow(ValueError("route failed"))
+    assert _checked_out_connections() == 0
+    assert await _widget_names() == set()
+
+
+@pytest.mark.asyncio
+async def test_a_savepoint_releases_into_its_enclosing_transaction(engine_and_session: None) -> None:
+    async with open_session() as owner:
+        async with savepoint(owner):
+            owner.add(_ConnTestWidget(name="pending"))
+        assert owner.in_transaction()
+        await owner.rollback()
+    assert await _widget_names() == set()
+
+
+@pytest.mark.asyncio
+async def test_an_owned_session_refuses_the_boundary_calls_it_does_not_own(engine_and_session: None) -> None:
+    for call in ("commit", "rollback"):
+        with pytest.raises(TransactionBoundaryError, match=call):
+            async with transactional_session() as session:
+                await getattr(session, call)()
+    with pytest.raises(TransactionBoundaryError, match="begin"):
+        async with transactional_session() as session:
+            session.begin()
+
+
+@pytest.mark.asyncio
+async def test_a_midway_commit_cannot_half_apply_a_unit_of_work(engine_and_session: None) -> None:
+    with pytest.raises(TransactionBoundaryError):
+        async with transactional_session() as session:
+            session.add(_ConnTestWidget(name="early"))
+            await session.commit()
+            session.add(_ConnTestWidget(name="late"))
+    assert await _widget_names() == set()
+
+
+@pytest.mark.asyncio
+async def test_a_plain_session_owns_its_own_boundary(engine_and_session: None) -> None:
+    async with open_session() as plain:
+        plain.add(_ConnTestWidget(name="kept"))
+        await plain.commit()
+        plain.add(_ConnTestWidget(name="dropped"))
+        await plain.rollback()
+    assert await _widget_names() == {"kept"}
+
+
+@pytest.mark.asyncio
+async def test_a_transactional_session_before_init_engine_raises() -> None:
+    await close_engine()
+    with pytest.raises(DatabaseNotInitializedError, match="not initialized"):
+        async with transactional_session():
             pass
 
 
-@pytest.mark.asyncio
-async def test_with_transactional_session_no_session_provided(engine_and_session):
-    """Shape 1: no session passed — opens and commits its own via get_session()."""
+async def _widget_names() -> set[str]:
+    async with transactional_session() as session:
+        return set((await session.execute(sa.select(_ConnTestWidget.name))).scalars())
 
-    @with_transactional_session
-    async def add_widget(session, name: str):
-        session.add(_ConnTestWidget(name=name))
 
-    await add_widget("shape1")
-    async with get_session() as session:
-        result = await session.execute(sa.select(_ConnTestWidget).where(_ConnTestWidget.name == "shape1"))
-        assert result.scalar_one_or_none() is not None
+@with_transactional_session
+async def _add_widget(session: AsyncSession, name: str) -> None:
+    session.add(_ConnTestWidget(name=name))
+    await session.flush()
 
 
 @pytest.mark.asyncio
-async def test_with_transactional_session_caller_session_no_tx(engine_and_session):
-    """Shape 2: caller passes a session with no active transaction — decorator
-    opens one via session.begin() and commits it."""
-
-    @with_transactional_session
-    async def add_widget(session, name: str):
-        session.add(_ConnTestWidget(name=name))
-
-    # get_session() itself autobegins, so use a bare sessionmaker session to
-    # get one with genuinely no active transaction yet.
-    maker = _db_conn._async_sessionmaker
-    async with maker() as bare_session:
-        assert not bare_session.in_transaction()
-        await add_widget(bare_session, "shape2")
-        assert not bare_session.in_transaction()  # committed, not left open
-
-    async with get_session() as session:
-        result = await session.execute(sa.select(_ConnTestWidget).where(_ConnTestWidget.name == "shape2"))
-        assert result.scalar_one_or_none() is not None
+async def test_transactional_without_a_session_owns_and_commits_one(engine_and_session: None) -> None:
+    await _add_widget(name="owned")
+    assert await _widget_names() == {"owned"}
 
 
 @pytest.mark.asyncio
-async def test_with_transactional_session_caller_session_with_tx_uses_savepoint(
-    engine_and_session,
-):
-    """Shape 3: caller's session already has an active transaction — decorator
-    uses a SAVEPOINT (begin_nested), and a failure inside only rolls back the
-    savepoint, not the caller's outer transaction."""
-
+async def test_transactional_without_a_session_rolls_back_on_raise(engine_and_session: None) -> None:
     @with_transactional_session
-    async def add_widget_then_fail(session, name: str):
-        session.add(_ConnTestWidget(name=name))
+    async def add_then_fail(session: AsyncSession) -> None:
+        session.add(_ConnTestWidget(name="lost"))
         await session.flush()
-        raise ValueError("intentional savepoint rollback")
+        raise ValueError("boom")
 
-    maker = _db_conn._async_sessionmaker
-    async with maker() as session:
-        async with session.begin():
-            session.add(_ConnTestWidget(name="outer-survives"))
-            with pytest.raises(ValueError, match="intentional savepoint rollback"):
-                await add_widget_then_fail(session, "shape3-rolled-back")
-
-    async with get_session() as session:
-        outer = await session.execute(sa.select(_ConnTestWidget).where(_ConnTestWidget.name == "outer-survives"))
-        assert outer.scalar_one_or_none() is not None
-        rolled_back = await session.execute(
-            sa.select(_ConnTestWidget).where(_ConnTestWidget.name == "shape3-rolled-back")
-        )
-        assert rolled_back.scalar_one_or_none() is None
+    with pytest.raises(ValueError, match="boom"):
+        await add_then_fail()
+    assert await _widget_names() == set()
 
 
 @pytest.mark.asyncio
-async def test_with_transactional_session_detects_session_as_instance_method_arg(
-    engine_and_session,
-):
-    """A caller-provided session must be detected even when it's not
-    args[0] — e.g. decorating an instance method, where self is args[0]."""
+async def test_transactional_owned_session_refuses_its_own_transaction_block(engine_and_session: None) -> None:
+
+    @with_transactional_session
+    async def add_in_explicit_block(session: AsyncSession) -> None:
+        async with session.begin():
+            await _add_widget(session=session, name="explicit")
+
+    with pytest.raises(TransactionBoundaryError, match="begin"):
+        await add_in_explicit_block()
+    assert await _widget_names() == set()
+
+
+@pytest.mark.asyncio
+async def test_transactional_a_b_c_rolls_back_together(engine_and_session: None) -> None:
+    with pytest.raises(RuntimeError, match="c failed"):
+        async with transactional_session() as session:
+            await _add_widget(session, "b")
+            session.add(_ConnTestWidget(name="a"))
+            raise RuntimeError("c failed")
+    assert await _widget_names() == set()
+
+
+@pytest.mark.asyncio
+async def test_transactional_never_commits_a_session_it_was_handed(engine_and_session: None) -> None:
+    async with open_session() as plain:
+        assert not plain.in_transaction()
+        await _add_widget(plain, "b")
+        await plain.rollback()
+    assert await _widget_names() == set()
+
+    async with open_session() as plain:
+        await _add_widget(plain, "b")
+        await plain.commit()
+    assert await _widget_names() == {"b"}
+
+
+@with_transactional_session
+async def _add_widget_then_fail(session: AsyncSession, *, name: str) -> None:
+    session.add(_ConnTestWidget(name=name))
+    await session.flush()
+    raise ValueError("callee failed")
+
+
+@pytest.mark.asyncio
+async def test_transactional_handed_a_session_joins_it_rather_than_nesting(
+    engine_and_session: None,
+) -> None:
+    with pytest.raises(ValueError, match="callee failed"):
+        async with transactional_session() as session:
+            session.add(_ConnTestWidget(name="caller"))
+            await _add_widget_then_fail(session, name="callee")
+    assert await _widget_names() == set()
+
+
+@pytest.mark.asyncio
+async def test_a_caller_may_isolate_a_part_that_is_allowed_to_fail(
+    engine_and_session: None,
+) -> None:
+    async with transactional_session() as session:
+        session.add(_ConnTestWidget(name="batch-survives"))
+        with pytest.raises(ValueError, match="callee failed"):
+            async with savepoint(session):
+                await _add_widget_then_fail(session, name="rolled-back")
+        session.add(_ConnTestWidget(name="next-row"))
+    assert await _widget_names() == {"batch-survives", "next-row"}
+
+
+@with_transactional_session(isolate=True)
+async def _add_widget_then_fail_isolated(session: AsyncSession, *, name: str) -> None:
+    await _add_widget_then_fail(session, name=name)
+
+
+@pytest.mark.asyncio
+async def test_isolate_true_takes_the_savepoint_on_the_callees_behalf(engine_and_session: None) -> None:
+    async with transactional_session() as session:
+        session.add(_ConnTestWidget(name="outer-survives"))
+        with pytest.raises(ValueError, match="callee failed"):
+            await _add_widget_then_fail_isolated(session, name="rolled-back")
+    assert await _widget_names() == {"outer-survives"}
+
+
+@pytest.mark.asyncio
+async def test_the_session_is_bound_by_name_not_by_scanning_for_one(engine_and_session: None) -> None:
+
+    @with_transactional_session
+    async def not_session_first(name: str, session: AsyncSession | None = None) -> str:
+        session.add(_ConnTestWidget(name=name))
+        return type(name).__name__
+
+    assert await not_session_first("late-param") == "str"
+    assert await _widget_names() == {"late-param"}
+
+    @with_transactional_session
+    async def takes_a_session_as_data(session: AsyncSession, *, audited: AsyncSession, name: str) -> None:
+        session.add(_ConnTestWidget(name=name))
+
+    async with open_session() as other:
+        await takes_a_session_as_data(audited=other, name="data-session")
+    assert await _widget_names() == {"late-param", "data-session"}
+
+
+def test_a_function_with_no_session_parameter_is_rejected_at_import() -> None:
+    with pytest.raises(TypeError, match="has no 'session' parameter"):
+
+        @with_transactional_session
+        async def no_session(name: str) -> None: ...
+
+    with pytest.raises(TypeError, match="positional-only"):
+
+        @with_transactional_session
+        async def positional_only(session: AsyncSession, /) -> None: ...
+
+
+@pytest.mark.asyncio
+async def test_a_positional_call_that_omits_the_session_is_refused(engine_and_session: None) -> None:
+    with pytest.raises(TypeError, match="got str for its 'session' parameter"):
+        await _add_widget("owned")
+
+
+@pytest.mark.asyncio
+async def test_transactional_detects_the_session_on_an_instance_method(engine_and_session: None) -> None:
 
     class Service:
         @with_transactional_session
-        async def add_widget(self, session, name: str):
+        async def add_widget(self, session: AsyncSession, name: str) -> None:
             session.add(_ConnTestWidget(name=name))
 
-    maker = _db_conn._async_sessionmaker
-    async with maker() as bare_session:
-        await Service().add_widget(bare_session, "shape-method")
-
-    async with get_session() as session:
-        result = await session.execute(sa.select(_ConnTestWidget).where(_ConnTestWidget.name == "shape-method"))
-        assert result.scalar_one_or_none() is not None
+    async with transactional_session() as session:
+        await Service().add_widget(session, "method")
+        await Service().add_widget(session=session, name="method-kw")
+    assert await _widget_names() == {"method", "method-kw"}
 
 
 @pytest.mark.asyncio
-async def test_schema_translate_map(postgres_url_str: str, fresh_schema: str):
-    """schema_translate_map must reroute ORM tables to the target schema."""
+async def test_schema_translate_map(postgres_url_str: str, fresh_schema: str) -> None:
     target = fresh_schema + "_map"
-    # None → target remaps schema=None (default) tables into target schema.
     engine = create_async_engine(
         postgres_url_str,
         execution_options={
@@ -216,12 +349,11 @@ async def test_schema_translate_map(postgres_url_str: str, fresh_schema: str):
         await conn.execute(sa.text(f'CREATE SCHEMA IF NOT EXISTS "{target}"'))
         await conn.run_sync(BaseDBModel.metadata.create_all)
 
-    maker = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+    maker = sessions_for(engine)
     async with maker() as session:
         session.add(_ConnTestWidget(name="gamma"))
         await session.commit()
 
-    # Verify row landed in target schema, not public
     async with engine.connect() as conn:
         rows = (
             await conn.execute(sa.text(f"SELECT name FROM \"{target}\".conn_test_widget WHERE name = 'gamma'"))
@@ -231,59 +363,27 @@ async def test_schema_translate_map(postgres_url_str: str, fresh_schema: str):
 
 
 @pytest.mark.asyncio
-async def test_session_scope_works_as_a_fastapi_dependency(postgres_url_str: str, fresh_schema: str):
-    """``Depends(session_scope)`` must inject a real ``AsyncSession``.
-
-    Regression guard: ``get_session`` is decorated with
-    ``@asynccontextmanager``, so ``Depends(get_session)`` injects the
-    ``_AsyncGeneratorContextManager`` object rather than a session — yet the
-    module docstring advertised exactly that for a long time. ``session_scope``
-    is the plain async generator FastAPI actually needs.
-    """
+async def test_the_dependency_works_in_fastapi(postgres_url_str: str, fresh_schema: str) -> None:
     from fastapi import Depends, FastAPI
     from fastapi.testclient import TestClient
 
-    init_engine(postgres_url_str)
+    await init_engine(postgres_url_str)
     try:
         app = FastAPI()
 
         @app.get("/probe")
-        async def _probe(session: AsyncSession = Depends(session_scope)) -> dict[str, object]:
-            # Prove it is a live, usable session and not a context-manager object.
+        async def _probe(session: AsyncSession = Depends(yield_transactional_session)) -> dict[str, object]:
             value = (await session.execute(sa.text("SELECT 42"))).scalar_one()
-            return {"type": type(session).__name__, "value": value}
+            return {"is_session": isinstance(session, AsyncSession), "value": value}
 
         body = TestClient(app).get("/probe").json()
-        assert body["type"] == "AsyncSession"
+        assert body["is_session"] is True
         assert body["value"] == 42
     finally:
         await close_engine()
 
 
-@pytest.mark.asyncio
-async def test_get_session_and_session_scope_share_one_implementation(postgres_url_str: str):
-    """The CM and the generator must not drift apart — same commit/rollback body."""
-    init_engine(postgres_url_str)
-    try:
-        async with get_session() as session:
-            assert isinstance(session, AsyncSession)
-            assert (await session.execute(sa.text("SELECT 1"))).scalar_one() == 1
-    finally:
-        await close_engine()
-
-
-# ---------------------------------------------------------------------------
-# Database handle (explicit, non-global pools)
-# ---------------------------------------------------------------------------
-
-
-def test_database_construction_is_lazy():
-    """A handle must not connect at construction time.
-
-    A component that owns its own pool builds one per instance, and callers
-    routinely construct a handle against an unreachable URL purely to read
-    configuration off it.
-    """
+def test_database_construction_is_lazy() -> None:
     from forktex.database import Database
 
     db = Database(
@@ -291,10 +391,10 @@ def test_database_construction_is_lazy():
         schema_translate_map={"forktex_flow": "somewhere"},
     )
     assert db.schema_translate_map == {"forktex_flow": "somewhere"}
-    assert db.engine is not None  # engine object exists; no connection opened
+    assert db.engine is not None
 
 
-def test_independent_handles_own_independent_pools():
+def test_independent_handles_own_independent_pools() -> None:
     from forktex.database import Database
 
     a = Database("postgresql+asyncpg://x:y@h/d")
@@ -304,52 +404,104 @@ def test_independent_handles_own_independent_pools():
 
 
 @pytest.mark.asyncio
-async def test_database_session_commits_and_rolls_back(postgres_url_str: str):
-    """The handle's session() must have the same semantics as get_session()."""
+async def test_a_handles_transactional_session_commits_and_rolls_back(postgres_url_str: str) -> None:
     from forktex.database import Database
 
     db = Database(postgres_url_str)
     try:
-        async with db.session() as session:
+        async with db.open_session() as session:
             assert (await session.execute(sa.text("SELECT 1"))).scalar_one() == 1
 
         with pytest.raises(ValueError):
-            async with db.session() as session:
+            async with db.open_session() as session:
                 await session.execute(sa.text("SELECT 1"))
                 raise ValueError("boom")
+        assert db.engine.pool.checkedout() == 0
     finally:
         await db.dispose()
 
 
 @pytest.mark.asyncio
-async def test_module_level_functions_track_the_current_default(postgres_url_str: str):
-    """`connection.engine` / `_async_sessionmaker` are derived from the default
-    handle, so rebinding the default is reflected rather than leaving a stale
-    reference captured at init time."""
-    await close_engine()
-    assert _db_conn.engine is None
+async def test_a_caught_constraint_violation_needs_a_savepoint(engine_and_session: None) -> None:
+    from forktex.database.crud import create
+    from forktex.error import AlreadyExistsError
 
-    init_engine(postgres_url_str)
-    first = _db_conn.engine
-    assert first is not None
+    async with transactional_session() as session:
+        await create(session, _ConnTestUnique, slug="taken")
 
-    init_engine(postgres_url_str)  # rebind
-    assert _db_conn.engine is not first  # follows the new default
+    with pytest.raises(PendingRollbackError):
+        async with transactional_session() as session:
+            with pytest.raises(AlreadyExistsError):
+                await create(session, _ConnTestUnique, slug="taken")
+            await create(session, _ConnTestUnique, slug="next")
 
-    await close_engine()
-    assert _db_conn.engine is None
-    assert _db_conn._async_sessionmaker is None
+    async with transactional_session() as session:
+        with pytest.raises(AlreadyExistsError):
+            async with savepoint(session):
+                await create(session, _ConnTestUnique, slug="taken")
+        await create(session, _ConnTestUnique, slug="next")
+
+    async with open_session() as plain:
+        slugs = set((await plain.execute(sa.select(_ConnTestUnique.slug))).scalars())
+    assert slugs == {"taken", "next"}
 
 
 @pytest.mark.asyncio
-async def test_uninitialised_default_raises_an_apperror_that_is_also_a_runtimeerror():
-    """Dual-inherited like `queue.QueueError`: an `AppError` (so a transport can
-    render it) that still satisfies pre-existing `except RuntimeError`."""
-    from forktex.error import AppError
+async def test_the_session_parameter_may_be_named_something_else(engine_and_session: None) -> None:
+    @with_transactional_session(param="db")
+    async def add_under_another_name(db: AsyncSession, *, name: str) -> None:
+        db.add(_ConnTestWidget(name=name))
 
+    await add_under_another_name(name="renamed")
+    assert await _widget_names() == {"renamed"}
+
+    async with transactional_session() as session:
+        await add_under_another_name(db=session, name="joined")
+        assert await _widget_names() == {"renamed"}
+    assert await _widget_names() == {"renamed", "joined"}
+
+
+def test_a_renamed_session_parameter_must_still_exist() -> None:
+    with pytest.raises(TypeError, match="has no 'db' parameter"):
+
+        @with_transactional_session(param="db")
+        async def no_such_parameter(session: AsyncSession) -> None: ...
+
+
+@pytest.mark.asyncio
+async def test_an_owned_handle_hands_out_both_kinds_of_session(postgres_url_str: str) -> None:
+    db = Database(postgres_url_str)
+    try:
+        async with db.transactional_session() as owned:
+            with pytest.raises(TransactionBoundaryError):
+                await owned.commit()
+        async with db.open_session() as unmanaged:
+            await unmanaged.commit()
+    finally:
+        await db.dispose()
+
+
+@pytest.mark.asyncio
+async def test_init_engine_hands_back_nothing_and_open_session_is_the_commit_capable_one(
+    postgres_url_str: str, fresh_schema: str
+) -> None:
+    assert await init_engine(postgres_url_str, schema_translate_map={None: fresh_schema}) is None
+    async with get_engine().begin() as conn:
+        await conn.run_sync(BaseDBModel.metadata.create_all)
+    async with open_session() as raw:
+        raw.add(_ConnTestWidget(name="raw-factory"))
+        await raw.commit()
+    assert await _widget_names() == {"raw-factory"}
     await close_engine()
-    with pytest.raises(RuntimeError, match="not initialized") as exc_info:
-        async with get_session():
-            pass
-    assert isinstance(exc_info.value, AppError)
-    assert exc_info.value.code == "internal"
+
+
+@pytest.mark.asyncio
+async def test_a_handles_sessionmaker_hands_out_a_session_that_commits(postgres_url_str: str) -> None:
+    db = Database(postgres_url_str)
+    try:
+        async with db.sessionmaker() as raw:
+            await raw.execute(sa.text("SELECT 1"))
+            await raw.commit()
+            await raw.rollback()
+    finally:
+        await db.dispose()

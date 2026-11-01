@@ -21,7 +21,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Log formatters: JSON (Loki-compatible) and human-readable (dev)."""
 
 from __future__ import annotations
 
@@ -33,8 +32,6 @@ from typing import Any
 
 from forktex.iso import to_iso
 
-# Fields that are part of the standard LogRecord but should NOT be forwarded
-# as extra structured fields — they're either already mapped or are internal.
 _SKIP_FIELDS = frozenset(
     {
         "name",
@@ -68,39 +65,10 @@ _SKIP_FIELDS = frozenset(
 )
 
 
-#: Anything that could break a single-line text record: newlines, carriage
-#: returns, tabs, and the rest of the C0/C1 control range.
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 class JsonFormatter(logging.Formatter):
-    """JSON log formatter for structured Loki ingestion.
-
-    Output per line (newline-delimited JSON)::
-
-        {
-          "timestamp": "2026-05-02T14:30:00.123456+00:00",
-          "level": "INFO",
-          "logger": "network.crm.contacts",
-          "service": "network",
-          "message": "contact created",
-          "trace_id": "req-abc-123",
-          "org_id": "org-xyz",
-          "exception": "Traceback (most recent call last): ..."   // only on error
-        }
-
-    Loki label recommendations:
-      - ``service`` — log stream selector (low cardinality)
-      - ``level`` — stream selector
-      - ``trace_id`` — structured metadata query (not label)
-
-    Precedence: core fields (``timestamp``/``level``/``logger``/``service``/
-    ``message``/``trace_id``/``root_trace_id``/``exception``) always win. A ``log_context()`` or
-    ``extra={}`` field with a colliding name is silently dropped rather than
-    overwriting the real value — e.g. ``extra={"level": "spoofed"}`` never
-    changes the record's actual ``level``.
-    """
-
     def format(self, record: logging.LogRecord) -> str:
         ts = to_iso(datetime.fromtimestamp(record.created, tz=UTC))
         doc: dict[str, Any] = {
@@ -108,15 +76,12 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
         }
-        # `service` is injected onto the record by _ContextFilter (single source).
         service = getattr(record, "service", None)
         if service:
             doc["service"] = service
 
         doc["message"] = record.getMessage()
 
-        # Always emitted when the filter ran: this is the field that makes every
-        # line attributable, including lines logged outside any trace scope.
         run_id = getattr(record, "run_id", None)
         if run_id:
             doc["run_id"] = run_id
@@ -144,13 +109,6 @@ class JsonFormatter(logging.Formatter):
 
 
 class HumanFormatter(logging.Formatter):
-    """Readable formatter for local development.
-
-    Output::
-
-        2026-05-02 14:30:00 | INFO     | network.crm | [req-abc] contact created
-    """
-
     FMT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
     DATEFMT = "%Y-%m-%d %H:%M:%S"
 
@@ -161,14 +119,7 @@ class HumanFormatter(logging.Formatter):
         trace_id = getattr(record, "trace_id", None)
         if not trace_id:
             return super().format(record)
-        # Escape before interpolating: this formatter writes trace_id into a raw
-        # text line, so a newline in it splices a forged record into the stream.
-        # `TraceIDMiddleware` screens inbound headers, but a trace id can also come
-        # from `trace_context()`, a CLI argument, or a queue job's payload — none of
-        # which it sees. Defending at the sink covers every source.
         trace_id = _CONTROL_CHARS.sub("?", str(trace_id))
-        # Prefix the trace id without permanently mutating the shared record
-        # (a record may be handled by multiple handlers).
         original = record.msg
         record.msg = f"[{trace_id}] {record.msg}"
         try:

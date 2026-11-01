@@ -21,34 +21,23 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""PostgreSQL async primitives — the foundation the substrate packages build on.
 
-Connection handling, base models, CRUD, migrations, locks, identifier
-validation, constraint-error translation, reflection, and DDL constructs.
-``grid``/``flow``/``space`` are expected to reuse these rather than
-reimplementing them.
-
-``ddl``, ``filters`` and ``reflect`` are imported as modules rather than flattened
-into this namespace, because names like ``CreateTable``/``columns``/``FilterOp`` read
-better qualified::
-
-    from forktex.database import ddl, filters, reflect
-
-    await conn.execute(ddl.AddColumn(col, if_not_exists=True))
-    present = await reflect.columns(session, "my_table", schema="public")
-"""
-
-from forktex.database import ddl, filters, reflect
+from forktex.database import crud, ddl, filters, identifiers, integrity, reflect
 from forktex.database.connection import (
     Database,
     close_engine,
-    get_session,
+    default,
+    get_engine,
     init_engine,
-    session_scope,
+    open_session,
+    require_default,
+    savepoint,
+    transactional_session,
+    verify,
     with_transactional_session,
+    yield_transactional_session,
 )
 from forktex.database.crud import (
-    ConflictError,
     PageResponse,
     ScrollResponse,
     create,
@@ -58,7 +47,15 @@ from forktex.database.crud import (
     paginate,
     paginate_scroll,
 )
-from forktex.database.errors import DatabaseNotInitializedError
+from forktex.database.errors import (
+    DatabaseNotInitializedError,
+    DatabaseUnreachableError,
+    InvalidAdvisoryKeyError,
+    InvalidKeysetError,
+    InvalidSchemaChangeError,
+    MigrationError,
+    TransactionBoundaryError,
+)
 from forktex.database.identifiers import (
     is_identifier,
     validate_identifier,
@@ -82,7 +79,7 @@ from forktex.database.models import (
     NamespacedMixin,
     ReprMixin,
     TimestampMixin,
-    UtcDateTime,
+    UtcTimestamp,
     substrate_base,
 )
 from forktex.database.pagination import (
@@ -95,10 +92,14 @@ from forktex.database.pagination import (
 __all__ = [
     "AuditMixin",
     "BaseDBModel",
-    "ConflictError",
     "Database",
     "DatabaseNotInitializedError",
+    "DatabaseUnreachableError",
+    "InvalidAdvisoryKeyError",
+    "InvalidKeysetError",
+    "InvalidSchemaChangeError",
     "JsonModelColumn",
+    "MigrationError",
     "NamespacedMixin",
     "Page",
     "PageResponse",
@@ -106,35 +107,45 @@ __all__ = [
     "SchemaMigrationRunner",
     "ScrollResponse",
     "TimestampMixin",
-    "UtcDateTime",
+    "TransactionBoundaryError",
+    "UtcTimestamp",
     "advisory_key",
     "advisory_lock",
     "close_engine",
     "create",
+    "crud",
     "ddl",
     "decode_cursor",
+    "default",
     "encode_cursor",
     "filters",
     "find_one_by",
     "get",
-    "get_session",
+    "get_engine",
+    "identifiers",
     "init_engine",
+    "integrity",
     "integrity_boundary",
     "is_identifier",
     "key_from_uuid",
     "keyset_predicate",
     "list_all",
+    "open_session",
     "paginate",
     "paginate_scroll",
     "read_boundary",
     "reflect",
-    "session_scope",
+    "require_default",
+    "savepoint",
     "substrate_base",
+    "transactional_session",
     "try_advisory_lock",
     "validate_identifier",
     "validate_relation",
     "validate_schema",
     "validate_slug",
+    "verify",
     "with_transactional_session",
     "xact_lock",
+    "yield_transactional_session",
 ]

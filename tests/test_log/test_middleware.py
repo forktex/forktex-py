@@ -21,12 +21,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Tests for forktex.log.TraceIDMiddleware — pure-ASGI, no starlette/fastapi
-dependency. Uses hand-rolled scope/receive/send doubles rather than a real ASGI
-app, since the middleware's contract is defined purely in ASGI terms."""
 
 from __future__ import annotations
 
+from starlette.types import Message, Receive, Scope, Send
 import pytest
 
 from forktex.log import TraceIDMiddleware, get_root_trace_id, get_trace_id
@@ -35,13 +33,13 @@ from forktex.log import TraceIDMiddleware, get_root_trace_id, get_trace_id
 async def _run_middleware(header_value: bytes | None) -> str | None:
     captured: list[str | None] = []
 
-    async def app(scope, receive, send):
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
         captured.append(get_trace_id())
 
-    async def receive():
+    async def receive() -> Message:
         return {"type": "http.request"}
 
-    async def send(message):
+    async def send(message: Message) -> None:
         pass
 
     headers = [(b"x-request-id", header_value)] if header_value is not None else []
@@ -51,36 +49,36 @@ async def _run_middleware(header_value: bytes | None) -> str | None:
 
 
 @pytest.mark.asyncio
-async def test_trace_id_middleware_sanitizes_injected_header():
+async def test_trace_id_middleware_sanitizes_injected_header() -> None:
     trace_id = await _run_middleware(b"abc\n2026-01-01 FAKE LOG LINE")
     assert "\n" not in (trace_id or "")
     assert trace_id != "abc\n2026-01-01 FAKE LOG LINE"
 
 
 @pytest.mark.asyncio
-async def test_trace_id_middleware_accepts_valid_header():
+async def test_trace_id_middleware_accepts_valid_header() -> None:
     trace_id = await _run_middleware(b"req-abc-123")
     assert trace_id == "req-abc-123"
 
 
 @pytest.mark.asyncio
-async def test_trace_id_middleware_mints_uuid_when_header_absent():
+async def test_trace_id_middleware_mints_uuid_when_header_absent() -> None:
     trace_id = await _run_middleware(None)
     assert trace_id is not None
-    assert len(trace_id) == 36  # uuid string form
+    assert len(trace_id) == 36
 
 
 @pytest.mark.asyncio
-async def test_trace_id_middleware_echoes_header_on_response():
-    async def app(scope, receive, send):
+async def test_trace_id_middleware_echoes_header_on_response() -> None:
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
         await send({"type": "http.response.start", "status": 200, "headers": []})
 
     sent: list[dict] = []
 
-    async def receive():
+    async def receive() -> Message:
         return {"type": "http.request"}
 
-    async def send(message):
+    async def send(message: Message) -> None:
         sent.append(message)
 
     middleware = TraceIDMiddleware(app)
@@ -91,61 +89,60 @@ async def test_trace_id_middleware_echoes_header_on_response():
 
 
 @pytest.mark.asyncio
-async def test_trace_id_middleware_custom_header_name():
+async def test_trace_id_middleware_custom_header_name() -> None:
     captured: list[str | None] = []
 
-    async def app(scope, receive, send):
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
         captured.append(get_trace_id())
 
-    async def receive():
+    async def receive() -> Message:
         return {"type": "http.request"}
 
-    async def send(message):
+    async def send(message: Message) -> None:
         pass
 
     middleware = TraceIDMiddleware(app, header="X-Trace-ID")
     await middleware({"type": "http", "headers": [(b"x-trace-id", b"custom-header-value")]}, receive, send)
     assert captured[0] == "custom-header-value"
 
-    # A request-id header under the *default* name is ignored when a custom header is configured.
     captured.clear()
     await middleware({"type": "http", "headers": [(b"x-request-id", b"ignored")]}, receive, send)
     assert captured[0] != "ignored"
 
 
 @pytest.mark.asyncio
-async def test_trace_id_middleware_passes_through_non_http_scopes():
+async def test_trace_id_middleware_passes_through_non_http_scopes() -> None:
     calls = []
 
-    async def app(scope, receive, send):
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
         calls.append(scope["type"])
 
-    async def receive():
+    async def receive() -> Message:
         return {"type": "lifespan.startup"}
 
-    async def send(message):
+    async def send(message: Message) -> None:
         pass
 
     middleware = TraceIDMiddleware(app)
     await middleware({"type": "lifespan"}, receive, send)
     assert calls == ["lifespan"]
-    assert get_trace_id() is None  # trace_context is never entered for non-http scopes
+    assert get_trace_id() is None
 
 
 @pytest.mark.asyncio
-async def test_trace_id_middleware_establishes_root_trace_id():
+async def test_trace_id_middleware_establishes_root_trace_id() -> None:
     captured: list[str | None] = []
 
-    async def app(scope, receive, send):
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
         captured.append(get_root_trace_id())
 
-    async def receive():
+    async def receive() -> Message:
         return {"type": "http.request"}
 
-    async def send(message):
+    async def send(message: Message) -> None:
         pass
 
     middleware = TraceIDMiddleware(app)
     await middleware({"type": "http", "headers": []}, receive, send)
     assert captured[0] is not None
-    assert get_root_trace_id() is None  # restored after the request
+    assert get_root_trace_id() is None
