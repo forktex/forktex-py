@@ -266,3 +266,89 @@ async def test_a_failing_migration_raises_a_named_error_and_records_no_version(
         recorded = await conn.execute(sa.text(f'SELECT count(*) FROM "{fresh_schema}".schema_version'))
         assert recorded.scalar_one() == 0
     await engine.dispose()
+
+
+async def test_an_edited_applied_migration_is_refused(postgres_url_str: str, fresh_schema: str, tmp_path: Path) -> None:
+    """A database never re-runs an applied migration, so an edit to one is never
+    reflected: the file and the schema disagree from then on, in silence, and
+    the next migration builds on an assumption that was never true.
+    """
+    from forktex.database.errors import MigrationError
+    from forktex.database.migrate import SchemaMigrationRunner
+
+    mdir = tmp_path / "migrations"
+    mdir.mkdir()
+    migration = mdir / "v0001__a.sql"
+    migration.write_text('CREATE TABLE "{schema}".a (id int);\n')
+    engine = create_async_engine(postgres_url_str)
+    runner = SchemaMigrationRunner(engine, schema=fresh_schema, migrations_dir=mdir)
+    await runner.apply()
+
+    migration.write_text('CREATE TABLE "{schema}".a (id int, extra text);\n')
+    with pytest.raises(MigrationError, match="has changed since it was applied"):
+        await runner.apply()
+    await engine.dispose()
+
+
+async def test_a_migration_numbered_below_the_highest_applied_is_refused(
+    postgres_url_str: str, fresh_schema: str, tmp_path: Path
+) -> None:
+    """Two branches merging produce this: the runner compared version numbers
+    for membership only, so a late-arriving v0002 was applied after v0003 and
+    the version table read as though nothing had happened.
+    """
+    from forktex.database.errors import MigrationError
+    from forktex.database.migrate import SchemaMigrationRunner
+
+    mdir = tmp_path / "migrations"
+    mdir.mkdir()
+    (mdir / "v0003__later.sql").write_text('CREATE TABLE "{schema}".c (id int);\n')
+    engine = create_async_engine(postgres_url_str)
+    runner = SchemaMigrationRunner(engine, schema=fresh_schema, migrations_dir=mdir)
+    await runner.apply()
+
+    (mdir / "v0002__earlier.sql").write_text('CREATE TABLE "{schema}".b (id int);\n')
+    with pytest.raises(MigrationError, match="numbered below"):
+        await runner.apply()
+    await engine.dispose()
+
+
+async def test_a_version_table_predating_checksums_still_applies(
+    postgres_url_str: str, fresh_schema: str, tmp_path: Path
+) -> None:
+    """The column is added to an existing table, and a row written before it
+    existed records no checksum — so it cannot be verified and must not be
+    rejected for that."""
+    from forktex.database.migrate import SchemaMigrationRunner
+
+    mdir = tmp_path / "migrations"
+    mdir.mkdir()
+    migration = mdir / "v0001__a.sql"
+    migration.write_text('CREATE TABLE "{schema}".a (id int);\n')
+    engine = create_async_engine(postgres_url_str)
+
+    async with engine.begin() as conn:
+        await conn.execute(sa.schema.CreateSchema(fresh_schema, if_not_exists=True))
+        await conn.execute(
+            sa.text(
+                f'CREATE TABLE "{fresh_schema}".schema_version '
+                "(version int primary key, applied_at timestamptz not null default now())"
+            )
+        )
+        await conn.execute(sa.text(f'INSERT INTO "{fresh_schema}".schema_version (version) VALUES (1)'))
+        await conn.execute(sa.text(f'CREATE TABLE "{fresh_schema}".a (id int)'))
+
+    runner = SchemaMigrationRunner(engine, schema=fresh_schema, migrations_dir=mdir)
+    migration.write_text('CREATE TABLE "{schema}".a (id int, x text);\n')
+    await runner.apply()
+
+    (mdir / "v0002__b.sql").write_text('CREATE TABLE "{schema}".b (id int);\n')
+    await runner.apply()
+    async with engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                sa.text(f'SELECT version, checksum IS NOT NULL FROM "{fresh_schema}".schema_version ORDER BY version')
+            )
+        ).fetchall()
+    assert [tuple(r) for r in rows] == [(1, False), (2, True)]
+    await engine.dispose()

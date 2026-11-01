@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.schema import CreateSchema, CreateTable
 
+from forktex.database.ddl import AddColumn
 from forktex.database.errors import MigrationError
 from forktex.database.identifiers import validate_identifier, validate_schema
 from forktex.database.locks import advisory_key, advisory_lock
@@ -93,6 +95,9 @@ class SchemaMigrationRunner:
                 nullable=False,
                 server_default=sa.func.now(),
             ),
+            # Nullable: a table created before checksums existed carries rows
+            # that cannot be verified, and must not be rejected for it.
+            sa.Column("checksum", sa.Text, nullable=True),
             schema=self._target,
         )
 
@@ -101,24 +106,58 @@ class SchemaMigrationRunner:
         async with self._engine.begin() as conn:
             await conn.execute(CreateSchema(self._target, if_not_exists=True))
             await conn.execute(CreateTable(table, if_not_exists=True))
+            # `if_not_exists` leaves an existing table alone, so a database
+            # whose version table predates the checksum column has to be given
+            # it here rather than at creation.
+            await conn.execute(AddColumn(table.c.checksum, if_not_exists=True))
 
-    async def _read_applied(self) -> set[int]:
+    async def _read_applied(self) -> dict[int, str | None]:
         table = self._version_table_construct()
         async with self._engine.connect() as conn:
-            result = await conn.execute(sa.select(table.c.version))
-            return {row[0] for row in result.fetchall()}
+            result = await conn.execute(sa.select(table.c.version, table.c.checksum))
+            return {row[0]: row[1] for row in result.fetchall()}
 
     async def _apply_pending(self) -> None:
         applied = await self._read_applied()
+        highest = max(applied, default=0)
         for version, path in self._list_migrations():
-            if version not in applied:
-                await self._apply(version, path)
+            if version in applied:
+                self._verify_unchanged(version, path, applied[version])
+                continue
+            if version < highest:
+                raise MigrationError(
+                    f"migration {path.name!r} is numbered below v{highest:04d}, which this database "
+                    "has already applied; applying it now would build the schema out of order. "
+                    "Renumber it above the highest applied version."
+                )
+            await self._apply(version, path)
+
+    def _verify_unchanged(self, version: int, path: Path, recorded: str | None) -> None:
+        """Refuse a migration whose content has changed since it was applied.
+
+        A database does not re-run an applied migration, so an edit to one is
+        never reflected: the file and the schema disagree from then on, in
+        silence, and the next deploy builds on an assumption that was never
+        true. Rows written before checksums existed record ``None`` and cannot
+        be checked.
+        """
+        if recorded is None:
+            return
+        current = _checksum(path)
+        if current != recorded:
+            raise MigrationError(
+                f"migration {path.name!r} has changed since it was applied to this database "
+                f"(recorded {recorded[:12]}, now {current[:12]}). An applied migration is never "
+                "re-run, so the schema does not reflect this edit. Write the next migration instead."
+            )
 
     async def _apply(self, version: int, path: Path) -> None:
         logger.info("%s: applying migration v%04d (%s)", self._schema, version, path.name)
         try:
             async with self._engine.begin() as conn:
-                await conn.execute(sa.insert(self._version_table_construct()).values(version=version))
+                await conn.execute(
+                    sa.insert(self._version_table_construct()).values(version=version, checksum=_checksum(path))
+                )
                 await _execute_script(conn, self._script(path))
         except AppError:
             raise
@@ -128,6 +167,15 @@ class SchemaMigrationRunner:
 
     def _script(self, path: Path) -> str:
         return path.read_text(encoding="utf-8").replace("{schema}", self._target)
+
+
+def _checksum(path: Path) -> str:
+    """The migration's content hash.
+
+    Taken before ``{schema}`` is substituted, so one migration applied to two
+    schemas records one value.
+    """
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _migration_version(path: Path) -> int:

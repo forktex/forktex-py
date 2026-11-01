@@ -6,6 +6,23 @@ Each entry says what to change.
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-11-01
+
+### Breaking
+
+**`SchemaMigrationRunner` verifies what it already applied.** The version table gains a
+nullable `checksum` column, added to an existing table on the next `apply()`.
+
+- A migration whose content changed since it was applied raises `MigrationError`. A database
+  never re-runs an applied migration, so the edit was never reflected and the file and the
+  schema disagreed in silence.
+- A pending migration numbered below the highest applied version raises `MigrationError`. It
+  was applied out of order — the shape two merged branches produce — and the version table
+  read as though nothing had happened.
+- Rows written before this release record no checksum and are not verified, so an existing
+  database keeps working. New migrations record one.
+
+
 ## [0.13.0] — 2026-11-01
 
 `forktex` is eight modules and one install. The modules with no consumer, or one consumer using a

@@ -230,6 +230,12 @@ await SchemaMigrationRunner(engine, schema="my_lib", migrations_dir=Path(__file_
   and `VACUUM` cannot be used.
 - A file may hold several statements, over asyncpg's simple-query protocol, which accepts no bind
   parameters. Write literals.
+- An applied migration whose content has since changed raises `MigrationError`. A database does
+  not re-run one, so an edit never reaches the schema. Write the next migration instead.
+- A pending migration numbered below the highest applied version raises `MigrationError`, rather
+  than being applied out of order. Renumber it above that version.
+- Both checks read a `checksum` column added to the version table on the next `apply()`. Rows
+  written before it existed record none and are not verified.
 - Concurrent callers serialise on an advisory lock; safe to call from every worker on startup.
 - `target_schema=` runs the DDL elsewhere; `version_table=` renames the tracking table. Runners
   sharing a target schema need distinct version tables.
