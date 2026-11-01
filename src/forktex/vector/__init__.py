@@ -47,6 +47,10 @@ def register(name: str, qdrant_url: str, *, api_key: str | None = None) -> Vecto
     return _registry.set(name, Vector(qdrant_url=qdrant_url, api_key=api_key))
 
 
+def default() -> Vector:
+    return get_client()
+
+
 def get_client(name: str = "default") -> Vector:
     return _registry.get(name)
 
@@ -68,6 +72,7 @@ __all__ = [
     "Vector",
     "VectorError",
     "VectorPoint",
+    "default",
     "deregister",
     "get_client",
     "register",

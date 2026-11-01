@@ -44,7 +44,6 @@ pip install forktex
 | Module | Extra | What it is |
 | --- | --- | --- |
 | [`api`](docs/api.md) | `[api]` | FastAPI app factory: middleware stack, error envelope, health probes |
-| [`worker`](docs/worker.md) | `[worker]` | Queue-consumer hosts: standalone process, embedded in a lifespan, process pool |
 
 Install extras as needed — `pip install "forktex[storage,vector]"`, or
 `pip install "forktex[all]"` for everything.

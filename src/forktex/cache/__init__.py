@@ -23,7 +23,7 @@
 
 
 from forktex.cache.cache import Cache
-from forktex.cache.connection import available, close, get_client, init
+from forktex.cache.connection import available, close, default, get_client, init, require_default
 from forktex.cache.decorators import cached
 from forktex.cache.errors import CacheError, CacheInitializationError, CacheNotInitializedError
 from forktex.cache.namespaces import CachePrefix, key_for
@@ -48,6 +48,7 @@ __all__ = [
     "available",
     "cached",
     "close",
+    "default",
     "delete",
     "deserialize",
     "fetch_or_set",
@@ -58,6 +59,7 @@ __all__ = [
     "invalidate_key",
     "invalidate_prefix",
     "key_for",
+    "require_default",
     "serialize",
     "set",
     "shutdown_background_tasks",

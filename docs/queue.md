@@ -111,7 +111,7 @@ if __name__ == "__main__":
 | `cancel_job(job_id, *, queue_name="default") -> bool` | Signal abort, wait up to 1s for confirmation. |
 | `list_jobs(queue_name="default", *, status: JobStatus \| None = None) -> list[JobInfo]` | Jobs still in the queue's sorted set (queued or deferred). |
 | `worker_health(redis_url=None, *, queue_name="default") -> QueueHealth` | `pending`, `in_flight`, `failed`. |
-| `make_worker(redis_url, *, queue_name="default", max_jobs=10, job_timeout=300, handle_signals=True, drain_timeout=0) -> arq.Worker` | Build a worker over every registered `@task`, with `allow_abort_jobs=True`. `drain_timeout` reaches arq as `job_completion_wait` — see the gotcha below. |
+| `make_worker(redis_url, *, queue_name="default", max_jobs=10, job_timeout=300, handle_signals=True, drain_timeout=0, poll_delay=0.5) -> arq.Worker` | Build a worker over every registered `@task`, with `allow_abort_jobs=True`. `drain_timeout` reaches arq as `job_completion_wait` — see the gotcha below. Raises `QueueError` for a URL that is not `redis://`, `rediss://` or `unix://`, and for one arq cannot parse. |
 | `QueueError` | See below. |
 | `DEFAULT_QUEUE` | `"default"` — the queue a bare `enqueue` and `@task` use, and arq's own default. |
 | `require_default() -> Queue` | The default handle, or `QueueError`. `default()` returns `None` instead of raising. |
@@ -159,7 +159,7 @@ Two consequences worth knowing:
 - **`drain_timeout=0` (the default) kills in-flight jobs on SIGTERM.** It is 0 because that is
   arq's own default, and arq installs its immediate-cancel signal handler unless the value is
   non-zero. Any worker meant to survive a rolling deploy needs a real value — set it below your
-  orchestrator's grace period. [`forktex.worker`](worker.md) defaults it to 30 s for you.
+  orchestrator's grace period. Nothing sets it for you.
 - **`make_worker()` at module level breaks.** Construct it inside the running loop; a module-level instance binds arq's Redis objects to the import-time loop and fails with "attached to a different loop".
 - **Registration is import-side-effect only.** If the worker entrypoint does not import the task modules, the worker starts with an empty function list and jobs sit in Redis forever. Keep the `# noqa: F401` import.
 - **Registries are per-process.** `storage`, `cache`, and `vector` clients registered in the API process do not exist in the worker; re-register them before consuming.

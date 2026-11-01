@@ -82,6 +82,7 @@ from forktex.storage import (
 | Name | Description |
 |---|---|
 | `register(name, url, bucket, access_key, secret_key, *, region="us-east-1", public_url=None)` | Build and store a named client; returns it. |
+| `default()` | The `"default"` client — what the module-level operations use. |
 | `get_client(name="default")` | Look up a registered client. |
 | `deregister(name="default")` | Drop a name; returns the dropped client or `None`. Idempotent. |
 | `init(...)` | Async. `register("default", ...)` with the same arguments. |

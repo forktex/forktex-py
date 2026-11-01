@@ -22,7 +22,8 @@ ImportError: Install 'forktex[vector]' (qdrant-client) to use forktex.vector
 ## Wiring
 
 `register(name, qdrant_url, *, api_key=None)` builds a `Vector` and keeps it under that name;
-`get_client(name)` fetches it, `deregister(name)` drops it. There is no `init()` or `close()`:
+`get_client(name)` fetches it, `default()` fetches the `"default"` one, `deregister(name)` drops it.
+There is no `init()` or `close()`:
 `Vector` holds no connection, and a fresh `AsyncQdrantClient` is opened and closed per operation.
 
 ```python

@@ -76,7 +76,7 @@ smoke: ## Install the BUILT wheel into a throwaway venv and import every extra
 		$$TMP/base/bin/python -c "import forktex.$$m" || { echo "  ✗ base import forktex.$$m"; exit 1; }; \
 	done; \
 	echo "  base modules import"; \
-	for x in vault storage queue vector store api worker; do \
+	for x in vault storage queue vector store api; do \
 		$$PY -m venv $$TMP/$$x >/dev/null; \
 		$$TMP/$$x/bin/pip install -q "$$WHL[$$x]" 2>&1 | tee $$TMP/$$x.log; \
 		if grep -q "does not provide the extra" $$TMP/$$x.log; then echo "  ✗ [$$x] undeclared"; exit 1; fi; \

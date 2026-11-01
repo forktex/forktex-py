@@ -166,6 +166,3 @@ still yields FastAPI's standard 422.
 - To keep the health routes out of a generated SDK, set `include_in_schema = False` on them.
 - `/health/ready` returns 503 **with a body**; read `checks` for which dependency failed.
 
-## Running background work in the same app
-
-See [worker.md](worker.md#running-a-worker-inside-a-fastapi-app).

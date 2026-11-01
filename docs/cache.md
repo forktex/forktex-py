@@ -71,6 +71,8 @@ from forktex.cache import (
 | `init(url)` | Async. Create the client from a Redis URL and `PING` it. |
 | `close()` | Async. Close the client and clear the global. Idempotent. |
 | `available()` | `True` if the client global is set. |
+| `default()` | The process-wide `Cache`, or `None` before `init()`. |
+| `require_default()` | The same, raising `CacheNotInitializedError` instead of returning `None`. |
 | `get_client()` | The raw `redis.asyncio.Redis`. Raises if `init()` has not run. |
 | `get(key)` | Async. Value or `None`. |
 | `set(key, value, ex)` | Async. Write with a TTL in seconds. |

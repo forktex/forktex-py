@@ -47,7 +47,6 @@ PACKAGES = [
     "types",
     "vault",
     "vector",
-    "worker",
 ]
 
 _EXTRA_BACKED = {
@@ -56,7 +55,6 @@ _EXTRA_BACKED = {
     "storage": ("aioboto3", "botocore"),
     "queue": ("arq",),
     "vector": ("qdrant_client",),
-    "worker": ("arq",),
     "store": ("pymongo",),
 }
 

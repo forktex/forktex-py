@@ -52,6 +52,10 @@ def register(name: str, url: str, database: str) -> StoreClient:
     return _registry.set(name, StoreClient(StoreConfig(url=url, database=database)))
 
 
+def default() -> StoreClient:
+    return get_client()
+
+
 def get_client(name: str = "default") -> StoreClient:
     return _registry.get(name)
 
@@ -139,6 +143,7 @@ __all__ = [
     "StoreError",
     "close",
     "count",
+    "default",
     "delete_one",
     "deregister",
     "find",

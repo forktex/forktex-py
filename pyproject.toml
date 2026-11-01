@@ -72,7 +72,6 @@ cache    = []                          # redis is a core dep
 database = []                          # sqlalchemy/asyncpg are core deps
 graph    = []                          # pure in-memory algebra, no extra deps
 api      = ["fastapi>=0.115"]
-worker   = ["arq>=0.26"]                # same consumer dep as [queue]
 vault    = ["cryptography>=42.0"]
 storage  = ["aioboto3>=13.0"]
 queue    = ["arq>=0.26"]

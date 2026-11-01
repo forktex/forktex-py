@@ -8,23 +8,25 @@ Internal documentation for contributors and maintainers. Library consumers do no
 
 ```
 primitives      log · error · types · iso
-role facades    database · cache · queue · storage · store · vector · vault · graph
+mechanics       registry
+facades         api · cache · database · graph · queue · storage · store · vault · vector · worker
 
-database    ← vault     (EncryptedJSON TypeDecorator)
-cache       ← queue     (Redis as arq backend)
-─────────────────────────────────────────────────
 iso         ← types     (UtcDateTime / UtcDate serialise through iso)
 types       ← error     (ErrorEnvelope is a BaseAppModel)
 iso         ← log       (canonical UTC timestamp formatting)
 ─────────────────────────────────────────────────
-storage, store, vector, graph  →  no deps on other forktex modules
+no facade imports another facade
 ```
+
+`vault` composes with `database` at the consumer's call site (`EncryptedJSON` takes a `Vault`), and
+`worker` composes with `queue` through the `Consumer` protocol — structurally, with no import
+either way. Both are deliberate: a facade-to-facade import would make one extra pull in another.
 
 Two rules, enforced by `tests/test_architecture/test_layering.py`:
 
 - **A primitive never imports a facade.** The three primitive↔primitive edges above are the only ones.
-- **A facade never imports another facade**, except the two above. Peers compose in the consumer's
-  own service.
+- **A facade never imports another facade.** Peers compose in the consumer's own service, or
+  through a protocol one of them defines and the other satisfies structurally.
 
 ---
 
@@ -44,6 +46,17 @@ migration. Consumers that cannot create schemas route them to public with
 **`schema_translate_map` key for default-schema tables is `None`, not `"public"`.** Tables with `schema=None` (no explicit schema) are remapped by the `None` key. Using `"public"` as the key has no effect on those tables.
 
 **`ContextVar` defaults must be immutable.** A mutable default (e.g. `ContextVar("x", default={})`) creates one shared dict for all coroutines that never set the var — mutations leak across task boundaries. Pattern: `ContextVar("x", default=None)` + factory in getter.
+
+**One name for the process-wide handle: `default()`.** Every facade that owns one exports
+`default()` returning its own handle type — `Database`, `Cache`, `Queue`, `StorageClient`,
+`StoreClient`, `Vector` — plus `require_default()` where a missing one should raise rather than
+return `None`. `get_engine()` and `get_client()` stay for the *driver* object underneath, which is
+a different thing and is what advisory locks and raw Redis calls need.
+
+The lifecycle names deliberately differ: `database` uses `init_engine`/`close_engine` because
+consumers import it bare, while `cache`, `queue`, `storage` and `store` use `init`/`close` because
+consumers reach them module-qualified (`await cache.init(...)`). Unifying on `init` would make
+`from forktex.database import init` and `from forktex.cache import init` collide in the same module.
 
 **Identifiers are UUIDv7**, declared as the column default so a raw `INSERT` gets the same shape:
 

@@ -63,7 +63,6 @@ LIBRARY: tuple[ModuleLayer, ...] = (
     ModuleLayer(name="store", level=Level.FACADE),
     ModuleLayer(name="vault", level=Level.FACADE),
     ModuleLayer(name="vector", level=Level.FACADE),
-    ModuleLayer(name="worker", level=Level.FACADE),
 )
 
 
@@ -96,6 +95,8 @@ def _forktex_imports(path: pathlib.Path) -> set[tuple[int, str]]:
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             targets = [node.module] if node.module else []
+            if node.module == "forktex":
+                targets += [f"forktex.{alias.name}" for alias in node.names]
         elif isinstance(node, ast.Import):
             targets = [alias.name for alias in node.names]
         else:

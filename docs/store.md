@@ -80,6 +80,7 @@ from forktex.store import (
 | Name | Description |
 |---|---|
 | `register(name, url, database)` | Build and store a named client; returns it. |
+| `default()` | The `"default"` client — what the module-level operations use. |
 | `get_client(name="default")` | Look up a registered client. |
 | `init(url, database)` | Async. `register("default", ...)`. |
 | `close(name="default")` | Async. Deregister *and* `await client.close()`. Idempotent. |

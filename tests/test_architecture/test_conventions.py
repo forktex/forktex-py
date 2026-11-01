@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import ast
 import importlib
+import inspect
 import pathlib
+import textwrap
 
 import pytest
 
@@ -252,3 +254,32 @@ def test_every_module_ends_with_its_all(package: str) -> None:
         if not (isinstance(last, ast.Assign) and any(getattr(t, "id", None) == "__all__" for t in last.targets)):
             misplaced.append(f"{path.name} declares __all__ at line {body[names.index('__all__')].lineno}, not last")
     assert misplaced == [], f"forktex.{package}: {misplaced}"
+
+
+# Both deregister a per-call client and have nothing to await; they stay `async`
+# so a lifespan teardown reads the same for every facade.
+_AWAITS_NOTHING = {
+    ("storage", "close"),
+    ("store", "init"),
+}
+
+
+@pytest.mark.parametrize("package", PACKAGES)
+def test_an_async_entry_point_awaits_something(package: str) -> None:
+    module = importlib.import_module(f"forktex.{package}")
+    misleading: list[str] = []
+    for name in sorted(getattr(module, "__all__", ())):
+        target = getattr(module, name, None)
+        if not inspect.iscoroutinefunction(target) or (package, name) in _AWAITS_NOTHING:
+            continue
+        try:
+            tree = ast.parse(textwrap.dedent(inspect.getsource(target)))
+        except OSError, SyntaxError:
+            continue
+        if not any(isinstance(node, ast.Await | ast.AsyncWith | ast.AsyncFor) for node in ast.walk(tree)):
+            misleading.append(name)
+    assert misleading == [], (
+        f"forktex.{package}: {misleading} are `async def` but await nothing, so a caller that "
+        f"awaits them in a lifespan believes work was done and a failure would have surfaced. "
+        f"Make them sync, or make them do the check their name implies"
+    )

@@ -51,6 +51,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_REDIS_SCHEMES = ("redis://", "rediss://", "unix://")
+
 _TRACE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 _registry: dict[str, Callable] = {}
@@ -160,17 +162,25 @@ def make_worker(
     job_timeout: int = 300,
     handle_signals: bool = True,
     drain_timeout: int = 0,
+    poll_delay: float = 0.5,
 ) -> Worker:
+    if not redis_url.startswith(_REDIS_SCHEMES):
+        raise QueueError(f"redis_url must start with one of {', '.join(_REDIS_SCHEMES)}, got {redis_url!r}")
     arq = _get_arq()
+    try:
+        settings = arq.connections.RedisSettings.from_dsn(redis_url)
+    except Exception as exc:
+        raise QueueError(f"the broker at {redis_url!r} is unusable: {exc}") from exc
     return arq.Worker(
         functions=[_as_arq_function(fn) for fn in _registry.values()],
-        redis_settings=arq.connections.RedisSettings.from_dsn(redis_url),
+        redis_settings=settings,
         queue_name=queue_name,
         max_jobs=max_jobs,
         job_timeout=job_timeout,
         allow_abort_jobs=True,
         handle_signals=handle_signals,
         job_completion_wait=drain_timeout,
+        poll_delay=poll_delay,
     )
 
 

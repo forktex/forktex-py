@@ -33,10 +33,14 @@ from forktex.storage import (
     ClientNotRegisteredError,
     ObjectNotFoundError,
     StorageClient,
+    StorageError,
+    close,
+    default,
     delete,
     download,
     exists,
     get_client,
+    init,
     presign,
     presign_post,
     register,
@@ -348,3 +352,30 @@ async def test_module_facade_close_is_idempotent_and_deregisters(minio_config: d
 
     with pytest.raises(ClientNotRegisteredError):
         get_client()
+
+
+@pytest.mark.asyncio
+async def test_init_fails_at_boot_when_the_bucket_is_not_reachable(minio_config: dict) -> None:
+    with pytest.raises(StorageError, match="not reachable"):
+        await init(
+            url=minio_config["url"],
+            bucket="a-bucket-that-does-not-exist",
+            access_key=minio_config["access_key"],
+            secret_key=minio_config["secret_key"],
+        )
+    await close()
+
+
+@pytest.mark.asyncio
+async def test_init_succeeds_and_default_hands_back_the_client(minio_config: dict) -> None:
+    await init(
+        url=minio_config["url"],
+        bucket=minio_config["bucket"],
+        access_key=minio_config["access_key"],
+        secret_key=minio_config["secret_key"],
+    )
+    try:
+        assert default() is get_client()
+        await default().verify()
+    finally:
+        await close()

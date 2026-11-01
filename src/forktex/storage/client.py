@@ -137,6 +137,15 @@ class StorageClient:
                 )
                 await s3.put_bucket_policy(Bucket=self._config.bucket, Policy=policy)
 
+    async def verify(self) -> None:
+        from botocore.exceptions import ClientError
+
+        async with self._client() as s3:
+            try:
+                await s3.head_bucket(Bucket=self._config.bucket)
+            except ClientError as exc:
+                raise StorageError("storage bucket is not reachable") from exc
+
     async def upload(
         self,
         key: str,

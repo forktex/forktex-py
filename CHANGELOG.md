@@ -8,6 +8,11 @@ Each entry says what to change. The reasoning lives in `docs/<module>.md`.
 
 ## [0.13.0] — 2026-11-01
 
+### Removed
+
+- **`forktex.worker` is gone**, with the `[worker]` extra. Use `forktex-flow` for scheduled and
+  durable work, and host a consumer in a process you own.
+
 ### Breaking
 
 **`forktex.database`** — [docs/database.md](docs/database.md#sessions-and-transactions)
@@ -36,12 +41,21 @@ Each entry says what to change. The reasoning lives in `docs/<module>.md`.
 
 - `inspect_job`, `list_jobs` and `worker_health` return `JobInfo` / `QueueHealth`, not dicts;
   `list_jobs(status=...)` takes a `JobStatus`.
+- `make_worker()` raises `QueueError` for a `redis_url` that is not `redis://`, `rediss://` or
+  `unix://`, and for one arq cannot parse — where arq raised a bare `RuntimeError` that a
+  transport rendered as a masked 500.
+- `storage.init()` verifies the bucket is reachable before returning, so a wrong endpoint or
+  credential fails at boot instead of on the first upload. It can raise `StorageError`.
 
 ### Added
 
 - `savepoint(session)`, `open_session()`, `get_engine()`, `TransactionBoundaryError`.
+- `default()` on `database`, `cache`, `storage`, `store` and `vector`, matching `queue.default()`:
+  one name on every facade for the process-wide handle. `database.require_default()` is public too,
+  retiring the reach into `_require_default()` a consumer had written.
+- `StorageClient.verify()` — a `head_bucket` reachability check that creates nothing.
+- `make_worker(..., poll_delay=0.5)`.
 - `Cache(url)` and `Queue(url)` — explicit handles; the module functions are shims over one default.
-- `WorkerError` for `forktex.worker` lifecycle misuse (also a `RuntimeError`).
 
 ### Fixed
 
@@ -49,7 +63,6 @@ Each entry says what to change. The reasoning lives in `docs/<module>.md`.
   matched nothing; `inspect_job` returned `"JobStatus.queued"` for `"queued"`.
 - A tampered cursor on a `Numeric` column raised 500 instead of `BadRequestError`.
 - `presign()` emitted SigV2, which Garage, R2 and current AWS regions reject with 403.
-- `forktex.worker` raised bare `RuntimeError` before `start()`, masking as a 500.
 
 ## [0.12.0] — 2026-10-15
 

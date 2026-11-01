@@ -64,6 +64,10 @@ def register(
     return client
 
 
+def default() -> StorageClient:
+    return get_client()
+
+
 def get_client(name: str = "default") -> StorageClient:
     return _registry.get(name)
 
@@ -90,6 +94,7 @@ async def init(
         region=region,
         public_url=public_url,
     )
+    await get_client().verify()
 
 
 async def close(name: str = "default") -> None:
@@ -152,6 +157,7 @@ __all__ = [
     "StorageConfig",
     "StorageError",
     "close",
+    "default",
     "delete",
     "deregister",
     "download",

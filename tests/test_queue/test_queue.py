@@ -420,3 +420,18 @@ async def test_an_over_long_inbound_trace_id_is_rejected(redis_url: str) -> None
 )
 def test_failed_count_reads_arqs_health_string(raw: str | bytes | None, expected: int) -> None:
     assert _failed_count(raw) == expected
+
+
+def test_make_worker_refuses_a_non_redis_dsn() -> None:
+    with pytest.raises(QueueError, match="must start with"):
+        make_worker("postgresql+asyncpg://u:p@localhost:5432/db", queue_name="dsn-check")
+
+
+def test_make_worker_accepts_every_scheme_redis_supports() -> None:
+    for dsn in ("redis://h/0", "rediss://h/0", "unix:///var/run/redis.sock"):
+        assert make_worker(dsn, queue_name="dsn-check") is not None
+
+
+def test_make_worker_wraps_an_unusable_dsn_in_queue_error() -> None:
+    with pytest.raises(QueueError, match="unusable"):
+        make_worker("redis://h:notaport/0", queue_name="dsn-check")

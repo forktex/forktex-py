@@ -139,7 +139,9 @@ knows the module-level default, so a component owning a `Database` uses `db.tran
 | --- | --- |
 | `init_engine(db_url, *, echo=False, schema_translate_map=None, **engine_kwargs)` | Build the process-wide default engine. Returns `None`. |
 | `close_engine()` | Dispose it and clear the handle. |
-| `get_engine()` | The default `AsyncEngine`. |
+| `default()` | The process-wide `Database`, or `None` before `init_engine`. |
+| `require_default()` | The same, raising `DatabaseNotInitializedError` instead of returning `None`. |
+| `get_engine()` | The default `AsyncEngine` — what `advisory_lock` and DDL take. |
 | `Database(url, *, echo=False, schema_translate_map=None, **engine_kwargs)` | An engine and sessionmaker owned explicitly. `.engine`, `.sessionmaker`, `.dispose()`, plus the three session methods. |
 | `transactional_session()` | `async with` — one unit of work. |
 | `yield_transactional_session()` | The same as an async generator, for `Depends`. |

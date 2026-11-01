@@ -117,12 +117,22 @@ async def close_engine() -> None:
         _default = None
 
 
+def default() -> Database | None:
+    return _default
+
+
+def require_default() -> Database:
+    if _default is None:
+        raise DatabaseNotInitializedError("Engine/sessionmaker not initialized — call init_engine() first")
+    return _default
+
+
 def get_engine() -> AsyncEngine:
-    return _require_default().engine
+    return require_default().engine
 
 
 def transactional_session() -> AbstractAsyncContextManager[AsyncSession]:
-    return _require_default().transactional_session()
+    return require_default().transactional_session()
 
 
 async def yield_transactional_session() -> AsyncGenerator[AsyncSession]:
@@ -131,7 +141,7 @@ async def yield_transactional_session() -> AsyncGenerator[AsyncSession]:
 
 
 def open_session() -> AbstractAsyncContextManager[AsyncSession]:
-    return _require_default().open_session()
+    return require_default().open_session()
 
 
 @asynccontextmanager
@@ -220,18 +230,14 @@ async def _open_session(sessionmaker: async_sessionmaker[AsyncSession]) -> Async
 _default: Database | None = None
 
 
-def _require_default() -> Database:
-    if _default is None:
-        raise DatabaseNotInitializedError("Engine/sessionmaker not initialized — call init_engine() first")
-    return _default
-
-
 __all__ = [
     "Database",
     "close_engine",
+    "default",
     "get_engine",
     "init_engine",
     "open_session",
+    "require_default",
     "savepoint",
     "transactional_session",
     "with_transactional_session",

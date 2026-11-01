@@ -103,7 +103,7 @@ boundary copies the context:
 | `threading.Thread` | **no** | a new thread starts with a fresh, empty context |
 | `ThreadPoolExecutor.submit` | **no** | same reason |
 | `loop.run_in_executor` | **no** | unlike `asyncio.to_thread`, it does not copy |
-| any subprocess (`multiprocessing`, `run_worker_pool`) | **no** | contextvars never cross a process |
+| any subprocess (`multiprocessing`, a process pool) | **no** | contextvars never cross a process |
 | `queue.enqueue` → worker job | **yes** | carried explicitly over Redis — see [queue.md](queue.md) |
 
 For the thread boundaries, wrap the callable with `bind_current_context`:

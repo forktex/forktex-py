@@ -115,3 +115,38 @@ def test_no_module_redefines_a_conftest_fixture() -> None:
         "a module-level fixture with a conftest name shadows the shared one, which is how two "
         f"identical database-session fixtures came to exist: {shadowed}"
     )
+
+
+# Substituting a library internal is how a suite stops testing anything: the
+# worker suite replaced forktex.queue with a fake and asserted that kwargs
+# reached it, while never consuming a job. Both entries below inject a failure
+# a real container cannot be made to produce, against a real container.
+_FAULT_INJECTION = {
+    ("test_cache/test_ops.py", "Cache"),
+    ("test_queue/test_queue.py", "q"),
+}
+
+
+def test_no_test_substitutes_a_library_internal() -> None:
+    offenders: list[str] = []
+    for path in sorted(TESTS.rglob("test_*.py")):
+        relative = path.relative_to(TESTS).as_posix()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr != "setattr" or not node.args:
+                continue
+            if not (isinstance(node.func.value, ast.Name) and node.func.value.id == "monkeypatch"):
+                continue
+            target = node.args[0]
+            root = target
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            name = root.id if isinstance(root, ast.Name) else ast.unparse(target)
+            if (relative, name) in _FAULT_INJECTION:
+                continue
+            offenders.append(f"{relative}:{node.lineno} patches {ast.unparse(target)}")
+    assert offenders == [], (
+        f"a test replaced a library internal instead of running against a container: {offenders}. "
+        f"Use the real thing, or add it to _FAULT_INJECTION with the failure it injects"
+    )
