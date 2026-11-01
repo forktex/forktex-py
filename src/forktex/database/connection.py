@@ -24,8 +24,8 @@
 
 import functools
 import inspect
-from collections.abc import AsyncGenerator, Callable, Iterator
-from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -41,39 +41,11 @@ from forktex.log import get_logger
 logger = get_logger(__name__)
 
 _BOUNDARY_REFUSED = (
-    "{call}() is not available here: this session's transaction belongs to the block "
-    "that opened it. Raise to abort the whole unit of work, wrap the part that may "
-    "fail in savepoint(session), or open unmanaged_session() to own the boundary "
-    "yourself."
+    "{call}() is not available here: this session's transaction belongs to the "
+    "transactional_session() block that opened it. Raise to abort the whole unit of "
+    "work, wrap the part that may fail in savepoint(session), or open open_session() to "
+    "own the boundary yourself."
 )
-
-
-class ManagedSession(AsyncSession):
-    _boundary_is_borrowed: bool = False
-
-    @contextmanager
-    def borrowed_boundary(self) -> Iterator[None]:
-        self._boundary_is_borrowed = True
-        try:
-            yield
-        finally:
-            self._boundary_is_borrowed = False
-
-    async def commit(self) -> None:
-        self._refuse_if_borrowed("commit")
-        await super().commit()
-
-    async def rollback(self) -> None:
-        self._refuse_if_borrowed("rollback")
-        await super().rollback()
-
-    def begin(self) -> AsyncSessionTransaction:
-        self._refuse_if_borrowed("begin")
-        return super().begin()
-
-    def _refuse_if_borrowed(self, call: str) -> None:
-        if self._boundary_is_borrowed:
-            raise TransactionBoundaryError(_BOUNDARY_REFUSED.format(call=call))
 
 
 class Database:
@@ -91,8 +63,9 @@ class Database:
         if schema_translate_map:
             engine = engine.execution_options(schema_translate_map=schema_translate_map)
         self._engine: AsyncEngine = engine
-        self._sessionmaker: async_sessionmaker[ManagedSession] = async_sessionmaker(
-            bind=engine, expire_on_commit=False, class_=ManagedSession
+        self._sessionmaker: async_sessionmaker[AsyncSession] = async_sessionmaker(bind=engine, expire_on_commit=False)
+        self._managed: async_sessionmaker[_ManagedSession] = async_sessionmaker(
+            bind=engine, expire_on_commit=False, class_=_ManagedSession
         )
 
     @property
@@ -100,56 +73,21 @@ class Database:
         return self._engine
 
     @property
-    def sessionmaker(self) -> async_sessionmaker[ManagedSession]:
+    def sessionmaker(self) -> async_sessionmaker[AsyncSession]:
         return self._sessionmaker
 
-    def session(self) -> AbstractAsyncContextManager[AsyncSession]:
-        return _owned_session(self._sessionmaker)
+    def transactional_session(self) -> AbstractAsyncContextManager[AsyncSession]:
+        return _transactional_session(self._managed)
 
-    def unmanaged_session(self) -> AbstractAsyncContextManager[AsyncSession]:
-        return _unmanaged_session(self._sessionmaker)
+    async def yield_transactional_session(self) -> AsyncGenerator[AsyncSession]:
+        async with self.transactional_session() as bound:
+            yield bound
 
-    async def session_scope(self) -> AsyncGenerator[AsyncSession]:
-        async with self.session() as session:
-            yield session
+    def open_session(self) -> AbstractAsyncContextManager[AsyncSession]:
+        return _open_session(self._sessionmaker)
 
     async def dispose(self) -> None:
         await self._engine.dispose()
-
-
-@asynccontextmanager
-async def _owned_session(sessionmaker: async_sessionmaker[ManagedSession]) -> AsyncGenerator[AsyncSession]:
-    async with sessionmaker() as session:
-        try:
-            with session.borrowed_boundary():
-                yield session
-        except Exception:
-            await session.rollback()
-            raise
-        await session.commit()
-
-
-@asynccontextmanager
-async def _unmanaged_session(
-    sessionmaker: async_sessionmaker[ManagedSession],
-) -> AsyncGenerator[AsyncSession]:
-    async with sessionmaker() as session:
-        yield session
-
-
-@asynccontextmanager
-async def savepoint(session: AsyncSession) -> AsyncGenerator[AsyncSession]:
-    async with session.begin_nested():
-        yield session
-
-
-_default: Database | None = None
-
-
-def _require_default() -> Database:
-    if _default is None:
-        raise DatabaseNotInitializedError("Engine/sessionmaker not initialized — call init_engine() first")
-    return _default
 
 
 def init_engine(
@@ -158,7 +96,7 @@ def init_engine(
     echo: bool = False,
     schema_translate_map: dict[str, str | None] | None = None,
     **engine_kwargs: object,
-) -> async_sessionmaker:
+) -> None:
     global _default
     if _default is not None:
         logger.warning(
@@ -170,7 +108,6 @@ def init_engine(
         "database engine initialised",
         extra={"schema_translate_map": schema_translate_map},
     )
-    return _default.sessionmaker
 
 
 async def close_engine() -> None:
@@ -180,23 +117,27 @@ async def close_engine() -> None:
         _default = None
 
 
-def get_session() -> AbstractAsyncContextManager[AsyncSession]:
-    return _require_default().session()
+def get_engine() -> AsyncEngine:
+    return _require_default().engine
 
 
-def unmanaged_session() -> AbstractAsyncContextManager[AsyncSession]:
-    return _require_default().unmanaged_session()
+def transactional_session() -> AbstractAsyncContextManager[AsyncSession]:
+    return _require_default().transactional_session()
 
 
-async def session_scope() -> AsyncGenerator[AsyncSession]:
-    async with get_session() as session:
-        yield session
+async def yield_transactional_session() -> AsyncGenerator[AsyncSession]:
+    async with transactional_session() as bound:
+        yield bound
 
 
-def __getattr__(name: str) -> object:
-    if name == "engine":
-        return None if _default is None else _default.engine
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+def open_session() -> AbstractAsyncContextManager[AsyncSession]:
+    return _require_default().open_session()
+
+
+@asynccontextmanager
+async def savepoint(session: AsyncSession) -> AsyncGenerator[None]:
+    async with session.begin_nested():
+        yield
 
 
 def with_transactional_session(
@@ -235,12 +176,64 @@ def with_transactional_session(
                     async with savepoint(provided):
                         return await fn(*args, **kwargs)
                 return await fn(*args, **kwargs)
-            async with get_session() as session:
+            async with transactional_session() as opened:
                 if param in bound.arguments:
-                    bound.arguments[param] = session
+                    bound.arguments[param] = opened
                     return await fn(*bound.args, **bound.kwargs)
-                return await fn(*args, **{**kwargs, param: session})
+                return await fn(*args, **{**kwargs, param: opened})
 
         return wrapper
 
     return decorate(func) if func is not None else decorate
+
+
+class _ManagedSession(AsyncSession):
+    async def commit(self) -> None:
+        raise TransactionBoundaryError(_BOUNDARY_REFUSED.format(call="commit"))
+
+    async def rollback(self) -> None:
+        raise TransactionBoundaryError(_BOUNDARY_REFUSED.format(call="rollback"))
+
+    def begin(self) -> AsyncSessionTransaction:
+        raise TransactionBoundaryError(_BOUNDARY_REFUSED.format(call="begin"))
+
+
+@asynccontextmanager
+async def _transactional_session(
+    sessionmaker: async_sessionmaker[_ManagedSession],
+) -> AsyncGenerator[AsyncSession]:
+    async with sessionmaker() as opened:
+        try:
+            yield opened
+        except Exception:
+            await AsyncSession.rollback(opened)
+            raise
+        await AsyncSession.commit(opened)
+
+
+@asynccontextmanager
+async def _open_session(sessionmaker: async_sessionmaker[AsyncSession]) -> AsyncGenerator[AsyncSession]:
+    async with sessionmaker() as opened:
+        yield opened
+
+
+_default: Database | None = None
+
+
+def _require_default() -> Database:
+    if _default is None:
+        raise DatabaseNotInitializedError("Engine/sessionmaker not initialized — call init_engine() first")
+    return _default
+
+
+__all__ = [
+    "Database",
+    "close_engine",
+    "get_engine",
+    "init_engine",
+    "open_session",
+    "savepoint",
+    "transactional_session",
+    "with_transactional_session",
+    "yield_transactional_session",
+]

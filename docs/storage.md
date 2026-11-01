@@ -21,10 +21,9 @@ ImportError: Install 'forktex[storage]' (aioboto3) to use forktex.storage
 
 ## Wiring
 
-**Shape B — named-client registry.** `register(name, ...)` builds a `StorageClient` and stores it
-in a module dict; `get_client(name)` fetches it; `deregister(name)` drops it. `init(...)` is
-`register("default", ...)`, and the module-level `upload`/`download`/`delete`/`exists`/`presign`/
-`presign_post` functions all operate on `get_client()` — i.e. the `"default"` client.
+`register(name, ...)` builds a `StorageClient` and keeps it under that name; `get_client(name)`
+fetches it, `deregister(name)` drops it. `init(...)` is `register("default", ...)`, and every
+module-level operation runs against `get_client()`.
 
 ```python
 from contextlib import asynccontextmanager
@@ -138,15 +137,14 @@ instead of a masked 500.
 | `StorageError("storage existence check failed")` | `exists()` on any non-404 failure. | Yes, at a request boundary. |
 | `botocore.exceptions.ClientError`, unwrapped | `ensure_bucket()` when `head_bucket` fails with anything other than 404/`NoSuchBucket`. | Only if you call `ensure_bucket` outside startup. |
 
-`StorageError` messages are deliberately fixed strings: a botocore message can quote request ids,
-ARNs and headers, so the detail is logged (with the AWS error code) and reaches the caller only via
+`StorageError` messages are fixed strings: a botocore message can quote request ids, ARNs and
+headers, so the detail is logged with the AWS error code and reaches the caller only as
 `__cause__`.
 
 ## Gotchas
 
-- **`close()` closes nothing.** It just deregisters. Boto clients are created per call and closed
-  by their own context manager, so there is no long-lived connection to release. The `async` shape
-  exists for callers that already `await` it.
+- **`close()` only deregisters.** Boto clients are created and closed per call, so there is no
+  long-lived connection to release.
 - **`exists()` returns `False` for a missing key** — it does not raise `ObjectNotFoundError`. Only
   `download()` does.
 - **`upload()` overwrites silently.** There is no conditional-put or if-none-match option.

@@ -31,12 +31,6 @@ from pydantic import BaseModel
 from forktex.cache.ops import fetch_or_set, fetch_swr
 
 
-def _default_key(func: Callable, args: tuple, kwargs: dict) -> str:
-    rendered_kwargs = ", ".join(f"{k}={kwargs[k]!r}" for k in sorted(kwargs))
-    raw = f"{func.__module__}.{func.__qualname__}:{args!r}:{{{rendered_kwargs}}}"
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
 def cached(
     *,
     ttl: int = 60,
@@ -56,6 +50,12 @@ def cached(
         return wrapper
 
     return decorator
+
+
+def _default_key(func: Callable, args: tuple, kwargs: dict) -> str:
+    rendered_kwargs = ", ".join(f"{k}={kwargs[k]!r}" for k in sorted(kwargs))
+    raw = f"{func.__module__}.{func.__qualname__}:{args!r}:{{{rendered_kwargs}}}"
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 __all__ = ["cached"]

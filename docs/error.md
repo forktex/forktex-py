@@ -5,19 +5,16 @@ The shared error vocabulary: an `AppError` hierarchy, a stable `AppErrorCode` en
 
 ## Install
 
-Always bundled — `error` is a level-0 extra with no packages behind it. `pip install forktex` is enough; `forktex[error]` resolves but installs nothing extra. Depends on `forktex.types`, a level-0 sibling. Nothing here ever raises `ImportError` for a missing extra.
-
 ```bash
 pip install forktex
 ```
 
-`AppError` deliberately has **no notion of HTTP**. The status mapping belongs in whatever
-transport layer needs one, so a worker, a CLI, or a script can raise and catch the same
-errors without importing a web framework.
+No extra required.
+
+`AppError` has **no notion of HTTP**: the status mapping belongs in the transport layer, so a
+worker, a CLI or a script raises and catches the same errors without a web framework.
 
 ## Wiring
-
-Shape C — plain classes and functions, no global state.
 
 Raise the typed error from anywhere in your service:
 
@@ -31,8 +28,7 @@ async def get_project(session, project_id):
     return project
 ```
 
-Then let your transport boundary turn it into a response. `to_envelope` builds the wire
-shape; you own the code → HTTP-status mapping, because only HTTP needs one:
+`to_envelope` builds the wire shape; you own the code → HTTP-status mapping:
 
 ```python
 from fastapi import FastAPI, Request
@@ -63,15 +59,12 @@ async def _app_error(request: Request, exc: AppError) -> JSONResponse:
     )
 ```
 
-One handler over `AppError` covers every error in the table above, including the ones
-`database` raises.
-
 ## Public surface
 
 ### The hierarchy
 
-`AppError` is the base; catching it covers every error below, including the ones `database` and
-other packages raise.
+`AppError` is the base. One handler over it covers every error below, including those raised by
+`database` and the other packages.
 
 | Class | Code | HTTP |
 |:---|:---|:---|
@@ -109,27 +102,19 @@ class InsufficientCreditError(AppError):
     code = "insufficient_credit"
 ```
 
-> **Caveat that bites.** A status map keyed on `AppErrorCode` — like the one above — has no
-> entry for a custom code, so it falls through to **500**. A custom code therefore surfaces
-> as an Internal Server Error unless you add it to the map. Either subclass an existing error
-> whose code is in the vocabulary (`BadRequestError` for a 400-shaped failure), or extend the
-> mapping at your boundary.
->
-> The same trap catches services that bridge a *separate* error hierarchy onto this one by string
-> matching: `not_found` and `resource_not_found` are different codes, and the mismatch falls through
-> to 500. Prefer raising `forktex.error` types directly to translating between vocabularies.
+> **A custom code falls through to 500**, because a status map keyed on `AppErrorCode` has no entry
+> for it. Either subclass an error whose code is already in the vocabulary, or extend the map at
+> your boundary. The same applies to bridging another hierarchy by string matching: `not_found` and
+> `resource_not_found` are different codes.
 
 ## Errors
 
-This package defines errors rather than raising them. `to_envelope` accepts any `AppError`;
-passing something else is a programming error.
+This package defines errors rather than raising them.
 
 ## Gotchas
 
-- Migrating from the old `forktex-core` 2.x line: `common.errors.AppError` carried a
-  `.status_code` attribute. `error.AppError` does not — HTTP is not its concern. Code
-  reading `exc.status_code` gets `None`; map from `exc.code` instead, as shown above.
-- `ConflictError` is re-exported by `forktex.database.crud`; it is the same class, so one
-  handler catches both import paths.
-- The trace id on the envelope comes from `forktex.log`'s contextvar, which is set by
-  `TraceIDMiddleware`. Without that middleware the field is empty.
+- **`AppError` carries no `.status_code`** — map from `exc.code`.
+- `ConflictError` is re-exported by `forktex.database.crud`; it is the same class, so one handler
+  catches both import paths.
+- The envelope's trace id comes from `forktex.log`'s contextvar, set by `TraceIDMiddleware`.
+  Without that middleware the field is empty.

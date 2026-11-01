@@ -135,15 +135,6 @@ def parse_filter(obj: FilterNode | Mapping[str, Any], *, _depth: int = 0) -> Fil
     return Comparison(column=obj["column"], op=op, value=obj.get("value"))
 
 
-def _parse_children(obj: Mapping[str, Any], key: str, depth: int) -> tuple[FilterNode, ...]:
-    children = obj[key]
-    if not isinstance(children, list):
-        raise BadRequestError(f"'{key}' filter takes a list")
-    if not children:
-        raise BadRequestError(f"empty '{key}' filter")
-    return tuple(parse_filter(child, _depth=depth + 1) for child in children)
-
-
 @runtime_checkable
 class FilterSource(Protocol):
     def check(self, column: str, op: FilterOp) -> None: ...
@@ -198,16 +189,6 @@ def compile_filter(node: FilterNode, source: FilterSource) -> sa.ColumnElement[b
     raise BadRequestError(f"unsupported filter node: {node!r}")
 
 
-def _like_pattern(op: FilterOp, value: object) -> str:
-    term = str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return {
-        FilterOp.contains: f"%{term}%",
-        FilterOp.icontains: f"%{term}%",
-        FilterOp.starts_with: f"{term}%",
-        FilterOp.ends_with: f"%{term}",
-    }[op]
-
-
 def compile_comparison(node: Comparison, source: FilterSource) -> sa.ColumnElement[bool]:
     column, op, value = node.column, node.op, node.value
     source.check(column, op)
@@ -250,6 +231,25 @@ def compile_comparison(node: Comparison, source: FilterSource) -> sa.ColumnEleme
         FilterOp.lte: lhs <= rhs,
         FilterOp.gt: lhs > rhs,
         FilterOp.gte: lhs >= rhs,
+    }[op]
+
+
+def _parse_children(obj: Mapping[str, Any], key: str, depth: int) -> tuple[FilterNode, ...]:
+    children = obj[key]
+    if not isinstance(children, list):
+        raise BadRequestError(f"'{key}' filter takes a list")
+    if not children:
+        raise BadRequestError(f"empty '{key}' filter")
+    return tuple(parse_filter(child, _depth=depth + 1) for child in children)
+
+
+def _like_pattern(op: FilterOp, value: object) -> str:
+    term = str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return {
+        FilterOp.contains: f"%{term}%",
+        FilterOp.icontains: f"%{term}%",
+        FilterOp.starts_with: f"{term}%",
+        FilterOp.ends_with: f"%{term}",
     }[op]
 
 

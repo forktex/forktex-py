@@ -8,7 +8,7 @@ Always bundled — `types` is a level-0 extra with no packages behind it. `pip i
 
 ## Wiring
 
-Shape C — plain classes and type aliases. Nothing to initialise, nothing global, no teardown. Import a base and subclass it.
+Import a base and subclass it.
 
 ```python
 from forktex.types import BaseAppModel, BaseValueObject, BaseWireValueObject, UtcDate, UtcDateTime
@@ -64,6 +64,6 @@ This module defines no exceptions. Everything that can fail is Pydantic's: `pyda
 - **A plain `datetime` field drifts.** Pydantic's own default is `Z`-suffixed, offset-preserving and not UTC-forced — it disagrees with the text `log`, `grid`, `flow`, and `database` all produce through `iso.to_iso()`. Annotate wire-facing datetimes as `UtcDateTime`.
 - **`frozen=True` does not deep-freeze.** A `list`/`dict` field on a `BaseValueObject` subclass can still be mutated in place, changing the instance's hash or leaking a shared reference between instances. Prefer `tuple` / `frozenset` / nested `BaseValueObject`.
 - **`BaseValueObject` has no aliases.** camelCase input raises `ValidationError`; that is the point of the split. Reach for `BaseWireValueObject` when the value crosses a boundary.
-- **`UtcDate` exists for symmetry.** A plain `date` field already serializes as `YYYY-MM-DD`, and Pydantic rejects a `datetime` with a nonzero time where a `date` is expected. `UtcDate` fixes no live bug.
+- **`UtcDate` is a convenience.** A plain `date` field already serializes as `YYYY-MM-DD`.
 - **Some type checkers do not see the generated `__hash__`.** Using a frozen model as a dict key is correct at runtime even when pyright complains.
 - **Internal adoption is thin.** Outside `error.ErrorEnvelope` and `space.config`, most `forktex` modules subclass `pydantic.BaseModel` directly — do not expect these bases everywhere in the repo.

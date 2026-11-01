@@ -1,8 +1,7 @@
 # forktex.worker
 
-Where a queue consumer lives. [`queue`](queue.md) owns *what* runs (`@task`, `enqueue`);
-this module owns the host: a standalone process, a consumer embedded in an API's lifespan, or
-one worker per CPU.
+The host a queue consumer runs in: a standalone process, a consumer inside an API's lifespan, or
+one worker per CPU. [`queue`](queue.md) owns *what* runs (`@task`, `enqueue`).
 
 ## Install
 
@@ -10,15 +9,13 @@ one worker per CPU.
 pip install "forktex[worker]"
 ```
 
-The extra declares `arq` — the same dependency as `[queue]`, which this is built on. Importing
-the package needs nothing; starting a worker raises `ImportError: Install 'forktex[queue]' (arq)`
-if arq is missing.
+The extra declares `arq`, the same dependency as `[queue]`. Starting a worker raises
+`ImportError: Install 'forktex[queue]' (arq)` if it is missing.
 
 ## Wiring
 
-**Shape C — consumer-owned object, no global state.** You build a `WorkerConfig` and hand it to
-one of three hosts. The three exist because loop and signal ownership belong to the host, not to
-the worker.
+Build a `WorkerConfig` and hand it to one of three hosts. They differ in who owns the event loop
+and the signals.
 
 | Host | Owns the loop? | Owns SIGTERM? | Use for |
 |:---|:---|:---|:---|
@@ -37,13 +34,11 @@ if __name__ == "__main__":
     run_worker(WorkerConfig(redis_url="redis://localhost:6379/1", queue_name="default"))
 ```
 
-Nothing registers your tasks for you. Import the module that defines them, for its side effect.
+Nothing registers your tasks. Import the module that defines them, for its side effect.
 
 ### Startup hooks
 
-Anything a job needs must exist before the first job is consumed. Hooks run in declared order,
-and a raising hook aborts startup rather than letting the worker consume with half-wired
-dependencies.
+Hooks run in declared order before the first job is consumed; a raising hook aborts startup.
 
 ```python
 from forktex.database import init_engine
@@ -59,31 +54,28 @@ async def open_pools() -> None:
 run_worker(WorkerConfig(redis_url=settings.redis_url, startup_hooks=[open_pools]))
 ```
 
-`Worker.start` also initialises the `queue` pool itself, which is what lets a *running* job call
-`enqueue()` to chain follow-up work. Note that `start()` does **not** verify the broker is
-reachable — `queue.init` only records the URL — so a wrong `redis_url` surfaces when arq first
-connects to consume, not at startup.
+`Worker.start` initialises the `queue` pool too, so a running job can `enqueue()` follow-up work.
+It does **not** verify the broker is reachable: a wrong `redis_url` surfaces when arq first
+connects, not at startup.
 
 ### Process pool
 
-A single worker is one event loop: it parallelises waiting, not computing, so CPU-bound tasks
-serialise behind the GIL no matter how high `max_jobs` goes.
+One worker is one event loop: it parallelises waiting, not computing, so CPU-bound tasks serialise
+behind the GIL however high `max_jobs` goes.
 
 ```python
 run_worker_pool(WorkerConfig(redis_url=settings.redis_url, max_jobs=4), processes=4)
 ```
 
-The parent is a supervisor only — it forwards SIGTERM/SIGINT and waits for children to drain. It
-does **not** restart them: a crash-loop is the process manager's job to see and back off from.
+The parent forwards SIGTERM/SIGINT and waits for children to drain. It does **not** restart them.
 
-## Draining, and the setting that decides whether you lose jobs
+## Draining
 
-`drain_timeout` reaches arq as `job_completion_wait`, and that value is what selects arq's
-*draining* signal handler over its *immediate-cancel* one. At `0` — arq's own default — a SIGTERM
-cancels running jobs outright, so every rolling deploy kills work in progress. `forktex.worker`
-defaults it to `30.0` seconds instead.
+`drain_timeout` reaches arq as `job_completion_wait`, which selects arq's draining signal handler
+over its immediate-cancel one. At arq's own default of `0`, a SIGTERM cancels running jobs, so
+every rolling deploy kills work in progress; `forktex.worker` defaults it to `30.0` seconds.
 
-Set it below your orchestrator's grace period so the drain finishes before the process is killed:
+Set it below your orchestrator's grace period:
 
 ```yaml
 # Kubernetes: give the pod more room than the worker needs.
@@ -94,7 +86,7 @@ terminationGracePeriodSeconds: 45    # >  drain_timeout
 WorkerConfig(redis_url=..., drain_timeout=30.0)
 ```
 
-`Worker.stop()` requests the drain and returns; awaiting `run()` (or leaving `background()`) is
+`Worker.stop()` requests the drain and returns. Awaiting `run()`, or leaving `background()`, is
 what tells you it finished.
 
 ## Public surface
@@ -128,8 +120,7 @@ what tells you it finished.
 | `ImportError("Install 'forktex[queue]' (arq) to use forktex.queue")` | arq is not installed. | No — install the extra. |
 | `WorkerError` | `run()` before `start()`, or `arq_worker` before `start()`. Subclasses `AppError` (code `INTERNAL`) and `RuntimeError`, so `except RuntimeError` still works and a transport can render it. | No — a lifecycle mistake. |
 
-Task failures are arq's business — use `@task(retries=...)`, and `queue.inspect_job` to see the
-outcome.
+Task failures are arq's: use `@task(retries=...)` and `queue.inspect_job`.
 
 ## Gotchas
 
@@ -139,16 +130,14 @@ outcome.
 - **`run_worker_pool` pickles the config**, because children are spawned, not forked. Every
   `startup_hooks` entry must be a module-level function — a lambda or a closure fails here while
   working fine in `run_worker` and `background`.
-- `create_worker` deliberately skips the hooks and the queue pool. Prefer `Worker`.
-- A `background()` consumer that dies on its own re-raises on exit, so a crashed worker cannot
-  leave its host running blind.
+- `create_worker` skips the hooks and the queue pool. Prefer `Worker`.
+- A `background()` consumer that dies on its own re-raises on exit.
 
 ---
 
 ## Running a worker inside a FastAPI app
 
-`background()` exists for exactly this: the API owns the loop and the signals, and the consumer
-rides along inside its lifespan. Combined with [`api`](api.md):
+`background()` puts the consumer in the API's lifespan, with [`api`](api.md):
 
 ```python
 from contextlib import asynccontextmanager
@@ -198,31 +187,24 @@ async def reindex(order_id: str) -> dict[str, str]:
 
 ### One trace id across both tiers
 
-`enqueue` attaches the caller's `root_trace_id` to the job, and the worker re-establishes it
-before the task body runs. So the id a client got back in `X-Request-ID` is the id the job logs
-under — the request and the work it caused are one search, not two:
+`enqueue` attaches the caller's `root_trace_id` and the worker re-establishes it before the task
+body runs, so the id returned in `X-Request-ID` is the id the job logs under:
 
 ```
 {"level":"INFO","message":"reindex accepted","trace_id":"req-abc","root_trace_id":"req-abc"}
 {"level":"INFO","message":"reindexing","trace_id":"req-abc","root_trace_id":"req-abc"}   ← the job
 ```
 
-A job enqueued with no trace context (a cron tick, an operator script) gets a freshly minted id,
-so job logs are always correlatable among themselves. The carrier is a reserved job kwarg that
-the worker strips before calling your task, so it never appears in a task signature.
+A job enqueued with no trace context gets a freshly minted id. The carrier is a reserved job
+kwarg the worker strips, so it never appears in a task signature.
 
 ### When *not* to embed the worker
 
-Sharing a process is convenient and often wrong:
-
 - **Shared fate.** An OOM from a heavy job kills the process serving HTTP.
 - **Shared CPU.** A busy job starves the event loop and inflates request latency.
-- **Coupled scaling.** You cannot scale request capacity and job capacity apart — the thing you
-  usually most want to do.
-- **Multiplied consumers.** `N` API replicas means `N` consumers. Fine, but `max_jobs` is
-  per-process, so total concurrency is `N × max_jobs`.
+- **Coupled scaling.** Request capacity and job capacity cannot scale apart.
+- **Multiplied consumers.** `N` API replicas is `N` consumers, and `max_jobs` is per-process, so
+  total concurrency is `N × max_jobs`.
 
-Embed it for a single-replica service, a background chore that must not need its own deployment,
-or local development where one process is simpler. Split them — same `WorkerConfig`, `run_worker`
-in its own entrypoint — as soon as either tier needs to scale or fail on its own. The code is the
-same either way; only the host changes.
+Embed for a single-replica service or local development. Split as soon as either tier needs to
+scale or fail on its own — same `WorkerConfig`, `run_worker` in its own entrypoint.

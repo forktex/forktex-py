@@ -35,15 +35,17 @@ from forktex.log import get_logger
 logger = get_logger(__name__)
 
 SQLSTATE_UNIQUE_VIOLATION = "23505"
+
+
 SQLSTATE_FOREIGN_KEY_VIOLATION = "23503"
+
+
 SQLSTATE_NOT_NULL_VIOLATION = "23502"
+
+
 SQLSTATE_CHECK_VIOLATION = "23514"
 
 _SQLSTATE_DATA_EXCEPTION_CLASS = "22"
-
-
-def _sqlstate(exc: BaseException) -> str:
-    return str(getattr(getattr(exc, "orig", None), "sqlstate", "") or "")
 
 
 @asynccontextmanager
@@ -76,6 +78,10 @@ async def read_boundary() -> AsyncGenerator[None]:
         if _sqlstate(exc).startswith(_SQLSTATE_DATA_EXCEPTION_CLASS):
             raise BadRequestError("a stored value is not valid for its column's declared type") from exc
         raise
+
+
+def _sqlstate(exc: BaseException) -> str:
+    return str(getattr(getattr(exc, "orig", None), "sqlstate", "") or "")
 
 
 __all__ = [

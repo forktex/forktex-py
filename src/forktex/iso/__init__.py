@@ -26,8 +26,6 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-__all__ = ["from_date_iso", "from_iso", "now", "to_date_iso", "to_iso"]
-
 
 def now() -> datetime:
     return datetime.now(UTC)
@@ -60,3 +58,6 @@ def to_date_iso(value: date) -> str:
 
 def from_date_iso(value: str) -> date:
     return date.fromisoformat(value)
+
+
+__all__ = ["from_date_iso", "from_iso", "now", "to_date_iso", "to_iso"]

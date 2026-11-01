@@ -31,18 +31,6 @@ from pydantic import BaseModel
 from forktex.cache.cache import LOCK_TTL
 from forktex.cache.connection import default
 
-__all__ = [
-    "LOCK_TTL",
-    "delete",
-    "fetch_or_set",
-    "fetch_swr",
-    "get",
-    "invalidate_key",
-    "invalidate_prefix",
-    "set",
-    "shutdown_background_tasks",
-]
-
 
 async def get(key: str) -> str | None:
     cache = default()
@@ -103,3 +91,16 @@ async def shutdown_background_tasks() -> None:
     cache = default()
     if cache is not None:
         await cache.shutdown_background_tasks()
+
+
+__all__ = [
+    "LOCK_TTL",
+    "delete",
+    "fetch_or_set",
+    "fetch_swr",
+    "get",
+    "invalidate_key",
+    "invalidate_prefix",
+    "set",
+    "shutdown_background_tasks",
+]

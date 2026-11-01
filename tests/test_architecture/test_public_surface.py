@@ -134,12 +134,13 @@ def test_database_exports_everything_the_standards_tell_consumers_to_use() -> No
 
     documented = {
         "Database",
-        "get_session",
-        "session_scope",
+        "transactional_session",
+        "yield_transactional_session",
         "init_engine",
         "close_engine",
         "savepoint",
-        "unmanaged_session",
+        "open_session",
+        "get_engine",
         "TransactionBoundaryError",
         "BaseDBModel",
         "substrate_base",
@@ -170,3 +171,23 @@ def test_database_exports_everything_the_standards_tell_consumers_to_use() -> No
     }
     missing = sorted(documented - set(db.__all__))
     assert missing == [], f"documented in standards/code-reuse.md but not exported: {missing}"
+
+
+def test_the_default_database_delegates_mirror_the_database_methods() -> None:
+    from forktex.database import connection
+
+    methods = {
+        name
+        for name, value in vars(connection.Database).items()
+        if not name.startswith("_") and callable(value) and name != "dispose"
+    }
+    delegates = {name for name in connection.__all__ if not name[0].isupper()}
+    assert methods <= delegates, f"Database methods with no module-level delegate: {sorted(methods - delegates)}"
+
+
+def test_connection_exports_no_name_that_is_not_defined_there() -> None:
+    from forktex.database import connection
+
+    assert sorted(connection.__all__) == connection.__all__
+    undefined = [name for name in connection.__all__ if not hasattr(connection, name)]
+    assert undefined == []

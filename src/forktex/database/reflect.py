@@ -34,21 +34,6 @@ from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 from sqlalchemy.types import TypeEngine
 
-__all__ = ["column_types", "columns", "has_table", "indexes", "type_ddl", "udt_names"]
-
-_Executor = AsyncSession | AsyncConnection
-
-
-async def _run_sync[R](executor: _Executor, fn: Callable[[Connection], R]) -> R:
-    if isinstance(executor, AsyncSession):
-        return await executor.run_sync(lambda sync_session: fn(sync_session.connection()))
-    return await executor.run_sync(fn)
-
-
-def _split_relation(relation: str) -> tuple[str | None, str]:
-    schema, _, table = relation.rpartition(".")
-    return (schema or None), table
-
 
 async def columns(executor: _Executor, relation: str, *, schema: str | None = None) -> set[str]:
     return set((await column_types(executor, relation, schema=schema)).keys())
@@ -106,3 +91,20 @@ async def indexes(executor: _Executor, relation: str, *, schema: str | None = No
         return {str(idx["name"]) for idx in insp.get_indexes(table, schema=target_schema) if idx.get("name")}
 
     return set(await _run_sync(executor, _reflect))
+
+
+_Executor = AsyncSession | AsyncConnection
+
+
+async def _run_sync[R](executor: _Executor, fn: Callable[[Connection], R]) -> R:
+    if isinstance(executor, AsyncSession):
+        return await executor.run_sync(lambda sync_session: fn(sync_session.connection()))
+    return await executor.run_sync(fn)
+
+
+def _split_relation(relation: str) -> tuple[str | None, str]:
+    schema, _, table = relation.rpartition(".")
+    return (schema or None), table
+
+
+__all__ = ["column_types", "columns", "has_table", "indexes", "type_ddl", "udt_names"]

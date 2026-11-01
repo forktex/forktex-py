@@ -21,10 +21,9 @@ ImportError: Install 'forktex[vector]' (qdrant-client) to use forktex.vector
 
 ## Wiring
 
-**Shape B — named-client registry**, alongside a directly-constructible client. `register(name,
-qdrant_url, *, api_key=None)` builds a `Vector` and stores it in a module dict; `get_client(name)`
-fetches it; `deregister(name)` drops it. There is no `init()` and no `close()` — `Vector` holds no
-connection, and a fresh `AsyncQdrantClient` is created and closed per operation.
+`register(name, qdrant_url, *, api_key=None)` builds a `Vector` and keeps it under that name;
+`get_client(name)` fetches it, `deregister(name)` drops it. There is no `init()` or `close()`:
+`Vector` holds no connection, and a fresh `AsyncQdrantClient` is opened and closed per operation.
 
 ```python
 from contextlib import asynccontextmanager
@@ -127,13 +126,9 @@ is passed) and `"sparse"` (when `sparse=True`).
 
 ## Gotchas
 
-- **Two wiring paths coexist, and the registry is optional.** `register()`/`get_client()` exists and
-  mirrors `storage`'s, but constructing `Vector(qdrant_url=...)` directly and passing it around is
-  equally supported — `Vector` holds no connection, so there is nothing for the registry to
-  lifecycle. Pick one per service; mixing them means two objects that look interchangeable but are
-  not the same instance.
-- **There is no `init()` and no `close()`** on this module, unlike `cache`, `storage` and `store`.
-  `deregister()` is the only teardown, and it does nothing beyond removing the dict entry.
+- **The registry is optional**: `Vector(qdrant_url=...)` passed around directly is equally
+  supported. Pick one per service, or you hold two objects that look interchangeable and are not.
+- **There is no `init()` or `close()`.** `deregister()` removes the dict entry and nothing else.
 - **`DimensionMismatchError` is a string-sniff.** `upsert()` only converts a Qdrant 400 whose
   message contains "dimension"; every other 400 propagates as `UnexpectedResponse`.
 - **`"hybrid"` and `"sparse"` run the same query.** Both take the dense prefetch path
@@ -146,11 +141,10 @@ is passed) and `"sparse"` (when `sparse=True`).
   `model_copy`. These are frozen value objects; assignment will fail.
 - **`search_across` swallows per-collection failures.** A collection that errors is logged at
   `warning` and omitted; you get a partial result set with no exception.
-- **`score_threshold` is applied by Qdrant *before* RRF fusion semantics**, and RRF scores are rank
-  reciprocals, not similarities — a threshold tuned for dense cosine will filter almost everything
-  under `"hybrid"`.
-- **`rerank()` silently keeps the original score** for any hit whose dense vector cannot be
-  retrieved, then sorts the mixed set — cosine scores and search scores end up compared directly.
+- **`score_threshold` is applied before RRF fusion**, whose scores are rank reciprocals rather than
+  similarities, so a threshold tuned for dense cosine filters almost everything under `"hybrid"`.
+- **`rerank()` keeps the original score** for a hit whose dense vector cannot be retrieved, then
+  sorts the mixed set — cosine and search scores end up compared directly.
 - **`upsert([])` and `delete_points([])` return early** without opening a connection.
 - **`info()` reads `points_count` with a `vectors_count` fallback**, and reports `0` if neither
   attribute is present on the installed client version.

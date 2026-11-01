@@ -56,28 +56,6 @@ _HTTP_STATUS_BY_CODE: dict[AppErrorCode, int] = {
 }
 
 
-def _http_status_for(error: AppError) -> int:
-    try:
-        return _HTTP_STATUS_BY_CODE[AppErrorCode(error.code)]
-    except ValueError:
-        return 500
-
-
-async def _send_json(send: _Send, status: int, payload: dict[str, Any]) -> None:
-    body = json.dumps(payload).encode()
-    await send(
-        {
-            "type": "http.response.start",
-            "status": status,
-            "headers": [
-                (b"content-type", b"application/json"),
-                (b"content-length", str(len(body)).encode()),
-            ],
-        }
-    )
-    await send({"type": "http.response.body", "body": body})
-
-
 class ExceptionEnvelopeMiddleware:
     def __init__(self, app: _ASGIApp, *, handle_unexpected: bool = True) -> None:
         self._app = app
@@ -136,6 +114,28 @@ class SecurityHeadersMiddleware:
             await send(message)
 
         await self._app(scope, receive, send_with_headers)
+
+
+async def _send_json(send: _Send, status: int, payload: dict[str, Any]) -> None:
+    body = json.dumps(payload).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
+
+
+def _http_status_for(error: AppError) -> int:
+    try:
+        return _HTTP_STATUS_BY_CODE[AppErrorCode(error.code)]
+    except ValueError:
+        return 500
 
 
 __all__ = ["ExceptionEnvelopeMiddleware", "SecurityHeadersMiddleware"]

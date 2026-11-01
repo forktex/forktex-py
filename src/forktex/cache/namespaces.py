@@ -34,3 +34,9 @@ def key_for(prefix: str | CachePrefix, *parts: object) -> str:
         raise ValueError(f"key_for({prefix!r}, ...): None part in {parts!r}")
     parts_str = ":".join(str(p) for p in parts if p != "")
     return f"{prefix}:{parts_str}" if parts_str else str(prefix)
+
+
+__all__ = [
+    "CachePrefix",
+    "key_for",
+]

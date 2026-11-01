@@ -42,10 +42,6 @@ logger = get_logger(__name__)
 LOCK_TTL = 10
 
 
-def _masked(url: str) -> str:
-    return url.rsplit("@", 1)[-1] if "@" in url else url
-
-
 class Cache:
     def __init__(self, url: str, **client_kwargs: object) -> None:
         self.url = url
@@ -185,6 +181,10 @@ class Cache:
         if self._background_tasks:
             logger.info("Waiting for %d SWR tasks to finish...", len(self._background_tasks))
             await asyncio.gather(*self._background_tasks, return_exceptions=True)
+
+
+def _masked(url: str) -> str:
+    return url.rsplit("@", 1)[-1] if "@" in url else url
 
 
 __all__ = ["LOCK_TTL", "Cache"]

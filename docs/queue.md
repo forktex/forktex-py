@@ -1,6 +1,8 @@
 # forktex.queue
 
-arq-backed background job queue on Redis: `@task` to register, `enqueue`/`enqueue_at` to dispatch, `make_worker` to build the consumer, plus operator calls for inspection and cancellation. For durable execution with replay and state, use `flow` instead.
+arq-backed background jobs on Redis: `@task` to register, `enqueue`/`enqueue_at` to dispatch,
+`make_worker` to build the consumer, plus inspection and cancellation. For durable execution with
+replay and state, use `flow`.
 
 ## Install
 
@@ -8,11 +10,14 @@ arq-backed background job queue on Redis: `@task` to register, `enqueue`/`enqueu
 pip install "forktex[queue]"   # arq
 ```
 
-The extra is required, but the failure is **lazy**: `import forktex.queue` succeeds without `arq`. The first call that actually needs it — `enqueue`, `enqueue_at`, `make_worker`, or any operator function that opens the pool — raises `ImportError("Install 'forktex[queue]' (arq) to use forktex.queue")`. So a service can ship the import and only discover the missing extra at first dispatch.
+The failure is lazy: `import forktex.queue` succeeds without `arq`, and the first call that opens
+the pool raises `ImportError("Install 'forktex[queue]' (arq) to use forktex.queue")`.
 
 ## Wiring
 
-Shape A — a module-level default. `await init(redis_url)` builds a `Queue` and installs it, closing any previous handle's pool; the `ArqRedis` pool is created lazily on first use and reused for the handle's lifetime. `await close()` closes it and clears the default; it is idempotent. `Queue(redis_url)` is the same handle built directly, for a process that needs two queues or none of the global.
+`await init(redis_url)` builds a `Queue` and installs it as the default, closing any previous
+handle's pool. The pool is created on first use and reused; `await close()` closes it and is
+idempotent. `Queue(redis_url)` is the same handle built directly.
 
 ```python
 from contextlib import asynccontextmanager
@@ -31,7 +36,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 ```
 
-Call `close()` in teardown. Skipping it leaks a pool bound to a dead event loop, which is the usual cause of cross-test "attached to a different loop" failures.
+Call `close()` in teardown, or a pool leaks bound to a dead event loop — the usual cause of
+"attached to a different loop" failures across tests.
 
 ### Defining and dispatching tasks
 
@@ -53,11 +59,14 @@ job_id = await enqueue(send_email, "user@example.com", "Welcome!")
 job_id = await enqueue_at(send_email, "user@example.com", "Reminder", eta=datetime(2026, 5, 9, 9, tzinfo=UTC))
 ```
 
-`@task` is pure registration — it stamps the function and returns it unchanged, so it composes with other decorators (`@task` outermost, e.g. over `@traced`).
+`@task` stamps the function and returns it unchanged, so it composes with other decorators —
+keep it outermost.
 
 ### Worker entrypoint
 
-The one real consumer shape. Tasks reach the registry only by **side-effect import** in the entrypoint, and `make_worker(...)` must be constructed **inside the already-running event loop** — building it at module level binds arq's Redis objects to a different loop than the one that runs them. Registries in `storage`, `cache`, and `vector` are per-process, so re-register them here too.
+Tasks reach the registry only by side-effect import, and `make_worker(...)` must be built **inside
+the running event loop** — at module level it binds arq's Redis objects to a different loop. The
+`storage`, `cache` and `vector` registries are per-process, so re-register them here too.
 
 ```python
 # knowledge/worker.py

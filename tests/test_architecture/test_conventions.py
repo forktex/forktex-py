@@ -205,3 +205,50 @@ def test_database_setup_goes_through_conftest(construct: str, replacement: str) 
         f"{construct} belongs to {replacement} in tests/conftest.py, not to individual "
         f"modules — eight hand-rolled copies had already drifted apart: {offenders}"
     )
+
+
+_BASE_CLASS_EXEMPT = {("database", "models.py", "_EagerDefaults")}
+
+
+@pytest.mark.parametrize("package", PACKAGES)
+def test_a_module_puts_its_public_surface_above_its_helpers(package: str) -> None:
+    out_of_order: list[str] = []
+    for path in sorted((SRC / package).glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        seen_private = None
+        for node in tree.body:
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                continue
+            if (package, path.name, node.name) in _BASE_CLASS_EXEMPT:
+                continue
+            if node.name.startswith("_"):
+                seen_private = node.name
+            elif seen_private is not None:
+                out_of_order.append(f"{path.name}:{node.lineno} {node.name} after {seen_private}")
+    assert out_of_order == [], (
+        f"forktex.{package} defines a public name after a private helper: {out_of_order}. "
+        f"A reader meets the surface first and the machinery after it"
+    )
+
+
+@pytest.mark.parametrize("package", PACKAGES)
+def test_every_module_ends_with_its_all(package: str) -> None:
+    misplaced: list[str] = []
+    for path in sorted((SRC / package).glob("*.py")):
+        body = ast.parse(path.read_text(encoding="utf-8")).body
+        names = [
+            target.id
+            for node in body
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        ]
+        if "__all__" not in names:
+            misplaced.append(f"{path.name} declares no __all__")
+            continue
+        last = body[-1]
+        if not (isinstance(last, ast.Assign) and any(getattr(t, "id", None) == "__all__" for t in last.targets)):
+            misplaced.append(f"{path.name} declares __all__ at line {body[names.index('__all__')].lineno}, not last")
+    assert misplaced == [], f"forktex.{package}: {misplaced}"

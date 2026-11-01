@@ -8,8 +8,6 @@ Always bundled — `iso` is a level-0 extra with no packages behind it. `pip ins
 
 ## Wiring
 
-Shape C — five plain functions. No state, no client, no setup, no teardown.
-
 ```python
 from datetime import date, datetime, timedelta, timezone
 
@@ -65,4 +63,4 @@ holds it to raising stdlib errors so the carve-out cannot quietly outlive its re
 - **`strict` is keyword-only and exists only on `to_iso`/`from_iso`.** The date functions have no strict mode; there is no offset to be ambiguous about.
 - **Precision follows `isoformat()`.** Microseconds appear only when nonzero — do not assume a fixed-width string.
 - **`to_iso(a_date)` raises.** `date` is not a `datetime`, and passing one is a `TypeError`, not a silent coercion. It is the `to_date_iso()` direction that is lenient: it accepts a full `datetime` and truncates.
-- **UTC only.** There is no helper to convert into a non-UTC display timezone, no ISO validity predicate, and no `timedelta` formatting. The surface is deliberately these five functions.
+- **UTC only.** No display-timezone conversion, no validity predicate, no `timedelta` formatting.

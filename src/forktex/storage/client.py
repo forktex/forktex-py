@@ -71,21 +71,6 @@ class StorageConfig(BaseValueObject):
     """
 
 
-def _get_aioboto3() -> ModuleType:
-    try:
-        import aioboto3
-
-        return aioboto3
-    except ImportError as exc:
-        raise ImportError("Install 'forktex[storage]' (aioboto3) to use forktex.storage") from exc
-
-
-def _signing_config() -> Config:
-    from botocore.config import Config
-
-    return Config(signature_version="s3v4", s3={"addressing_style": "path"})
-
-
 class StorageClient:
     def __init__(self, config: StorageConfig) -> None:
         self._config = config
@@ -266,3 +251,24 @@ class StorageClient:
                 Conditions=conditions or None,
                 ExpiresIn=expires_in,
             )
+
+
+def _signing_config() -> Config:
+    from botocore.config import Config
+
+    return Config(signature_version="s3v4", s3={"addressing_style": "path"})
+
+
+def _get_aioboto3() -> ModuleType:
+    try:
+        import aioboto3
+
+        return aioboto3
+    except ImportError as exc:
+        raise ImportError("Install 'forktex[storage]' (aioboto3) to use forktex.storage") from exc
+
+
+__all__ = [
+    "StorageClient",
+    "StorageConfig",
+]

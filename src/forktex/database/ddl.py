@@ -37,17 +37,6 @@ from sqlalchemy.schema import (
 )
 from sqlalchemy.sql.compiler import DDLCompiler
 
-__all__ = [
-    "AddColumn",
-    "CreateIndex",
-    "CreateSchema",
-    "CreateTable",
-    "DropColumn",
-    "DropIndex",
-    "DropSchema",
-    "DropTable",
-]
-
 
 class AddColumn(DDLElement):
     inherit_cache = False
@@ -96,3 +85,15 @@ def _compile_drop_column(element: DropColumn, compiler: DDLCompiler, **kw: objec
     target = _qualified(compiler, element.table_name, element.schema)
     exists = "IF EXISTS " if element.if_exists else ""
     return f"ALTER TABLE {target} DROP COLUMN {exists}{compiler.preparer.quote(element.column_name)}"
+
+
+__all__ = [
+    "AddColumn",
+    "CreateIndex",
+    "CreateSchema",
+    "CreateTable",
+    "DropColumn",
+    "DropIndex",
+    "DropSchema",
+    "DropTable",
+]

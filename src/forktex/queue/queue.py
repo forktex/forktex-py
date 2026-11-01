@@ -79,27 +79,6 @@ class QueueHealth(BaseAppModel):
     failed: int
 
 
-def _get_arq() -> ModuleType:
-    try:
-        import arq
-
-        return arq
-    except ImportError as exc:
-        raise ImportError("Install 'forktex[queue]' (arq) to use forktex.queue") from exc
-
-
-def _task_queue_name(fn: Callable) -> str:
-    name = getattr(fn, _QUEUE_NAME_ATTR, DEFAULT_QUEUE)
-    return name if isinstance(name, str) else DEFAULT_QUEUE
-
-
-def _with_trace(kwargs: dict[str, object]) -> dict[str, object]:
-    trace = get_root_trace_id() or get_trace_id()
-    if trace is None or TRACE_KWARG in kwargs:
-        return kwargs
-    return {**kwargs, TRACE_KWARG: trace}
-
-
 class Queue:
     def __init__(self, redis_url: str) -> None:
         self.redis_url = redis_url
@@ -228,6 +207,27 @@ def _failed_count(raw: str | bytes | None) -> int:
             except ValueError:
                 return 0
     return 0
+
+
+def _with_trace(kwargs: dict[str, object]) -> dict[str, object]:
+    trace = get_root_trace_id() or get_trace_id()
+    if trace is None or TRACE_KWARG in kwargs:
+        return kwargs
+    return {**kwargs, TRACE_KWARG: trace}
+
+
+def _task_queue_name(fn: Callable) -> str:
+    name = getattr(fn, _QUEUE_NAME_ATTR, DEFAULT_QUEUE)
+    return name if isinstance(name, str) else DEFAULT_QUEUE
+
+
+def _get_arq() -> ModuleType:
+    try:
+        import arq
+
+        return arq
+    except ImportError as exc:
+        raise ImportError("Install 'forktex[queue]' (arq) to use forktex.queue") from exc
 
 
 __all__ = ["DEFAULT_QUEUE", "TRACE_KWARG", "JobInfo", "JobStatus", "Queue", "QueueHealth"]

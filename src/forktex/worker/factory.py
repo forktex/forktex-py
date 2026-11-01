@@ -154,11 +154,6 @@ def create_worker(config: WorkerConfig) -> ArqWorker:
     )
 
 
-async def _bootstrap(config: WorkerConfig) -> None:
-    async with Worker(config, handle_signals=True) as worker:
-        await worker.run()
-
-
 def run_worker(config: WorkerConfig) -> None:
     asyncio.run(_bootstrap(config))
 
@@ -236,6 +231,11 @@ def run_worker_pool(config: WorkerConfig, *, processes: int = 1) -> None:
             signal.signal(sig, handler)
     exit_codes = {child.name: child.exitcode for child in children}
     logger.info("worker: pool stopped", extra={"queue": config.queue_name, "exit_codes": exit_codes})
+
+
+async def _bootstrap(config: WorkerConfig) -> None:
+    async with Worker(config, handle_signals=True) as worker:
+        await worker.run()
 
 
 __all__ = [

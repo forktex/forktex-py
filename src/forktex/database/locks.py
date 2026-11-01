@@ -54,10 +54,6 @@ def key_from_uuid(value: object) -> int:
     return _as_signed_bigint((as_int & 0xFFFFFFFFFFFFFFFF) ^ (as_int >> 64))
 
 
-def _as_signed_bigint(unsigned: int) -> int:
-    return unsigned - _UNSIGNED_64_WRAP if unsigned >= 1 << 63 else unsigned
-
-
 async def xact_lock(session: AsyncSession, key: int) -> None:
     await session.execute(sa.select(sa.func.pg_advisory_xact_lock(key)))
 
@@ -84,6 +80,10 @@ async def try_advisory_lock(engine: AsyncEngine, key: int) -> AsyncGenerator[boo
         finally:
             if acquired:
                 await _release(conn, key)
+
+
+def _as_signed_bigint(unsigned: int) -> int:
+    return unsigned - _UNSIGNED_64_WRAP if unsigned >= 1 << 63 else unsigned
 
 
 async def _release(conn: AsyncConnection, key: int) -> None:

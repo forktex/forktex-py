@@ -22,10 +22,10 @@ ImportError: Install 'forktex[store]' (pymongo) to use forktex.store
 
 ## Wiring
 
-**Shape B — named-client registry.** `register(name, url, database)` builds a `StoreClient` and
-stores it in a module dict; `get_client(name)` fetches it; `deregister(name)` drops it without
-closing. `init(url, database)` is `register("default", ...)`, and every module-level operation
-(`insert_one`, `find`, `transaction`, …) runs against `get_client()` — the `"default"` client.
+`register(name, url, database)` builds a `StoreClient` and keeps it under that name;
+`get_client(name)` fetches it, `deregister(name)` drops it **without closing**.
+`init(url, database)` is `register("default", ...)`, and every module-level operation runs against
+`get_client()`.
 
 ```python
 from contextlib import asynccontextmanager
@@ -134,11 +134,9 @@ renders as a 500 unless the consumer translates it.
   underlying `AsyncMongoClient`. Dropping a client with `deregister` alone leaks its pool.
 - **`_id` is always a string on the way out.** `_normalize` stringifies `ObjectId` on every document
   returned, so `find`/`find_one` never hand back a `bson.ObjectId`.
-- **`_id` filters get coerced.** A filter value that is a 24-hex-char string passing
-  `ObjectId.is_valid` is converted back to an `ObjectId` before querying — necessary because a
-  string never matches a real `ObjectId`. The consequence: a *caller-supplied* `id=` that happens to
-  be valid `ObjectId` hex was stored as a literal string but will be looked up as an `ObjectId`, and
-  will not match. Avoid raw 24-hex-char custom ids.
+- **`_id` filters get coerced** back to an `ObjectId` when the value is valid 24-hex-char hex, so a
+  caller-supplied id of that shape is stored as a string and looked up as an `ObjectId`, and never
+  matches. Avoid raw 24-hex-char custom ids.
 - **`update_one` always wraps in `$set`.** You pass a plain field dict, not an update document —
   `{"$inc": …}` and friends are unreachable through this module.
 - **`find()` defaults to `limit=100`** with no cursor or pagination. A caller who assumes "all"
@@ -148,7 +146,6 @@ renders as a 500 unless the consumer translates it.
 - **Transactions need a replica set or sharded cluster.** A standalone `mongod` raises
   `OperationFailure` on `start_transaction()`.
 - **An operation without `session=` inside a `transaction()` block runs outside it** — not rolled
-  back, and blind to the transaction's uncommitted writes. Ordinary Mongo isolation, but easy to
-  miss because the call still succeeds.
+  back, blind to the uncommitted writes, and it still succeeds.
 - **BSON documents cap at 16 MB.** Use `forktex.storage` for blobs and keep only the reference
   here.

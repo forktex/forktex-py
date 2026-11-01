@@ -46,37 +46,6 @@ class StoreConfig(BaseValueObject):
     """Logical database name within the MongoDB deployment."""
 
 
-def _make_client(url: str) -> AsyncMongoClient:
-    try:
-        from pymongo import AsyncMongoClient
-    except ImportError as exc:
-        raise ImportError("Install 'forktex[store]' (pymongo) to use forktex.store") from exc
-    return AsyncMongoClient(url)
-
-
-def _to_query_id(value: object) -> object:
-    from bson import ObjectId
-
-    if isinstance(value, str) and ObjectId.is_valid(value):
-        return ObjectId(value)
-    return value
-
-
-def _normalize_filter(filter: dict[str, Any]) -> dict[str, Any]:
-    if "_id" in filter:
-        filter = dict(filter)
-        filter["_id"] = _to_query_id(filter["_id"])
-    return filter
-
-
-def _normalize(doc: dict[str, Any] | None) -> dict[str, Any] | None:
-    if doc is None:
-        return None
-    if "_id" in doc:
-        doc["_id"] = str(doc["_id"])
-    return doc
-
-
 class StoreClient:
     def __init__(self, config: StoreConfig) -> None:
         self._config = config
@@ -163,3 +132,40 @@ class StoreClient:
 
     async def close(self) -> None:
         await self._client.close()
+
+
+def _normalize(doc: dict[str, Any] | None) -> dict[str, Any] | None:
+    if doc is None:
+        return None
+    if "_id" in doc:
+        doc["_id"] = str(doc["_id"])
+    return doc
+
+
+def _normalize_filter(filter: dict[str, Any]) -> dict[str, Any]:
+    if "_id" in filter:
+        filter = dict(filter)
+        filter["_id"] = _to_query_id(filter["_id"])
+    return filter
+
+
+def _make_client(url: str) -> AsyncMongoClient:
+    try:
+        from pymongo import AsyncMongoClient
+    except ImportError as exc:
+        raise ImportError("Install 'forktex[store]' (pymongo) to use forktex.store") from exc
+    return AsyncMongoClient(url)
+
+
+def _to_query_id(value: object) -> object:
+    from bson import ObjectId
+
+    if isinstance(value, str) and ObjectId.is_valid(value):
+        return ObjectId(value)
+    return value
+
+
+__all__ = [
+    "StoreClient",
+    "StoreConfig",
+]

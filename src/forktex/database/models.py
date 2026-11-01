@@ -115,22 +115,6 @@ class AuditMixin(TimestampMixin):
         return (*uniqueness, _active_flag_matches_archived_at(tablename))
 
 
-def _unique_among_active_rows(tablename: str, fields: list[str]) -> sa.Index:
-    return sa.Index(
-        f"uq_{tablename}_active",
-        *fields,
-        unique=True,
-        postgresql_where=sa.text("archived_at IS NULL"),
-    )
-
-
-def _active_flag_matches_archived_at(tablename: str) -> sa.CheckConstraint:
-    return sa.CheckConstraint(
-        "(is_active AND archived_at IS NULL) OR (NOT is_active AND archived_at IS NOT NULL)",
-        name=f"ck_{tablename}_active_archive_consistency",
-    )
-
-
 class NamespacedMixin:
     namespace: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
 
@@ -157,6 +141,22 @@ class JsonModelColumn[T: BaseModel]:
     @staticmethod
     def deserialize(data: list[dict], model: type[T]) -> list[T]:
         return [model(**item) for item in (data or [])]
+
+
+def _unique_among_active_rows(tablename: str, fields: list[str]) -> sa.Index:
+    return sa.Index(
+        f"uq_{tablename}_active",
+        *fields,
+        unique=True,
+        postgresql_where=sa.text("archived_at IS NULL"),
+    )
+
+
+def _active_flag_matches_archived_at(tablename: str) -> sa.CheckConstraint:
+    return sa.CheckConstraint(
+        "(is_active AND archived_at IS NULL) OR (NOT is_active AND archived_at IS NOT NULL)",
+        name=f"ck_{tablename}_active_archive_consistency",
+    )
 
 
 __all__ = [

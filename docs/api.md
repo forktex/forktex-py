@@ -1,8 +1,7 @@
 # forktex.api
 
-A preconfigured FastAPI factory: trace-id propagation, security headers, CORS, the
-`AppError` → `ErrorEnvelope` mapping, and liveness/readiness endpoints — assembled in the right
-order, then handed back for you to extend.
+A FastAPI factory: trace-id propagation, security headers, CORS, the `AppError` →
+`ErrorEnvelope` mapping, and liveness/readiness endpoints, assembled in order.
 
 ## Install
 
@@ -10,22 +9,12 @@ order, then handed back for you to extend.
 pip install "forktex[api]"
 ```
 
-The extra declares `fastapi`. Importing the package needs nothing: only `create_app` touches
-FastAPI, and it raises an `ImportError` naming the extra if it is missing.
-
-```
-ImportError: Install 'forktex[api]' (fastapi) to use forktex.api
-```
-
-Both middleware classes are **pure ASGI**, so `from forktex.api import SecurityHeadersMiddleware`
-works with no FastAPI installed and can be applied to any ASGI app.
-`ExceptionEnvelopeMiddleware` is not re-exported from the package root — `create_app` wires it
-for you; reach it at `forktex.api.middleware` if you are assembling an app yourself.
+Only `create_app` touches FastAPI, raising `ImportError: Install 'forktex[api]' (fastapi) to use
+forktex.api` if the extra is missing. Both middleware classes are pure ASGI and work without
+FastAPI installed; `ExceptionEnvelopeMiddleware` lives at `forktex.api.middleware` for an app you
+assemble yourself.
 
 ## Wiring
-
-**Shape C — consumer-owned object, no global state.** You own the app; there is no registry, no
-`init()`, no singleton.
 
 ```python
 from forktex.api import AppConfig, create_app
@@ -41,10 +30,8 @@ app = create_app(
 app.include_router(projects_router)
 ```
 
-That is a complete, correctly layered app. You do **not** need to add the envelope middleware, the
-trace-id middleware, or the security headers yourself.
-
-Raise an `AppError` subclass anywhere and it becomes the right status plus an `ErrorEnvelope` body:
+The envelope, trace-id and security-header middleware are already wired. Raise an `AppError`
+subclass anywhere and it becomes the right status plus an `ErrorEnvelope` body:
 
 ```python
 from forktex.error import NotFoundError
@@ -56,8 +43,7 @@ async def get_project(project_id: str) -> dict[str, str]:
 
 ### Startup and shutdown
 
-Pass your lifespan through `AppConfig`; there is no need to assign `app.router.lifespan_context`
-afterwards.
+Pass your lifespan through `AppConfig`.
 
 ```python
 from contextlib import asynccontextmanager
@@ -80,19 +66,18 @@ app = create_app(AppConfig(title="Projects API", lifespan=lifespan))
 
 ### Readiness probes
 
-`/health` is liveness and always returns `{"status": "ok"}`. `/health/ready` runs each probe you
-register and reports them individually, so you extend the built-in endpoint rather than hiding it
-and mounting your own. Any failing probe makes the whole response a **503**.
+`/health` always returns `{"status": "ok"}`. `/health/ready` runs each registered probe and
+reports them individually; any failing probe makes the response a **503**.
 
 ```python
 import sqlalchemy as sa
 
 from forktex.api import AppConfig, create_app
-from forktex.database import get_session
+from forktex.database import transactional_session
 
 
 async def db_ready() -> bool:
-    async with get_session() as session:
+    async with transactional_session() as session:
         await session.execute(sa.text("SELECT 1"))
     return True
 
@@ -100,9 +85,8 @@ async def db_ready() -> bool:
 app = create_app(AppConfig(readiness_probes={"database": db_ready}))
 ```
 
-A probe that raises and a probe that returns `False` are both reported as not-ready; the raising one
-is logged with a stack trace, so the two stay distinguishable. Keep probes fast (≤200 ms) and
-side-effect-free — they run on every call.
+A probe that raises and one that returns `False` are both not-ready; the raising one is logged with
+a stack trace. Keep probes fast and side-effect-free — they run on every call.
 
 ## Public surface
 
@@ -132,8 +116,7 @@ side-effect-free — they run on every call.
 
 ### Security headers
 
-`SecurityHeadersMiddleware` sets four conservative headers, and never overwrites one your app
-already set:
+Set by `SecurityHeadersMiddleware`, never overwriting one your app already set:
 
 | Header | Value |
 |:---|:---|
@@ -142,27 +125,20 @@ already set:
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
 | `Permissions-Policy` | `geolocation=(), microphone=(), camera=()` |
 
-CSP and HSTS are deliberately **not** included: both need per-service values, and a wrong default
-either breaks the app or provides false assurance. Add your own middleware for those.
+CSP and HSTS need per-service values and are not included; add your own middleware.
 
 ## Middleware order
 
-`add_middleware` applies in reverse, so the assembled stack is, outermost first:
+Outermost first: **security headers · CORS · trace-id · envelope**.
 
-**security headers · CORS · trace-id · envelope**
-
-The envelope sits *inside* trace-id so the contextvar is still live when the error body is built —
-which is what makes the response `traceId`, the `X-Request-ID` header, and the log records agree.
-This ordering is load-bearing: `TraceIDMiddleware` binds the id with a context manager that resets
-it on exit, so an envelope built anywhere outside it would carry a null `traceId`. Security headers
-are outermost so they stamp every response, errors and CORS preflights included.
+The envelope sits inside trace-id, so the contextvar is live when the error body is built and the
+response `traceId`, the `X-Request-ID` header and the log records agree. Security headers are
+outermost, stamping errors and CORS preflights too.
 
 ## Errors
 
-The package raises nothing of its own beyond the `ImportError` for a missing extra — it converts
-your `AppError`s into responses. See [error.md](error.md) for the hierarchy.
-
-The `AppErrorCode` → status mapping:
+The package raises nothing of its own beyond the `ImportError` for a missing extra; it converts
+your `AppError`s into responses ([error.md](error.md)). The `AppErrorCode` → status mapping:
 
 | Code | Status | | Code | Status |
 |:---|:---|---|:---|:---|
@@ -174,8 +150,8 @@ The `AppErrorCode` → status mapping:
 | `forbidden` | 403 | | `internal` | 500 |
 | `conflict` | 409 | | | |
 
-FastAPI's own `HTTPException` and request-validation handling runs closer to the route and is left
-untouched — a bad query param still yields FastAPI's standard 422.
+FastAPI's own `HTTPException` and request-validation handling is untouched: a bad query param
+still yields FastAPI's standard 422.
 
 ## Gotchas
 
@@ -187,13 +163,9 @@ untouched — a bad query param still yields FastAPI's standard 422.
   server to deal with. `AppError`s are still enveloped — the switch governs only the catch-all.
 - An exception raised *after* the response has started streaming cannot be turned into an envelope
   (the status line is already on the wire), so it is re-raised instead.
-- The health routes are registered on the app. To keep them out of a generated SDK, set
-  `include_in_schema = False` on them rather than removing them.
-- `/health/ready` returns 503 with a body — it is a real report, not an empty error. Read `checks`
-  to see which dependency failed.
+- To keep the health routes out of a generated SDK, set `include_in_schema = False` on them.
+- `/health/ready` returns 503 **with a body**; read `checks` for which dependency failed.
 
 ## Running background work in the same app
 
-See [worker.md](worker.md#running-a-worker-inside-a-fastapi-app) for consuming a queue inside
-this app's lifespan, the one-trace-id-across-both-tiers contract, and when to split the two
-into separate processes instead.
+See [worker.md](worker.md#running-a-worker-inside-a-fastapi-app).

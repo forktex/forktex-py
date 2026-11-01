@@ -7,18 +7,14 @@ plus subgraph extraction. No I/O, no persistence, no backend.
 ## Install
 
 ```bash
-pip install forktex            # graph is always available
-pip install forktex[graph]     # same thing — the extra declares no dependencies
+pip install forktex
 ```
 
-There is nothing to import lazily and no `ImportError` path. The module depends only on the
-standard library, `pydantic` and `forktex.error`.
+No extra required. Depends only on the standard library, `pydantic` and `forktex.error`.
 
 ## Wiring
 
-**Shape C — consumer-owned object, no global state.** No registry, no `init()`, no singleton. A
-`Graph` is an ordinary value you construct, mutate and pass around; nothing is shared between
-requests unless you share it yourself.
+A `Graph` is an ordinary value you construct, mutate and pass around. No registry, no `init()`.
 
 ```python
 from forktex.graph import Graph, GraphNode, shortest_path, transitive_closure
@@ -36,8 +32,7 @@ payload = g.sorted().model_dump_json()      # byte-stable snapshot
 g2 = Graph.model_validate_json(payload)
 ```
 
-`kind` is a free-form `str` on both nodes and edges (`NodeKind` and `EdgeKind` are aliases for
-`str`) — each consumer brings its own vocabulary.
+`kind` is a free-form `str` on both nodes and edges; each consumer brings its own vocabulary.
 
 ## Public surface
 
@@ -78,10 +73,10 @@ from forktex.graph import (
 | `NodeNotFoundError` | `NotFoundError` + `KeyError`, code `NOT_FOUND`. |
 | `InvalidDirectionError` | `BadRequestError` + `ValueError`, code `BAD_REQUEST`. |
 
-`Graph` methods (not separately exported): `add_node`, `add_edge`, `node`, `has_node`, `out_edges`,
-`in_edges`, `neighbors`, `by_kind`, `edges_by_kind`, `sorted`, `merge`, and the classmethods
-`empty` and `from_iterables`. `GraphMeta` (`name`, `generated_at`, `schema_version`) is defined in
-`forktex.graph.models` and reachable there, but is **not** in the package `__all__`:
+`Graph` methods: `add_node`, `add_edge`, `node`, `has_node`, `out_edges`, `in_edges`, `neighbors`,
+`by_kind`, `edges_by_kind`, `sorted`, `merge`, and the classmethods `empty` and `from_iterables`.
+`GraphMeta` (`name`, `generated_at`, `schema_version`) is reachable at `forktex.graph.models` but
+is not in the package `__all__`:
 
 ```python
 from forktex.graph.models import GraphMeta
@@ -97,16 +92,14 @@ reached = transitive_closure(g, "alice", edge_kind="works_at")
 
 ## Errors
 
-Both errors subclass `AppError` *and* the plain-Python exception callers already catch, so
-`except KeyError` and `except NotFoundError` both work.
+Both errors subclass `AppError` *and* the plain-Python exception callers already catch.
 
 | Raised | When | Catch? |
 |---|---|---|
 | `NodeNotFoundError` | `add_edge()` where `src_id` or `dst_id` is not already a node. | Yes, if you build edges from untrusted input. |
-| `InvalidDirectionError` | `neighbors(direction=…)` with anything other than `"out"`, `"in"`, `"both"` — and so from `bfs`/`dfs`/`transitive_closure`/`shortest_path`/`subgraph_around`, which forward `direction` through. | No — a programming error. |
+| `InvalidDirectionError` | `direction=` anything but `"out"`, `"in"`, `"both"`, in `neighbors` or any algorithm forwarding it. | No — a programming error. |
 
-Nothing else raises. Unknown ids passed to the algorithms return an empty result rather than an
-error.
+Nothing else raises; an unknown id returns an empty result.
 
 ## Gotchas
 
@@ -117,24 +110,20 @@ error.
   edges coexist between the same pair — that is the multi-edge behaviour. Identical tuples return
   the existing edge.
 - **`add_edge` requires both endpoints to exist**; ordering matters when building from a stream.
-- **Edge ids depend on `attrs` content.** `edge_id` hashes `json.dumps(attrs, sort_keys=True,
-  default=str)`, so a value that only `str`-renders identically (a `datetime` versus its string)
-  produces the same id, and mutating `attrs` after insertion desynchronises the edge from its id.
-- **The adjacency index is not invalidated by direct list mutation.** `_ensure_index` rebuilds once,
-  on first read of a freshly-parsed graph; after that only `add_node`/`add_edge` keep it in sync.
-  Appending to `g.nodes` or `g.edges` yourself leaves lookups stale.
+- **Edge ids depend on `attrs` content**, hashed as `json.dumps(attrs, sort_keys=True,
+  default=str)`. A `datetime` and its string render alike, and mutating `attrs` after insertion
+  desynchronises the edge from its id.
+- **Direct list mutation does not invalidate the adjacency index.** Only `add_node`/`add_edge`
+  keep it in sync, so appending to `g.nodes` or `g.edges` yourself leaves lookups stale.
 - **`dfs` is recursive** and will hit Python's recursion limit on a deep chain. `bfs` is iterative.
   `cycles` is also recursive (Tarjan).
-- **`shortest_path` is unweighted** — every edge counts as 1. Encode weights in `attrs` and run your
-  own Dijkstra if you need them.
+- **`shortest_path` is unweighted**; encode weights in `attrs` and run your own Dijkstra.
 - **`cycles` returns one representative per cyclic SCC**, not every simple cycle, and the node order
   within a component is Tarjan's stack-pop order, not a traversal order.
-- **`sorted()`, `merge()` and `induced_subgraph()` deep-copy** nodes and edges, so results never
-  alias the source. `sorted()` carries `meta` over by reference.
+- **`sorted()`, `merge()` and `induced_subgraph()` deep-copy** nodes and edges; `sorted()` carries
+  `meta` over by reference.
 - **`merge()` mutates the receiver** and keeps the receiver's `meta`; it returns `self`, not a new
   graph.
 - **`subgraph_around` with an unknown `start_id`** returns an empty `Graph` carrying the source's
   `meta`; `max_depth <= 0` returns just the start node.
 - **`induced_subgraph` silently drops ids** that are not in the graph.
-- **Nothing is persisted.** This is an in-memory algebra — build a `Graph`, query it,
-  and persist whatever you need from the result yourself.

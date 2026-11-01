@@ -34,13 +34,6 @@ from pydantic import Field
 from forktex.error import BadRequestError
 from forktex.types import BaseAppModel
 
-__all__ = [
-    "Page",
-    "decode_cursor",
-    "encode_cursor",
-    "keyset_predicate",
-]
-
 
 class Page[T](BaseAppModel):
     items: list[T] = Field(default_factory=list)
@@ -66,19 +59,6 @@ def decode_cursor(cursor: str, *, expected_length: int | None = None) -> list[An
     return values
 
 
-def _sorts_after(
-    expr: sa.SQLColumnExpression[Any], value: object, *, ascending: bool, is_tiebreaker: bool
-) -> sa.ColumnElement[bool] | None:
-    nulls_last = ascending
-    if value is None:
-        return None if nulls_last else expr.is_not(None)
-    if not ascending:
-        return expr < value
-    if is_tiebreaker:
-        return expr > value
-    return sa.or_(expr > value, expr.is_(None))
-
-
 def keyset_predicate(
     levels: list[tuple[sa.SQLColumnExpression[Any], Any]],
     *,
@@ -99,3 +79,24 @@ def keyset_predicate(
     if not disjuncts:
         raise BadRequestError("invalid cursor")
     return sa.or_(*disjuncts)
+
+
+def _sorts_after(
+    expr: sa.SQLColumnExpression[Any], value: object, *, ascending: bool, is_tiebreaker: bool
+) -> sa.ColumnElement[bool] | None:
+    nulls_last = ascending
+    if value is None:
+        return None if nulls_last else expr.is_not(None)
+    if not ascending:
+        return expr < value
+    if is_tiebreaker:
+        return expr > value
+    return sa.or_(expr > value, expr.is_(None))
+
+
+__all__ = [
+    "Page",
+    "decode_cursor",
+    "encode_cursor",
+    "keyset_predicate",
+]

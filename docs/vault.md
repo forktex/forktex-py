@@ -22,10 +22,8 @@ itself always succeeds.
 
 ## Wiring
 
-**Shape C — consumer-owned object, no global state.** There is no registry and no `init()`. Build
-one `Vault` at startup from an environment variable and pass it where it is needed; the same
-instance must be handed to every `EncryptedJSON` column so loads decrypt with the key that wrote
-them.
+Build one `Vault` at startup from an environment variable and pass it where it is needed. The same
+instance must reach every `EncryptedJSON` column, so loads decrypt with the key that wrote them.
 
 ```python
 import os
@@ -75,16 +73,15 @@ cleartext and would otherwise reach logs, tracebacks and error reporters that ca
 | `ImportError("Install 'forktex[vault]' (cryptography) to use forktex.vault")` | `Vault(kek)` without the extra. | No — install it. |
 | `DecryptionError` | `decrypt()` (and therefore `rotate_kek()` and any `EncryptedJSON` load) with the wrong KEK or a tampered/corrupt blob. Fernet cannot tell those apart, so the message does not guess; `cryptography.fernet.InvalidToken` is on `__cause__`. | Only at an operational boundary. |
 
-`InvalidToken` is passed through deliberately rather than wrapped in an `AppError` — the same
+`InvalidToken` is passed through rather than wrapped in an `AppError` — the same
 exception means "wrong KEK" and "tampered ciphertext", and only an operator can distinguish them.
 Collapsing it into a status code would hide that. `decrypt()` logs the failure with the blob length
 only — never the plaintext, blob or key.
 
 ## Gotchas
 
-- **No envelope encryption.** There is no data-encryption-key wrapped by the KEK, so `rotate_kek`
-  fully decrypts and re-encrypts each payload. It is O(1) per call but a full rotation is a bulk
-  migration over every encrypted row, not a key swap.
+- **No envelope encryption.** `rotate_kek` decrypts and re-encrypts each payload, so a full
+  rotation is a bulk migration over every encrypted row, not a key swap.
 - **Bulk rotation must bypass the ORM.** `EncryptedJSON` is bound to one `Vault` and always decrypts
   on load, so a rotation script has to read and write the raw bytes through Core:
 
@@ -103,8 +100,7 @@ only — never the plaintext, blob or key.
 
 - **`encrypt` only accepts a dict.** It is typed `dict[str, Any]` and always JSON-serialises; there
   is no bytes-in/bytes-out path.
-- **`default=str` is lossy.** Anything JSON cannot represent — `datetime`, `Decimal`, `UUID` — is
-  stringified on encrypt and comes back as a string. Round-trips are not type-preserving.
+- **`default=str` is lossy.** `datetime`, `Decimal` and `UUID` come back as strings.
 - **Ciphertext is non-deterministic** (fresh IV per call), so an encrypted column cannot be indexed,
   compared, or used in a `WHERE` clause.
 - **The KEK is not stretched.** Derivation is a single SHA-256, not a KDF — the KEK must itself be

@@ -46,14 +46,6 @@ if TYPE_CHECKING:
     from qdrant_client import AsyncQdrantClient
 
 
-def _make_client(url: str, api_key: str | None) -> AsyncQdrantClient:
-    try:
-        from qdrant_client import AsyncQdrantClient
-    except ImportError as exc:
-        raise ImportError("Install 'forktex[vector]' (qdrant-client) to use forktex.vector") from exc
-    return AsyncQdrantClient(url=url, api_key=api_key)
-
-
 class CollectionHandle:
     def __init__(self, name: str, qdrant_url: str, api_key: str | None) -> None:
         self._name = name
@@ -323,6 +315,14 @@ class CollectionHandle:
 
         reranked.sort(key=lambda h: h.score, reverse=True)
         return reranked[:top_k]
+
+
+def _make_client(url: str, api_key: str | None) -> AsyncQdrantClient:
+    try:
+        from qdrant_client import AsyncQdrantClient
+    except ImportError as exc:
+        raise ImportError("Install 'forktex[vector]' (qdrant-client) to use forktex.vector") from exc
+    return AsyncQdrantClient(url=url, api_key=api_key)
 
 
 __all__ = ["CollectionHandle"]
