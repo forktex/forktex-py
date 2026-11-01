@@ -29,7 +29,7 @@ from datetime import datetime
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
-from forktex.database.models import AuditMixin, BaseDBModel, TimestampMixin, UtcDateTime
+from forktex.database.models import AuditMixin, BaseDBModel, TimestampMixin, UtcTimestamp
 
 
 def _naive_temporal_columns(metadata: sa.MetaData) -> list[str]:
@@ -43,8 +43,8 @@ def _naive_temporal_columns(metadata: sa.MetaData) -> list[str]:
 
 
 def test_the_canonical_type_is_timezone_aware() -> None:
-    assert isinstance(UtcDateTime, sa.TIMESTAMP)
-    assert UtcDateTime.timezone is True
+    assert isinstance(UtcTimestamp, sa.TIMESTAMP)
+    assert UtcTimestamp.timezone is True
 
 
 def test_a_bare_mapped_datetime_declares_a_tz_aware_column() -> None:
@@ -70,7 +70,12 @@ def test_timestamp_and_audit_mixins_declare_tz_aware_columns() -> None:
         __tablename__ = "_probe_ts_tz"
         id: Mapped[int] = mapped_column(primary_key=True)
 
-    assert _naive_temporal_columns(_ProbeTs.metadata) == []
+    assert _naive_temporal_columns(sa.MetaData()) == [], "the helper must report nothing for nothing"
+    assert [c.name for c in _ProbeTs.__table__.c if isinstance(c.type, sa.DateTime)] == [
+        "created_at",
+        "updated_at",
+    ]
+    assert all(c.type.timezone for c in _ProbeTs.__table__.c if isinstance(c.type, sa.DateTime))
 
 
 def test_no_declared_model_in_the_library_has_a_naive_temporal_column() -> None:

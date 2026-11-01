@@ -24,8 +24,10 @@
 
 from __future__ import annotations
 
-from forktex.error import AppErrorCode
-from forktex.error import AppError
+from uuid import uuid7
+
+from forktex import iso
+from forktex.error import AppError, AppErrorCode, BadRequestError
 from starlette.requests import Request
 from collections.abc import AsyncIterator
 from fastapi.responses import JSONResponse
@@ -333,13 +335,14 @@ def test_middleware_are_usable_on_a_plain_asgi_app_without_create_app() -> None:
 
 
 def test_downstream_package_errors_render_with_their_real_status() -> None:
-    from forktex.graph.errors import NodeNotFoundError
-    from forktex.vector.errors import CollectionNotFoundError, DimensionMismatchError
+    from forktex.cache.errors import CacheInitializationError
+    from forktex.database.errors import TransactionBoundaryError
+    from forktex.storage.errors import ObjectNotFoundError
 
     cases = [
-        (NodeNotFoundError("node 'a' is absent"), 404),
-        (CollectionNotFoundError("collection 'docs' is absent"), 404),
-        (DimensionMismatchError("expected 768, got 512"), 422),
+        (ObjectNotFoundError("object 'a/b.png' is absent"), 404),
+        (CacheInitializationError("redis is unreachable"), 503),
+        (TransactionBoundaryError("commit() is not available here"), 500),
     ]
     for error, expected_status in cases:
         with TestClient(_app_that_raises(error)) as client:
@@ -479,3 +482,18 @@ def test_a_malformed_prefix_is_rejected_at_config_time(bad: str) -> None:
 def test_an_unknown_config_field_is_rejected_rather_than_ignored() -> None:
     with pytest.raises(ValidationError, match="not_a_real_setting"):
         AppConfig(not_a_real_setting="/api")
+
+
+def test_an_error_envelope_survives_details_that_are_not_json_native() -> None:
+    """A UUID or datetime in `details` crashed the middleware's own response, so a
+    deliberate 400 reached the client as a plain-text 500 with no traceId."""
+    error = BadRequestError("bad", details={"id": uuid7(), "when": iso.now()})
+    with TestClient(_app_that_raises(error)) as client:
+        response = client.get("/boom")
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == AppErrorCode.BAD_REQUEST.value
+    assert isinstance(body["details"]["id"], str)
+    assert isinstance(body["details"]["when"], str)
+    assert body["traceId"]

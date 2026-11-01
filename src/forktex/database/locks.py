@@ -27,14 +27,12 @@ from __future__ import annotations
 import zlib
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 
+from forktex.database.errors import InvalidAdvisoryKeyError
 from forktex.log import get_logger
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 
 logger = get_logger(__name__)
 
@@ -43,14 +41,14 @@ _UNSIGNED_64_WRAP = 1 << 64
 
 def advisory_key(*parts: object) -> int:
     if not parts:
-        raise ValueError("advisory_key requires at least one part")
+        raise InvalidAdvisoryKeyError("advisory_key requires at least one part")
     return zlib.crc32("\x00".join(str(p) for p in parts).encode())
 
 
 def key_from_uuid(value: object) -> int:
     as_int = getattr(value, "int", None)
     if as_int is None:
-        raise TypeError(f"expected a UUID, got {type(value).__name__}")
+        raise InvalidAdvisoryKeyError(f"expected a UUID, got {type(value).__name__}")
     return _as_signed_bigint((as_int & 0xFFFFFFFFFFFFFFFF) ^ (as_int >> 64))
 
 

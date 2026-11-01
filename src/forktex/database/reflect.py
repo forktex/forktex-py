@@ -29,6 +29,7 @@ from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import inspect
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Connection
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
@@ -54,8 +55,6 @@ async def column_types(executor: _Executor, relation: str, *, schema: str | None
 
 
 def type_ddl(type_: TypeEngine[Any]) -> str:
-    from sqlalchemy.dialects import postgresql
-
     return str(type_.compile(dialect=postgresql.dialect()))
 
 

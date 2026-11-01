@@ -3,16 +3,7 @@
 The shared error vocabulary: an `AppError` hierarchy, a stable `AppErrorCode` enum, and the
 `ErrorEnvelope` wire shape every ForkTex service returns on failure.
 
-## Install
-
-```bash
-pip install forktex
-```
-
-No extra required.
-
-`AppError` has **no notion of HTTP**: the status mapping belongs in the transport layer, so a
-worker, a CLI or a script raises and catches the same errors without a web framework.
+`AppError` carries no HTTP status; the mapping lives at the transport edge.
 
 ## Wiring
 
@@ -28,36 +19,16 @@ async def get_project(session, project_id):
     return project
 ```
 
-`to_envelope` builds the wire shape; you own the code → HTTP-status mapping:
+`to_envelope` builds the wire shape. `forktex.api.create_app` already maps the code to a status
+([api.md](api.md#errors) has the table); for a transport you assemble yourself:
 
 ```python
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-
-from forktex.error import AppError, AppErrorCode, to_envelope
-
-_STATUS = {
-    AppErrorCode.NOT_FOUND: 404,
-    AppErrorCode.ALREADY_EXISTS: 409,
-    AppErrorCode.CONFLICT: 409,
-    AppErrorCode.BAD_REQUEST: 400,
-    AppErrorCode.VALIDATION: 422,
-    AppErrorCode.UNAUTHORIZED: 401,
-    AppErrorCode.FORBIDDEN: 403,
-    AppErrorCode.RATE_LIMITED: 429,
-    AppErrorCode.UNAVAILABLE: 503,
-}
-
-app = FastAPI()
-
-
-@app.exception_handler(AppError)
-async def _app_error(request: Request, exc: AppError) -> JSONResponse:
-    return JSONResponse(
-        status_code=_STATUS.get(exc.code, 500),
-        content=to_envelope(exc).model_dump(by_alias=True),
-    )
+envelope = to_envelope(exc, trace_id=get_trace_id())
+body = envelope.model_dump(mode="json")
 ```
+
+`mode="json"` matters: `details` is coerced with a `str` fallback only in JSON mode, so a UUID or
+datetime in there fails to serialise otherwise.
 
 ## Public surface
 
@@ -114,7 +85,5 @@ This package defines errors rather than raising them.
 ## Gotchas
 
 - **`AppError` carries no `.status_code`** — map from `exc.code`.
-- `ConflictError` is re-exported by `forktex.database.crud`; it is the same class, so one handler
-  catches both import paths.
 - The envelope's trace id comes from `forktex.log`'s contextvar, set by `TraceIDMiddleware`.
   Without that middleware the field is empty.

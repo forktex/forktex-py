@@ -25,12 +25,11 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
 
 from pydantic import Field, field_serializer
 from pydantic_core import to_jsonable_python
 
-from forktex.types import BaseAppModel
+from forktex.types import BaseAppModel, JsonObject
 
 
 class AppErrorCode(StrEnum):
@@ -52,7 +51,7 @@ class AppErrorCode(StrEnum):
 class AppError(Exception):
     code: AppErrorCode = AppErrorCode.INTERNAL
 
-    def __init__(self, message: str, *, details: dict[str, Any] | None = None) -> None:
+    def __init__(self, message: str, *, details: dict[str, object] | None = None) -> None:
         super().__init__(message)
         self.message = message
         self.details = details or {}
@@ -97,11 +96,11 @@ class ServiceUnavailableError(AppError):
 class ErrorEnvelope(BaseAppModel):
     code: str
     message: str
-    details: dict[str, Any] = Field(default_factory=dict)
+    details: dict[str, object] = Field(default_factory=dict)
     trace_id: str | None = None
 
     @field_serializer("details", when_used="json")
-    def _serialize_details(self, value: dict[str, Any]) -> dict[str, Any]:
+    def _serialize_details(self, value: dict[str, object]) -> JsonObject:
         return to_jsonable_python(value, fallback=str)
 
 

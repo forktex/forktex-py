@@ -6,7 +6,7 @@
 
 <p align="center"><em>The shared Python substrate for ForkTex services.</em></p>
 
-Import only what you need: each module's third-party dependency is an optional extra.
+One install, no extras: `import forktex` resolves every module.
 
 ```bash
 pip install forktex
@@ -17,7 +17,7 @@ pip install forktex
 
 ## Modules
 
-**Primitives** — always available, no extra required:
+**Primitives**
 
 | Module | What it is |
 | --- | --- |
@@ -28,25 +28,20 @@ pip install forktex
 
 **Role facades** — one per piece of infrastructure:
 
-| Module | Extra | What it is |
-| --- | --- | --- |
-| [`database`](docs/database.md) | — | Async Postgres/SQLAlchemy: sessions, ORM bases, CRUD, advisory locks, migrations |
-| [`cache`](docs/cache.md) | — | Async Redis: `@cached`, namespaced keys, invalidation |
-| [`graph`](docs/graph.md) | — | Typed multi-edge in-memory graph algebra (BFS/DFS, subgraphs) |
-| [`queue`](docs/queue.md) | `[queue]` | arq background jobs: `@task`, `enqueue`, `make_worker` |
-| [`storage`](docs/storage.md) | `[storage]` | S3/MinIO objects: presigned URLs, bucket lifecycle |
-| [`store`](docs/store.md) | `[store]` | Schemaless documents (MongoDB) |
-| [`vector`](docs/vector.md) | `[vector]` | Qdrant vector search: collections, hybrid/dense/sparse |
-| [`vault`](docs/vault.md) | `[vault]` | Fernet encryption at rest, `EncryptedJSON` column type |
+| Module | What it is |
+| --- | --- |
+| [`database`](docs/database.md) | Async Postgres/SQLAlchemy: sessions, ORM bases, CRUD, advisory locks, migrations |
+| [`cache`](docs/cache.md) | Async Redis: `@cached`, namespaced keys, invalidation |
+| [`storage`](docs/storage.md) | S3/MinIO objects: presigned URLs, bucket lifecycle |
 
 **Bootstrap** — process-level wiring:
 
-| Module | Extra | What it is |
-| --- | --- | --- |
-| [`api`](docs/api.md) | `[api]` | FastAPI app factory: middleware stack, error envelope, health probes |
+| Module | What it is |
+| --- | --- |
+| [`api`](docs/api.md) | FastAPI app factory: middleware stack, error envelope, health probes |
 
-Install extras as needed — `pip install "forktex[storage,vector]"`, or
-`pip install "forktex[all]"` for everything.
+`graph`, `queue`, `store`, `vault` and `vector` are set aside in
+`backlog/facades/` until a consumer needs them.
 
 ## Quick start
 
@@ -106,27 +101,18 @@ async with transactional_session() as session:
 Inside the first two, `commit()`, `rollback()` and `begin()` raise `TransactionBoundaryError`.
 To abort, raise. Full contract in [docs/database.md](docs/database.md).
 
-### No global state required
-
-`init_engine` / `cache.init` / `queue.init` configure one process-wide default. Each is a shim
-over a handle you can build yourself — `Database(url)`, `Cache(url)`, `Queue(url)` — so a process
-can hold several, or none.
-
-A module whose extra is missing raises an `ImportError` that names it:
-
-```
-ImportError: Install 'forktex[vector]' (qdrant-client) to use forktex.vector
-```
+`init_engine` / `cache.init` / `storage.init` configure one process-wide default; `Database(url)`,
+`Cache(url)` and `StorageClient(config)` build handles directly, so a process can hold several.
 
 ## Documentation
 
-One page per module under [`docs/`](docs/): install, wiring, the public surface, the error
-contract, the gotchas. [`docs/development.md`](docs/development.md) is the contributor guide.
+One page per module under [`docs/`](docs/): wiring, the public surface, the error contract,
+the gotchas. [`docs/development.md`](docs/development.md) is the contributor guide.
 
 ## Development
 
 ```bash
-make install     # poetry install --with dev --all-extras
+make install     # poetry install --with dev
 make test        # pytest with the coverage floor
 make ci          # format-check · lint · license-check · typecheck · audit · test · build · smoke
 ```

@@ -3,14 +3,7 @@
 Async Redis cache: connection lifecycle, plain get/set/delete, a `@cached` decorator with
 optional stale-while-revalidate, namespaced keys, and Pydantic-aware JSON serialisation.
 
-## Install
-
-```bash
-pip install forktex
-```
-
-`redis[hiredis]` is a core dependency; the `[cache]` extra declares nothing. The only startup
-failure is `init()` being unable to reach Redis.
+The only startup failure is `init()` being unable to reach Redis.
 
 ## Wiring
 
@@ -44,28 +37,6 @@ helpers degrade to no-ops rather than raising, so a missing worker-side `init()`
 
 ## Public surface
 
-```python
-from forktex.cache import (
-    CachePrefix,
-    available,
-    cached,
-    close,
-    delete,
-    deserialize,
-    fetch_or_set,
-    fetch_swr,
-    get,
-    get_client,
-    init,
-    invalidate_key,
-    invalidate_prefix,
-    key_for,
-    serialize,
-    set,
-    shutdown_background_tasks,
-)
-```
-
 | Name | Description |
 |---|---|
 | `init(url)` | Async. Create the client from a Redis URL and `PING` it. |
@@ -91,8 +62,8 @@ from forktex.cache import (
 `cached` signature:
 
 ```python
-@cached(
-    ttl=300,                      # seconds; with stale_ttl set, the refresh threshold instead
+@cached(                          # keyword-only
+    ttl=60,                       # seconds; with stale_ttl set, the refresh threshold instead
     stale_ttl=None,               # set → stale-while-revalidate
     key_builder=None,             # callable(*args, **kwargs) -> str
     response_model=None,          # pydantic model for deserialisation
@@ -119,17 +90,19 @@ await invalidate_prefix(key_for(Prefix.ORG, org_id))
 
 | Raised | When | Catch? |
 |---|---|---|
-| `CacheInitializationError` | `init()` — `PING` failed. The client is reset to `None` first, so `available()` keeps reporting `False`. | At startup only. Let it stop the process unless the cache is genuinely optional. |
+| `CacheInitializationError` | `init()` — `PING` failed. Any previously installed default stays in place. | At startup only. Let it stop the process unless the cache is genuinely optional. |
 | `CacheNotInitializedError` | `get_client()` before `init()`. | A wiring bug; do not catch. |
-| `ValueError` | `key_for(prefix, ...)` with a `None` part. | A wiring bug; do not catch. |
+| `InvalidCacheKeyError` | `key_for()` given a `None` part, which would collapse a per-entity key onto the shared prefix. | A wiring bug; do not catch. |
 
-Both derive from `CacheError`, which subclasses `AppError` ([error.md](error.md)) and
+All three derive from `CacheError`, which subclasses `AppError` ([error.md](error.md)) and
 `RuntimeError`.
 
-Every read and write catches Redis exceptions, logs them and returns a neutral value, so no
-`try/except` is needed around ordinary cache use. The URL is masked in logs.
-
 ## Gotchas
+
+- **`@cached` returns the JSON round-trip of your value, on a miss as well as a hit.** A cache can
+  only store JSON, so a `datetime` comes back as a string and a `tuple` as a list — on every call,
+  not just the cached ones. Pass `response_model=` to get a model back; for anything else, cache
+  the serialisable shape and convert at the call site.
 
 - **Failures are swallowed.** Without `init()`, or if Redis dies mid-request, `get` returns `None`,
   `set`/`delete` no-op and `invalidate_prefix` returns `0` — a misconfigured cache looks like a 100%
@@ -139,9 +112,9 @@ Every read and write catches Redis exceptions, logs them and returns a neutral v
   but never `"username:foo"`.
 - **`key_for` rejects `None` parts**, which would collapse a per-entity key onto the shared
   `prefix` key. Empty-string parts *are* dropped.
-- **`stale_ttl=0` still selects SWR.** Only `stale_ttl=None` picks plain `fetch_or_set`; `0` is a
-  valid TTL and refreshes on every read.
-- **The default key builder SHA-256s `f"{module}.{name}:{args}:{kwargs}"`**, so arguments need a
+- **A non-positive `ttl` or `stale_ttl` stores nothing**, so every read refetches. `stale_ttl=0`
+  still selects SWR — only `stale_ttl=None` picks plain `fetch_or_set`.
+- **The default key builder SHA-256s the qualified name, the args and the sorted kwargs**, so arguments need a
   stable `repr`. Pass `key_builder` for anything non-trivial.
 - **SWR refresh is Redis-locked** under `lock:<key>` for 10 s, so one process refreshes at a time.
   The refresh itself is a bare `asyncio.Task`: call `shutdown_background_tasks()` before `close()`.

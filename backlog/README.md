@@ -17,6 +17,8 @@ It is expected to return, package by package, in later cycles.
 | `tests/core/` | `test_grid`, `test_flow`, `test_space`, `test_catalog`, `test_stories`, `test_architecture` (the level-DAG guards), plus two files split out of surviving suites (see below) | Follow their code. |
 | `client/`, `codegen/` | React Grid Studio UI + its API-client generator | Belong to `core/grid/`. |
 | `docs/` | `flow.md`, `grid.md`, `grid-binding-design.md`, `space.md`, and the CLI's own docs | Follow their code. |
+| `facades/` | `graph/`, `queue/`, `store/`, `vault/`, `vector/` | Set aside for 0.13.0. `graph` and `store` had no consumer anywhere in the fleet; `queue`, `vault` and `vector` had one each, using 2-5 of their exported names, and their defects clustered in the surface nobody called. Parking them dropped `arq`, `pymongo`, `cryptography` and `qdrant-client`. |
+| `tests/facades/` | `test_graph`, `test_queue`, `test_store`, `test_vault`, `test_vector` | Follow their code. All five ran against real containers; `store`'s needed a Mongo replica set. |
 | `README-agent-cli.md`, `CHANGELOG-agent-cli.md` | The CLI's README and changelog | Preserved verbatim; the repo root now documents the library. |
 
 ## Landmines — read before reviving anything
@@ -103,26 +105,19 @@ From the package-by-package audit against `../docs/engineering`. Each was verifi
 judged non-blocking, and left alone deliberately — recorded so they are not
 rediscovered as new findings.
 
-**Typing erasure on decorators.** `@cached` (`cache/decorators.py`) and `@traced`
-(`log/_decorators.py`) are annotated with bare `Callable`, so every decorated
-function loses its signature and return type at the call site. `with_transactional_session`
-(`database/connection.py`) has the same shape. The fix is `ParamSpec`/`TypeVar`
-overloads on each; it is a pure typing change but touches three public decorators,
-so it wants its own pass. (`cache.deserialize`'s erasure — the one that made
-`response_model=` useless — was fixed in 0.9.0.)
-
 **`dict[str, Any]` where `JsonObject` is the named type.** `python-lint.md` names
 `forktex.types.JsonValue`/`JsonObject` as the replacement for a JSON boundary.
-Present in `error.AppError.details`, `ErrorEnvelope.details`, `vault.encrypt`/
-`decrypt`, `store`'s document parameters, and `vector`'s payloads. Note ruff's
-ANN401 does **not** flag these (it targets bare `Any`), so CI passes today — this
-is a consistency item, not a gate failure.
+Still present in `error.AppError.details` and `ErrorEnvelope.details`; the
+`vault`, `store` and `vector` instances went to `facades/` with their code. Note
+ruff's ANN401 does **not** flag these (it targets bare `Any`), so CI passes
+today — this is a consistency item, not a gate failure.
 
 **`store._to_query_id` cannot disambiguate a 24-hex-char custom id.** A
 caller-supplied string id that happens to be valid ObjectId hex is coerced to an
-`ObjectId` and will never match the string it was stored as. Documented in the
-function, unenforced. Fix: reject such ids at `insert_one` time, or store them
-coerced.
+`ObjectId` and will never match the string it was stored as, so `insert_one`
+returns an id that can never fetch, update or delete the row. Verified against a
+live MongoDB. **Fix this before `store/` returns**: coerce symmetrically on
+insert, or stop coercing on read.
 
 **`vector` reads `SearchQuery`'s private attributes across modules.**
 `collection.py` reaches into `query._vector`/`._limit`/`._strategy`/
@@ -145,6 +140,19 @@ offset path contradicts that. Related: `crud.create` does add+flush+refresh wher
 module docstrings state the invariant; nothing checks it, and a disagreement
 silently skips or repeats rows. `keyset` should derive `order_by`.
 
+**`vault` has no known-answer test**, so nothing in the repository pins the
+output of `_derive_fernet_key`. A change to it would stay green and silently
+orphan every credential already encrypted at rest. Add a fixed-KEK /
+fixed-ciphertext / expected-plaintext vector before `vault/` returns. Also:
+`Vault(kek="")` is accepted and derives `sha256(b"")`, a publicly computable key,
+and `tests/facades/test_vault/test_vault.py` asserts that as correct.
+
+**`vault`'s key handling blocks its own biggest consumer.** It SHA-256s whatever
+it is handed, while `cloud` generates a raw Fernet key and passes it straight to
+`Fernet(...)` in seven hand-rolled places. The two are therefore key-incompatible:
+adopting `forktex.vault` in `cloud` is a data migration, not an import. Decide
+whether `Vault` should accept an already-valid 32-byte urlsafe-b64 key verbatim.
+
 **`vault.encrypt` uses `json.dumps(default=str)`.** A `Decimal`/`datetime`/`UUID`
 is silently stringified, so `decrypt(encrypt(x)) != x` with no error — in a
 credential store round-tripping through a SQLAlchemy column. Either drop
@@ -154,3 +162,23 @@ credential store round-tripping through a SQLAlchemy column. Either drop
 **`vault` imports `sqlalchemy` unconditionally** while gating `cryptography`
 lazily, so `import forktex.vault` fails without SQLAlchemy even for a caller who
 only wants `Vault`. The `[vault]` extra declares only `cryptography`.
+
+## Driver gotchas for the parked facades
+
+Carried over from `docs/development.md` when `queue`, `vector`, `store`, `vault` and `graph`
+were set aside. Each cost a debugging session; none is discoverable from the driver's docs.
+
+### Qdrant: point IDs
+
+Point IDs must be unsigned integers or UUID strings; an arbitrary string is a 400. Use `int` or
+`str(uuid.uuid7())`.
+
+### Qdrant: `AsyncQdrantClient` has no `async with`
+
+The `AsyncQdrantClient` in qdrant-client ≥ 1.14 does not implement `__aenter__`/`__aexit__`. Use explicit `try/finally` + `await q.close()`.
+
+### arq 0.28 API changes
+
+- `arq.worker.WorkerSettings` doesn't exist — use `arq.Worker` directly
+- `arq.Job` doesn't exist at the top level — use `arq.jobs.Job`
+- `Worker.async_run()` for programmatic burst mode; `arq` CLI uses `arq module.WorkerSettings`

@@ -31,6 +31,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from forktex.database.errors import InvalidAdvisoryKeyError
 from forktex.database.locks import advisory_key, advisory_lock, key_from_uuid, try_advisory_lock
 from tests.conftest import sessions_for
 
@@ -95,16 +96,21 @@ async def test_try_advisory_lock_contention_second_caller_gets_false(postgres_ur
 
 @pytest.mark.asyncio
 async def test_advisory_lock_released_after_context(postgres_url_str: str) -> None:
+    """Under a timeout: an unreleased lock makes the second acquire block forever,
+    which hangs the run instead of failing it."""
     engine = create_async_engine(postgres_url_str)
     key = advisory_key("test", "release")
 
-    async with advisory_lock(engine, key):
-        pass
+    async def acquire_twice() -> None:
+        async with advisory_lock(engine, key):
+            pass
+        async with advisory_lock(engine, key):
+            pass
 
-    async with advisory_lock(engine, key):
-        pass
-
-    await engine.dispose()
+    try:
+        await asyncio.wait_for(acquire_twice(), timeout=5)
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -137,7 +143,7 @@ def test_advisory_key_parts_cannot_collide_by_concatenation() -> None:
 
 def test_advisory_key_requires_a_part() -> None:
 
-    with pytest.raises(ValueError, match="at least one part"):
+    with pytest.raises(InvalidAdvisoryKeyError, match="at least one part"):
         advisory_key()
 
 
@@ -152,8 +158,7 @@ def test_key_from_uuid_folds_128_bits_into_signed_64() -> None:
 
 
 def test_key_from_uuid_rejects_non_uuid() -> None:
-
-    with pytest.raises(TypeError):
+    with pytest.raises(InvalidAdvisoryKeyError):
         key_from_uuid("not-a-uuid")
 
 

@@ -3,13 +3,7 @@
 Structured logging for any Python process: JSON to stdout (Loki-ready) in production,
 human-readable in dev, with a coroutine-scoped `trace_id` and extra fields on `contextvars`.
 
-## Install
-
-```bash
-pip install forktex
-```
-
-Stdlib only. No extra required, and nothing here raises `ImportError`.
+Stdlib only.
 
 ## Wiring
 
@@ -104,7 +98,6 @@ boundary copies the context:
 | `ThreadPoolExecutor.submit` | **no** | same reason |
 | `loop.run_in_executor` | **no** | unlike `asyncio.to_thread`, it does not copy |
 | any subprocess (`multiprocessing`, a process pool) | **no** | contextvars never cross a process |
-| `queue.enqueue` → worker job | **yes** | carried explicitly over Redis — see [queue.md](queue.md) |
 
 For the thread boundaries, wrap the callable with `bind_current_context`:
 
@@ -122,22 +115,11 @@ worker thread captures that thread's empty context and does nothing. It resumes 
 rather than nesting, so `trace_id` is unchanged.
 
 In async code prefer `asyncio.to_thread(...)` over `loop.run_in_executor(None, ...)`, which does not
-copy. Nothing in memory crosses a process boundary: pass the id in the payload, as `queue` does.
+copy. Nothing in memory crosses a process boundary: pass the id in the payload.
 
 ### Scripts, CLIs and cron
 
-Nothing binds a trace outside an ASGI app. Open one scope per unit of work:
-
-```python
-from forktex.log import get_logger, setup_logging, trace_context
-
-setup_logging(service="nightly-reconcile")
-log = get_logger(__name__)
-
-for batch_id in batches:
-    with trace_context(f"reconcile-{batch_id}"):
-        log.info("starting")        # every line in this batch shares one id
-```
+Nothing binds a trace outside an ASGI app: open one `trace_context()` per unit of work.
 
 ## Public surface
 
@@ -194,7 +176,7 @@ after logging it.
 ## Gotchas
 
 - **Only the boundaries screen an untrusted id.** `TraceIDMiddleware` validates an inbound
-  `X-Request-ID` and the queue validates one arriving with a job; `trace_context()` and
+  `X-Request-ID`; `trace_context()` and
   `set_trace_id()` accept whatever you pass. Screen an id taken from a webhook body, CLI argument
   or message header yourself.
 - **`set_trace_id()` has no restore.** It leaves the id set for whatever runs next in that context. Prefer `trace_context()` / `async_trace_context()`, which restore in a `finally`.

@@ -26,19 +26,17 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.schema import CreateSchema, CreateTable
 
+from forktex.database.errors import MigrationError
 from forktex.database.identifiers import validate_identifier, validate_schema
 from forktex.database.locks import advisory_key, advisory_lock
-from forktex.error import BadRequestError, ServiceUnavailableError
+from forktex.error import AppError, BadRequestError, ServiceUnavailableError
 from forktex.log import get_logger
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 logger = get_logger(__name__)
 
@@ -118,9 +116,15 @@ class SchemaMigrationRunner:
 
     async def _apply(self, version: int, path: Path) -> None:
         logger.info("%s: applying migration v%04d (%s)", self._schema, version, path.name)
-        async with self._engine.begin() as conn:
-            await conn.execute(sa.insert(self._version_table_construct()).values(version=version))
-            await _execute_script(conn, self._script(path))
+        try:
+            async with self._engine.begin() as conn:
+                await conn.execute(sa.insert(self._version_table_construct()).values(version=version))
+                await _execute_script(conn, self._script(path))
+        except AppError:
+            raise
+        except Exception as exc:
+            logger.error("%s: migration %s failed and was rolled back", self._schema, path.name)
+            raise MigrationError(f"migration {path.name!r} failed and was rolled back") from exc
 
     def _script(self, path: Path) -> str:
         return path.read_text(encoding="utf-8").replace("{schema}", self._target)

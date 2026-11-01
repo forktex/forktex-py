@@ -166,3 +166,21 @@ def test_traced_nested_inside_log_context(capture_json: Callable[..., tuple[logg
     rec = captured[0]
     assert rec["org_id"] == "org-xyz"
     assert rec["trace_id"] == trace_id
+
+
+@pytest.mark.parametrize("kind", ["async generator", "generator"])
+def test_traced_refuses_a_generator_instead_of_timing_its_construction(kind: str) -> None:
+    """`iscoroutinefunction` is False for an async generator, so @traced took the
+    sync branch: it timed construction, logged "finished" in ~0ms and left the
+    trace scope before the first yield."""
+    if kind == "async generator":
+
+        async def subject():  # noqa: ANN202
+            yield 1
+    else:
+
+        def subject():  # noqa: ANN202
+            yield 1
+
+    with pytest.raises(TypeError, match="cannot wrap the generator"):
+        traced(subject)

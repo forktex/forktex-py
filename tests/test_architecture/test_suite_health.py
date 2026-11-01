@@ -117,13 +117,11 @@ def test_no_module_redefines_a_conftest_fixture() -> None:
     )
 
 
-# Substituting a library internal is how a suite stops testing anything: the
-# worker suite replaced forktex.queue with a fake and asserted that kwargs
-# reached it, while never consuming a job. Both entries below inject a failure
-# a real container cannot be made to produce, against a real container.
+# Substituting a library internal is how a suite stops testing anything. The
+# entry below injects a failure a real container cannot be made to produce,
+# against a real container.
 _FAULT_INJECTION = {
     ("test_cache/test_ops.py", "Cache"),
-    ("test_queue/test_queue.py", "q"),
 }
 
 

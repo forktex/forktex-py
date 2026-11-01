@@ -25,7 +25,7 @@
 import enum
 import uuid
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 import sqlalchemy as sa
 from pydantic import BaseModel
@@ -42,21 +42,45 @@ class ReprMixin:
         return f"{cls}({attrs})"
 
 
-UtcDateTime = sa.TIMESTAMP(timezone=True)
+UtcTimestamp = sa.TIMESTAMP(timezone=True)
 
 _TYPE_ANNOTATION_MAP: dict[Any, Any] = {
     enum.StrEnum: sa.Enum(enum.StrEnum, native_enum=False, length=64),
-    datetime: UtcDateTime,
+    datetime: UtcTimestamp,
 }
 
 
+def _inherited_mapper_args(cls: type) -> object:
+    """``__mapper_args__`` from an unmapped mixin, which SQLAlchemy collects and
+    which would otherwise shadow this class's own default.
+
+    The walk stops at a mapped ancestor: its args are its own, and copying them
+    down reassigns its ``polymorphic_identity`` to the subclass.
+    """
+    for base in cls.__mro__[1:]:
+        if base is _EagerDefaults or hasattr(base, "__mapper__"):
+            return None
+        if "__mapper_args__" in base.__dict__:
+            return base.__dict__["__mapper_args__"]
+    return None
+
+
+@runtime_checkable
+class _MapperArgsDirective(Protocol):
+    def fget(self, cls: type[object]) -> dict[str, object]: ...
+
+
 class _EagerDefaults:
-    __mapper_args__: ClassVar[dict[str, Any]] = {"eager_defaults": True}
+    __mapper_args__: ClassVar[Any] = {"eager_defaults": True}
 
     def __init_subclass__(cls, **kwargs: object) -> None:
-        own_args = cls.__dict__.get("__mapper_args__")
-        if isinstance(own_args, dict):
-            cls.__mapper_args__ = {"eager_defaults": True, **own_args}
+        declared = cls.__dict__.get("__mapper_args__", _inherited_mapper_args(cls))
+        if isinstance(declared, dict):
+            cls.__mapper_args__ = {"eager_defaults": True, **declared}
+        elif isinstance(declared, _MapperArgsDirective):
+            cls.__mapper_args__ = _eager(declared)
+        else:
+            cls.__mapper_args__ = {"eager_defaults": True}
         super().__init_subclass__(**kwargs)
 
 
@@ -94,7 +118,7 @@ class AuditMixin(TimestampMixin):
         fk_args = [sa.ForeignKey(fk_target, ondelete="SET NULL")] if fk_target else []
         return mapped_column(sa.UUID(as_uuid=True), *fk_args, nullable=True, index=True)
 
-    archived_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True, index=True)
+    archived_at: Mapped[datetime | None] = mapped_column(UtcTimestamp, nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True, index=True)
 
     def __init_subclass__(cls, **kwargs: object) -> None:
@@ -143,6 +167,14 @@ class JsonModelColumn[T: BaseModel]:
         return [model(**item) for item in (data or [])]
 
 
+def _eager(original: _MapperArgsDirective) -> object:
+    @declared_attr.directive
+    def __mapper_args__(cls: type[object]) -> dict[str, object]:
+        return {"eager_defaults": True, **original.fget(cls)}
+
+    return __mapper_args__
+
+
 def _unique_among_active_rows(tablename: str, fields: list[str]) -> sa.Index:
     return sa.Index(
         f"uq_{tablename}_active",
@@ -166,6 +198,6 @@ __all__ = [
     "NamespacedMixin",
     "ReprMixin",
     "TimestampMixin",
-    "UtcDateTime",
+    "UtcTimestamp",
     "substrate_base",
 ]

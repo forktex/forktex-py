@@ -5,7 +5,7 @@
 # backlog/ with the generator. Reviving `fsd/` means re-authoring it.
 .DEFAULT_GOAL := help
 PROJECT_NAME := forktex
-COVERAGE_FLOOR := 94
+COVERAGE_FLOOR := 96
 
 help: ## Self-documenting target listing
 	@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -27,14 +27,14 @@ typecheck: ## Static type system verifies interface correctness (pyright)
 	poetry run python3 -m pyright src/
 
 test: ## Automated tests verify behaviour, with a coverage floor
-	@# The floor ratchets: it is the measured figure (95.54%) floored, so coverage
+	@# The floor ratchets: it is the measured figure (97.00%) floored, so coverage
 	@# cannot silently drop. Raise it when a pass adds real coverage; never lower
-	@# it to make a change pass.
-	@# Note: pytest-cov compares the ROUNDED percentage, so 93.6% still satisfies
-	@# --cov-fail-under=94 while printing "FAIL ... not reached". Read the number,
-	@# not just the word.
+	@# it to make a change pass. A global floor cannot see one module going thin:
+	@# the primitives sit at 100% and carry it, so read the per-module column too.
+	@# --cov-precision=2: pytest-cov otherwise compares the ROUNDED percentage, so
+	@# 93.6% satisfied --cov-fail-under=94 while printing "FAIL ... not reached".
 	poetry run python3 -m pytest tests/ -q --cov=src/forktex \
-		--cov-report=term-missing --cov-fail-under=$(COVERAGE_FLOOR)
+		--cov-report=term-missing --cov-precision=2 --cov-fail-under=$(COVERAGE_FLOOR)
 
 audit: ## Scan the project venv for known CVEs in installed deps
 	poetry run python3 -m pip_audit --skip-editable --timeout 30
@@ -46,7 +46,7 @@ license-fix: ## Add or update the dual-license header on every source file
 	poetry run python3 scripts/license_headers.py fix
 
 install: ## Bootstrap the project to a runnable state
-	poetry install --with dev --all-extras
+	poetry install --with dev
 	@# `poetry install` provisions the venv's own pip, which lags behind and has
 	@# repeatedly tripped `make audit` on a pip CVE that has nothing to do with
 	@# this project's dependencies. Upgrade it here so bootstrap leaves the venv
@@ -58,32 +58,23 @@ build: ## Build sdist + wheel into dist/ and verify metadata with twine check
 	poetry run python3 -m build
 	poetry run python3 -m twine check dist/*
 
-smoke: ## Install the BUILT wheel into a throwaway venv and import every extra
+smoke: ## Install the BUILT wheel into a throwaway venv and import every module
 	@# `make ci` otherwise only tests the source tree, so a packaging fault is
-	@# invisible to it. Importing a module is NOT sufficient to prove its extra
-	@# exists — pip only *warns* on an undeclared extra — so this greps for that
-	@# warning and fails on it.
+	@# invisible to it.
 	@set -e; \
 	WHL=$$(ls dist/forktex-*-py3-none-any.whl 2>/dev/null | head -1); \
 	if [ -z "$$WHL" ]; then echo "  no wheel in dist/ — run 'make build' first"; exit 1; fi; \
 	PY=$$(poetry run python3 -c 'import sys; print(sys.executable)'); \
 	TMP=$$(mktemp -d); trap 'rm -rf $$TMP' EXIT; \
-	echo "smoke: base install from $$WHL (interpreter $$PY)"; \
-	$$PY -m venv $$TMP/base >/dev/null; \
-	$$TMP/base/bin/pip install -q "$$WHL" 2>&1 | tee $$TMP/base.log; \
-	! grep -q "does not provide the extra" $$TMP/base.log; \
-	for m in log error types iso database cache graph; do \
-		$$TMP/base/bin/python -c "import forktex.$$m" || { echo "  ✗ base import forktex.$$m"; exit 1; }; \
+	echo "smoke: install from $$WHL (interpreter $$PY)"; \
+	$$PY -m venv $$TMP/venv >/dev/null; \
+	$$TMP/venv/bin/pip install -q "$$WHL"; \
+	$$TMP/venv/bin/python -c "import forktex" || { echo "  ✗ import forktex"; exit 1; }; \
+	for m in api cache database error iso log storage types; do \
+		$$TMP/venv/bin/python -c "import forktex; forktex.$$m" || { echo "  ✗ forktex.$$m"; exit 1; }; \
+		echo "  forktex.$$m OK"; \
 	done; \
-	echo "  base modules import"; \
-	for x in vault storage queue vector store api; do \
-		$$PY -m venv $$TMP/$$x >/dev/null; \
-		$$TMP/$$x/bin/pip install -q "$$WHL[$$x]" 2>&1 | tee $$TMP/$$x.log; \
-		if grep -q "does not provide the extra" $$TMP/$$x.log; then echo "  ✗ [$$x] undeclared"; exit 1; fi; \
-		$$TMP/$$x/bin/python -c "import forktex.$$x" || { echo "  ✗ [$$x] import"; exit 1; }; \
-		echo "  [$$x] OK"; \
-	done; \
-	echo "smoke: every extra resolves and delivers a working module"
+	echo "smoke: one install delivers every module"
 
 publish-test: ## Upload dist/ to TestPyPI for rehearsal
 	poetry run python3 -m twine upload -r testpypi dist/*

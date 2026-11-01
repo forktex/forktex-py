@@ -30,6 +30,7 @@ from typing import Any, ClassVar
 
 from forktex.error import AppError, AppErrorCode, to_envelope
 from forktex.log import get_logger, get_trace_id
+from forktex.types import JsonObject
 
 _Scope = dict[str, Any]
 _Message = dict[str, Any]
@@ -80,13 +81,13 @@ class ExceptionEnvelopeMiddleware:
             if started:
                 raise
             envelope = to_envelope(exc, trace_id=get_trace_id())
-            await _send_json(send, _http_status_for(exc), envelope.model_dump())
+            await _send_json(send, _http_status_for(exc), envelope.model_dump(mode="json"))
         except Exception:
             if started or not self._handle_unexpected:
                 raise
             logger.exception("unhandled error")
             envelope = to_envelope(AppError("Internal Server Error"), trace_id=get_trace_id())
-            await _send_json(send, 500, envelope.model_dump())
+            await _send_json(send, 500, envelope.model_dump(mode="json"))
 
 
 class SecurityHeadersMiddleware:
@@ -116,7 +117,7 @@ class SecurityHeadersMiddleware:
         await self._app(scope, receive, send_with_headers)
 
 
-async def _send_json(send: _Send, status: int, payload: dict[str, Any]) -> None:
+async def _send_json(send: _Send, status: int, payload: JsonObject) -> None:
     body = json.dumps(payload).encode()
     await send(
         {

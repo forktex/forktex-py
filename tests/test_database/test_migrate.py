@@ -233,3 +233,36 @@ def test_misnamed_or_duplicate_migrations_are_refused(tmp_path: Path, names: lis
     )
     with pytest.raises(BadRequestError, match="named|share version"):
         runner._list_migrations()
+
+
+@pytest.mark.asyncio
+async def test_a_failing_migration_raises_a_named_error_and_records_no_version(
+    postgres_url_str: str, fresh_schema: str, tmp_path: Path
+) -> None:
+    """A broken statement raised a raw asyncpg exception carrying driver text,
+    and nothing proved the version row rolled back with it."""
+    from forktex.database.errors import MigrationError
+    from forktex.database.migrate import SchemaMigrationRunner
+
+    mdir = tmp_path / "migrations"
+    mdir.mkdir()
+    (mdir / "v0001__half_broken.sql").write_text(
+        'CREATE TABLE "{schema}".first_half (id SERIAL PRIMARY KEY);\n'
+        'INSERT INTO "{schema}".a_table_that_does_not_exist (id) VALUES (1);\n'
+    )
+
+    engine = create_async_engine(postgres_url_str)
+    runner = SchemaMigrationRunner(engine, schema=fresh_schema, migrations_dir=mdir)
+
+    with pytest.raises(MigrationError) as raised:
+        await runner.apply()
+
+    assert "v0001__half_broken.sql" in str(raised.value)
+    assert "a_table_that_does_not_exist" not in str(raised.value)
+    assert raised.value.__cause__ is not None
+
+    assert not await _table_exists(engine, fresh_schema, "first_half")
+    async with engine.connect() as conn:
+        recorded = await conn.execute(sa.text(f'SELECT count(*) FROM "{fresh_schema}".schema_version'))
+        assert recorded.scalar_one() == 0
+    await engine.dispose()

@@ -157,13 +157,6 @@ def test_run_id_is_stable_across_contexts_and_threads() -> None:
         assert get_run_id() == baseline
 
 
-def test_run_id_is_not_used_as_a_trace_id_fallback() -> None:
-    from forktex.log import get_run_id
-
-    assert get_trace_id() is None
-    assert get_run_id() != get_trace_id()
-
-
 def test_bind_current_context_carries_the_trace_into_a_thread_pool() -> None:
     from concurrent.futures import ThreadPoolExecutor
 

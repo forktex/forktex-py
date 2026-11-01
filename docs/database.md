@@ -4,13 +4,7 @@ Async PostgreSQL on SQLAlchemy 2: sessions and transactions, ORM bases and mixin
 pagination, a filter language for client-supplied queries, advisory locks, a SQL-file migration
 runner, constraint-error translation.
 
-## Install
-
-```bash
-pip install forktex
-```
-
-Python 3.14+, PostgreSQL over `asyncpg` (`postgresql+asyncpg://…`). No extra required.
+PostgreSQL over `asyncpg` (`postgresql+asyncpg://…`).
 
 ## Wiring
 
@@ -117,13 +111,6 @@ for item in batch:
 fixtures that seed committed rows. Inside it the session is plain SQLAlchemy, so `session.begin()`
 and per-transaction execution options work as usual.
 
-```python
-async with open_session() as session:
-    for chunk in chunks:
-        await write(session, chunk)
-        await session.commit()
-```
-
 Don't share one session between concurrent tasks; give each its own.
 
 ### More than one pool
@@ -154,7 +141,7 @@ knows the module-level default, so a component owning a `Database` uses `db.tran
 | `AuditMixin` | `TimestampMixin` + `created_by_id`, `updated_by_id`, `archived_at`, `is_active`. |
 | `NamespacedMixin` | A `namespace` column for tenant scoping, no foreign key. |
 | `ReprMixin` | `__repr__` from the primary key. |
-| `UtcDateTime` | `TIMESTAMP WITH TIME ZONE` — what `Mapped[datetime]` maps to. |
+| `UtcTimestamp` | The SQLAlchemy column type `TIMESTAMP WITH TIME ZONE` — what `Mapped[datetime]` maps to. Not `forktex.types.UtcDateTime`, which is a Pydantic field annotation. |
 | `JsonModelColumn` | A JSONB column typed by a Pydantic model. |
 | `create(session, model, **values)` | Insert one row, inside `integrity_boundary()`. |
 | `get(session, model, value, *, key="id", options=None)` | One row by key, or `None`. |
@@ -166,7 +153,10 @@ knows the module-level default, so a component owning a `Database` uses `db.tran
 | `PageResponse` / `ScrollResponse` | `Page` plus `limit`, and `currentPage` / `totalPages` for offset. |
 | `encode_cursor(values)` / `decode_cursor(cursor, *, expected_length=None)` | The opaque cursor codec. |
 | `keyset_predicate(levels, *, ascending)` | The WHERE clause behind keyset pagination. |
+| `crud` | Module: `crud.get`, `crud.create`, `crud.find_one_by`, `crud.paginate`, `crud.paginate_scroll`. |
 | `filters` | Module: `filters.FilterOp`, `filters.parse_filter`, `filters.compile_filter`. |
+| `identifiers` | Module: `identifiers.validate_identifier`, `validate_schema`, `validate_relation`, `validate_slug`, `is_identifier`. |
+| `integrity` | Module: `integrity.integrity_boundary`, `integrity.read_boundary`, the `SQLSTATE_*` constants. |
 | `integrity_boundary()` | `async with` — a constraint violation becomes a typed `AppError`. |
 | `read_boundary()` | The same for a read-time data exception. |
 | `advisory_lock(engine, key)` | Blocking session-scoped Postgres advisory lock. |
@@ -190,7 +180,7 @@ slug is reusable. To add your own constraints, concatenate `super().__table_args
 
 ## CRUD and pagination
 
-Prefer `paginate_scroll`: its cost does not grow with depth. Pass `keyset` — the ordering columns,
+Prefer `paginate_scroll` for deep pages. Pass `keyset` — the ordering columns,
 most significant first, ending in a unique tiebreaker such as `id` — and hand `next_cursor` back as
 `cursor`. Without `order_by`, rows are ordered by the keyset. Cursors are opaque base64; a tampered
 one raises `BadRequestError`. For a custom query, build a `Page` with `keyset_predicate`,
@@ -218,12 +208,6 @@ validates sort input the same way.
 
 ## Locks
 
-| Name | Scope |
-|:---|:---|
-| `advisory_lock(engine, key)` | its own connection — block until held |
-| `try_advisory_lock(engine, key)` | its own connection — yields `True`/`False` |
-| `xact_lock(session, key)` | the caller's transaction, released at commit |
-
 `advisory_lock` yields its connection; commit work done on it inside the block, since anything
 uncommitted is rolled back on release.
 
@@ -250,15 +234,23 @@ await SchemaMigrationRunner(engine, schema="my_lib", migrations_dir=Path(__file_
 | Raised | When |
 |:---|:---|
 | `AlreadyExistsError` | a unique violation in `create` or `integrity_boundary()` |
-| `BadRequestError` | any other constraint violation; an invalid cursor, filter, sort or identifier; a stored value invalid for its type inside `read_boundary()` |
+| `BadRequestError` | any other constraint violation; an unknown column; an invalid cursor, filter, sort or identifier; a stored value invalid for its type inside `read_boundary()` |
 | `TransactionBoundaryError` | `commit`/`rollback`/`begin` on a session whose boundary belongs to its opener |
 | `DatabaseNotInitializedError` | a module-level function before `init_engine` |
-| `ValueError` | a cursor passed without its keyset |
+| `InvalidKeysetError` | a cursor passed without its keyset; `keyset_predicate` with no levels |
+| `InvalidAdvisoryKeyError` | `advisory_key()` with no parts; `key_from_uuid()` on a non-UUID |
+| `InvalidSchemaChangeError` | `AddColumn` on a column not attached to a `Table` |
+| `MigrationError` | a migration script failed; it and its version row rolled back together |
 
 Wrap hand-written writes in `async with integrity_boundary():`, flushing inside it, for the
 translation `create` applies. Driver text never reaches the error; the original is the `__cause__`.
 
 ## Gotchas
+
+- `forktex.database.UtcTimestamp` is a SQLAlchemy column type; `forktex.types.UtcDateTime` is a
+  Pydantic field annotation. Different objects, different places.
+- `keyset` **is** the ordering — passing `order_by` with it raises. The last keyset level is the
+  tiebreaker and must not be nullable.
 
 - A bare `Mapped[datetime]` is `timestamptz`, and asyncpg refuses to write a naive datetime into it.
 - Keyset pagination assumes Postgres's default NULL placement. Don't add `NULLS FIRST`/`NULLS LAST`

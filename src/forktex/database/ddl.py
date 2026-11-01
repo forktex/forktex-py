@@ -37,13 +37,15 @@ from sqlalchemy.schema import (
 )
 from sqlalchemy.sql.compiler import DDLCompiler
 
+from forktex.database.errors import InvalidSchemaChangeError
+
 
 class AddColumn(DDLElement):
     inherit_cache = False
 
     def __init__(self, column: Column, *, if_not_exists: bool = False) -> None:
         if column.table is None:
-            raise ValueError("AddColumn requires a column attached to a Table")
+            raise InvalidSchemaChangeError("AddColumn requires a column attached to a Table")
         self.column = column
         self.if_not_exists = if_not_exists
 

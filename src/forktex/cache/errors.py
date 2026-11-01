@@ -38,4 +38,8 @@ class CacheInitializationError(CacheError):
     code = AppErrorCode.UNAVAILABLE
 
 
-__all__ = ["CacheError", "CacheInitializationError", "CacheNotInitializedError"]
+class InvalidCacheKeyError(CacheError):
+    code = AppErrorCode.INTERNAL
+
+
+__all__ = ["CacheError", "CacheInitializationError", "CacheNotInitializedError", "InvalidCacheKeyError"]

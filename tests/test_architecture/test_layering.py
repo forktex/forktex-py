@@ -57,12 +57,7 @@ LIBRARY: tuple[ModuleLayer, ...] = (
     ModuleLayer(name="api", level=Level.FACADE),
     ModuleLayer(name="cache", level=Level.FACADE),
     ModuleLayer(name="database", level=Level.FACADE),
-    ModuleLayer(name="graph", level=Level.FACADE),
-    ModuleLayer(name="queue", level=Level.FACADE),
     ModuleLayer(name="storage", level=Level.FACADE),
-    ModuleLayer(name="store", level=Level.FACADE),
-    ModuleLayer(name="vault", level=Level.FACADE),
-    ModuleLayer(name="vector", level=Level.FACADE),
 )
 
 

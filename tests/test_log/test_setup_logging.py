@@ -33,17 +33,15 @@ import time
 from forktex.log import HumanFormatter, setup_logging, shutdown_logging
 
 
-def test_setup_logging_debug_uses_human_formatter(capsys: pytest.CaptureFixture[str]) -> None:
+def test_setup_logging_debug_emits_human_text_not_json(capsys: pytest.CaptureFixture[str]) -> None:
     setup_logging(service="test", debug=True)
-    log = logging.getLogger("test.human")
-    log.debug("debug message")
-    captured = capsys.readouterr()
-    try:
-        json.loads(captured.out.strip())
-        valid_json = True
-    except json.JSONDecodeError, ValueError:
-        valid_json = False
-    assert not valid_json or captured.out == ""
+    logging.getLogger("test.human").debug("debug message")
+    out = capsys.readouterr().out.strip()
+
+    assert out, "debug=True emitted nothing, so this proved nothing about the formatter"
+    assert "debug message" in out
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(out)
 
 
 def test_setup_logging_json_forced_in_debug(capture_json: Callable[..., tuple[logging.Logger, list[dict]]]) -> None:

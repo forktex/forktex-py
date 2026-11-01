@@ -31,6 +31,7 @@ from typing import Any
 import sqlalchemy as sa
 from pydantic import Field
 
+from forktex.database.errors import InvalidKeysetError
 from forktex.error import BadRequestError
 from forktex.types import BaseAppModel
 
@@ -65,7 +66,7 @@ def keyset_predicate(
     ascending: bool,
 ) -> sa.ColumnElement[bool]:
     if not levels:
-        raise ValueError("keyset_predicate requires at least one level")
+        raise InvalidKeysetError("keyset_predicate requires at least one level")
 
     def _eq(expr: sa.SQLColumnExpression[Any], value: object) -> sa.ColumnElement[bool]:
         return expr.is_(None) if value is None else (expr == value)

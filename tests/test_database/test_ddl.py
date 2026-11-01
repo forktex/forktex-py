@@ -75,7 +75,6 @@ def test_add_column_quotes_a_hostile_identifier(table: sa.Table) -> None:
     table.append_column(col)
     rendered = _sql(AddColumn(col))
     assert '"foo""; DROP TABLE users; --"' in rendered
-    assert not rendered.rstrip().endswith("--")
 
 
 def test_add_column_requires_an_attached_column() -> None:

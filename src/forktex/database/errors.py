@@ -35,4 +35,27 @@ class TransactionBoundaryError(AppError, RuntimeError):
     code = AppErrorCode.INTERNAL
 
 
-__all__ = ["DatabaseNotInitializedError", "TransactionBoundaryError"]
+class InvalidKeysetError(AppError, ValueError):
+    code = AppErrorCode.INTERNAL
+
+
+class InvalidAdvisoryKeyError(AppError):
+    code = AppErrorCode.INTERNAL
+
+
+class InvalidSchemaChangeError(AppError, ValueError):
+    code = AppErrorCode.INTERNAL
+
+
+class MigrationError(AppError, RuntimeError):
+    code = AppErrorCode.INTERNAL
+
+
+__all__ = [
+    "DatabaseNotInitializedError",
+    "InvalidAdvisoryKeyError",
+    "InvalidKeysetError",
+    "InvalidSchemaChangeError",
+    "MigrationError",
+    "TransactionBoundaryError",
+]

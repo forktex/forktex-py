@@ -27,11 +27,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any, ClassVar
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from forktex.database import BaseDBModel, TimestampMixin, AuditMixin, NamespacedMixin, substrate_base
@@ -180,12 +181,6 @@ def test_audit_mixin_requires_a_declarative_model() -> None:
             __tablename__ = "bad"
 
 
-def test_audit_mixin_allows_intermediate_mixin_subclass() -> None:
-
-    class ServiceMixin(AuditMixin):
-        __actor_fk_target__ = "user.id"
-
-
 def test_audit_mixin_actor_fk_target_inherited_by_subclasses() -> None:
 
     class ServiceMixin(AuditMixin):
@@ -261,3 +256,68 @@ async def test_own_mapper_args_keep_updated_at_readable(models_session: AsyncSes
     await models_session.flush()
     assert row.updated_at >= created
     assert sa.inspect(model).polymorphic_identity == model.__mapper_args__["polymorphic_identity"]
+
+
+class _ArgsFromMixin:
+    """`__mapper_args__` on a mixin, not on the model itself."""
+
+    __mapper_args__: ClassVar[dict[str, Any]] = {"confirm_deleted_rows": False}
+
+
+class _InheritedArgs(_ArgsFromMixin, BaseDBModel):
+    __tablename__ = "eager_inherited_args"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+
+class _DeclaredArgs(BaseDBModel):
+    __tablename__ = "eager_declared_args"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    @declared_attr.directive
+    def __mapper_args__(cls) -> dict[str, Any]:  # noqa: N805
+        return {"confirm_deleted_rows": False}
+
+
+@pytest.mark.parametrize("model", [_InheritedArgs, _DeclaredArgs], ids=["from a mixin", "from declared_attr"])
+def test_eager_defaults_survives_mapper_args_the_model_does_not_own(model: type[BaseDBModel]) -> None:
+    """The merge read `cls.__dict__`, so `__mapper_args__` arriving from a mixin
+    or a `@declared_attr.directive` silently dropped `eager_defaults` -- and a
+    model with its own mapper args is exactly where reading `updated_at` after
+    an update raises MissingGreenlet."""
+    assert sa.inspect(model).eager_defaults is True
+    assert sa.inspect(model).confirm_deleted_rows is False
+
+
+class _PolyRoot(BaseDBModel):
+    __tablename__ = "eager_poly_root"
+    __mapper_args__: ClassVar[dict[str, Any]] = {
+        "polymorphic_identity": "root",
+        "polymorphic_on": "kind",
+    }
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(sa.String(20))
+
+
+class _PolyBranch(_PolyRoot):
+    __mapper_args__: ClassVar[dict[str, Any]] = {"polymorphic_identity": "branch"}
+
+
+class _PolyLeaf(_PolyBranch):
+    """Declares nothing — it must not inherit its parent's identity."""
+
+
+def test_a_subclass_does_not_steal_its_mapped_parents_polymorphic_identity() -> None:
+    """The eager_defaults merge walked the whole MRO, so a leaf that declared no
+    `__mapper_args__` copied its mapped parent's dict -- identity included --
+    and SQLAlchemy reassigned 'branch' to the leaf. A row written as the parent
+    then loaded back as the leaf."""
+    assert sa.inspect(_PolyBranch).polymorphic_identity == "branch"
+    assert sa.inspect(_PolyLeaf).polymorphic_identity != "branch"
+
+    # and the merge still has to do its job on every level
+    assert sa.inspect(_PolyRoot).eager_defaults is True
+    assert sa.inspect(_PolyBranch).eager_defaults is True
+    assert sa.inspect(_PolyLeaf).eager_defaults is True

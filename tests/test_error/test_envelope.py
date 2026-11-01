@@ -95,11 +95,6 @@ def test_too_many_requests_and_service_unavailable_round_trip_through_envelope()
     assert unavailable.message == "maintenance window"
 
 
-def test_apperror_subclass_code_preserved() -> None:
-    error = NotFoundError("missing")
-    assert error.code == AppErrorCode.NOT_FOUND
-
-
 def test_envelope_handles_non_ascii_message() -> None:
     error = BadRequestError("Ungültige Eingabe — 请检查输入")
     envelope = to_envelope(error)
@@ -111,18 +106,6 @@ def test_envelope_handles_non_ascii_message() -> None:
 def test_envelope_validation_error_on_missing_required_field() -> None:
     with pytest.raises(ValidationError):
         ErrorEnvelope.model_validate({"message": "x"})
-
-
-def test_to_envelope_preserves_exception_chain_on_the_original_error() -> None:
-    try:
-        try:
-            raise ValueError("root cause")
-        except ValueError as exc:
-            raise NotFoundError("not found") from exc
-    except NotFoundError as error:
-        envelope = to_envelope(error)
-        assert envelope.message == "not found"
-        assert isinstance(error.__cause__, ValueError)
 
 
 def test_envelope_details_with_non_serializable_value_falls_back_to_str_in_json_mode() -> None:

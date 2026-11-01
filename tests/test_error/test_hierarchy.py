@@ -57,7 +57,6 @@ _LEAF_SUBCLASSES = [
 def test_leaf_subclass_code(cls: type[AppError], expected_code: AppErrorCode) -> None:
     error = cls("boom")
     assert error.code == expected_code
-    assert isinstance(error, AppError)
 
 
 def test_already_exists_and_conflict_are_distinct_codes() -> None:

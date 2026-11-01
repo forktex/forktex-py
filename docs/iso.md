@@ -1,10 +1,8 @@
 # forktex.iso
 
-The one module that decides how a datetime becomes text and back: always UTC, always `datetime.isoformat()`'s default shape. `log`, `types`, `grid`, `flow`, and `database` all delegate here rather than each hand-rolling the same normalisation.
+The one module that decides how a datetime becomes text and back: always UTC, always `datetime.isoformat()`'s default shape. `log`, `types` and `database` all delegate here rather than each hand-rolling the same normalisation.
 
-## Install
-
-Always bundled — `iso` is a level-0 extra with no packages behind it. `pip install forktex` is enough; `forktex[iso]` resolves but installs nothing extra. Stdlib only, no imports from any other `forktex` module. Nothing here ever raises `ImportError` for a missing extra.
+Stdlib only, and the one module that imports nothing else from `forktex`.
 
 ## Wiring
 
@@ -51,15 +49,12 @@ No custom exception type. Three stdlib ones:
 
 Catch `ValueError` at a parse boundary; there is nothing else to catch.
 
-**`iso` is the one module that does not raise `AppError`.** Every other package raises a typed
-`forktex.error` leaf so a consumer's single boundary renders it. `iso` cannot: `forktex.error`
-imports `forktex.types`, which imports `forktex.iso`, so an `iso -> error` edge would close a cycle
-between three level-0 primitives. The exemption is deliberate, and `test_the_stdlib_raise_exemption_is_still_real`
-holds it to raising stdlib errors so the carve-out cannot quietly outlive its reason.
+`iso` is the one module that raises stdlib errors rather than `forktex.error` leaves: `error`
+imports `types` imports `iso`, so a leaf would close a cycle.
 
 ## Gotchas
 
-- **Naive means UTC by default.** `to_iso`/`from_iso` assume it rather than raising, because every existing caller relied on that before this module existed. Pass `strict=True` if you have no such assumption to preserve — the default stays `False` so `grid`'s stored text format is untouched.
+- **Naive means UTC by default.** `to_iso`/`from_iso` assume it rather than raising, because every existing caller relied on that before this module existed. Pass `strict=True` if you have no such assumption to preserve — the default stays `False`.
 - **`strict` is keyword-only and exists only on `to_iso`/`from_iso`.** The date functions have no strict mode; there is no offset to be ambiguous about.
 - **Precision follows `isoformat()`.** Microseconds appear only when nonzero — do not assume a fixed-width string.
 - **`to_iso(a_date)` raises.** `date` is not a `datetime`, and passing one is a `TypeError`, not a silent coercion. It is the `to_date_iso()` direction that is lenient: it accepts a full `datetime` and truncates.

@@ -28,6 +28,17 @@ from forktex.log import get_logger
 from forktex.registry import ClientRegistry
 from forktex.storage.client import PublicAccess, StorageClient, StorageConfig
 from forktex.storage.errors import ClientNotRegisteredError, ObjectNotFoundError, StorageError
+from forktex.storage.policy import (
+    BucketPolicy,
+    BucketPolicyPrincipal,
+    BucketPolicyStatement,
+    PostPolicy,
+    PresignedPost,
+    PresignMethod,
+    PresignParams,
+    object_arn,
+    public_read_policy,
+)
 
 logger = get_logger(__name__)
 
@@ -64,7 +75,11 @@ def register(
     return client
 
 
-def default() -> StorageClient:
+def default() -> StorageClient | None:
+    return _registry.find()
+
+
+def require_default() -> StorageClient:
     return get_client()
 
 
@@ -85,16 +100,18 @@ async def init(
     region: str = "us-east-1",
     public_url: str | None = None,
 ) -> None:
-    register(
-        "default",
-        url,
-        bucket,
-        access_key,
-        secret_key,
-        region=region,
-        public_url=public_url,
+    candidate = StorageClient(
+        StorageConfig(
+            url=url,
+            bucket=bucket,
+            access_key=access_key,
+            secret_key=secret_key,
+            region=region,
+            public_url=public_url,
+        )
     )
-    await get_client().verify()
+    await candidate.verify()
+    _registry.set("default", candidate)
 
 
 async def close(name: str = "default") -> None:
@@ -121,7 +138,7 @@ async def presign(
     key: str,
     expires_in: int = 3600,
     *,
-    method: str = "get_object",
+    method: PresignMethod = "get_object",
     content_type: str | None = None,
     response_content_disposition: str | None = None,
 ) -> str:
@@ -140,7 +157,7 @@ async def presign_post(
     expires_in: int = 3600,
     content_type: str | None = None,
     max_size_bytes: int | None = None,
-) -> dict:
+) -> PresignedPost:
     return await get_client().presign_post(
         key,
         expires_in=expires_in,
@@ -150,8 +167,15 @@ async def presign_post(
 
 
 __all__ = [
+    "BucketPolicy",
+    "BucketPolicyPrincipal",
+    "BucketPolicyStatement",
     "ClientNotRegisteredError",
     "ObjectNotFoundError",
+    "PostPolicy",
+    "PresignMethod",
+    "PresignParams",
+    "PresignedPost",
     "PublicAccess",
     "StorageClient",
     "StorageConfig",
@@ -164,8 +188,11 @@ __all__ = [
     "exists",
     "get_client",
     "init",
+    "object_arn",
     "presign",
     "presign_post",
+    "public_read_policy",
     "register",
+    "require_default",
     "upload",
 ]

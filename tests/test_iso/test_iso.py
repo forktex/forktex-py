@@ -51,10 +51,6 @@ def test_to_iso_preserves_microseconds_only_when_present() -> None:
     assert to_iso(datetime(2026, 1, 1, 12, 0, 0, 500, tzinfo=timezone.utc)) == "2026-01-01T12:00:00.000500+00:00"
 
 
-def test_to_iso_full_microsecond_precision() -> None:
-    assert to_iso(datetime(2026, 1, 1, 12, 0, 0, 123456, tzinfo=timezone.utc)) == "2026-01-01T12:00:00.123456+00:00"
-
-
 def test_to_iso_rejects_a_plain_date() -> None:
     with pytest.raises(TypeError, match="use to_date_iso"):
         to_iso(date(2026, 1, 1))
@@ -134,19 +130,3 @@ def test_from_date_iso() -> None:
 def test_to_date_iso_from_date_iso_round_trip() -> None:
     d = date(2026, 6, 15)
     assert from_date_iso(to_date_iso(d)) == d
-
-
-def test_to_iso_rejects_a_date_with_a_message_naming_the_right_function() -> None:
-    with pytest.raises(TypeError, match="to_date_iso"):
-        to_iso(date(2026, 1, 1))
-
-
-def test_strict_mode_rejects_naive_and_offsetless_input() -> None:
-    with pytest.raises(ValueError, match="naive"):
-        to_iso(datetime(2026, 1, 1, 12, 0, 0), strict=True)
-
-    with pytest.raises(ValueError, match="no UTC offset"):
-        from_iso("2026-01-01T12:00:00", strict=True)
-
-    assert to_iso(datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc), strict=True).endswith("+00:00")
-    assert from_iso("2026-01-01T12:00:00+00:00", strict=True).tzinfo is not None

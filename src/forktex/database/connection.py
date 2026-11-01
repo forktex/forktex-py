@@ -24,8 +24,9 @@
 
 import functools
 import inspect
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from typing import overload
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -150,15 +151,37 @@ async def savepoint(session: AsyncSession) -> AsyncGenerator[None]:
         yield
 
 
-def with_transactional_session(
-    func: Callable | None = None,
+@overload
+def with_transactional_session[R](
+    func: Callable[..., Awaitable[R]],
     /,
     *,
     isolate: bool = False,
     param: str = "session",
-) -> Callable:
+) -> Callable[..., Awaitable[R]]: ...
 
-    def decorate(fn: Callable) -> Callable:
+
+@overload
+def with_transactional_session[R](
+    func: None = None,
+    /,
+    *,
+    isolate: bool = False,
+    param: str = "session",
+) -> Callable[[Callable[..., Awaitable[R]]], Callable[..., Awaitable[R]]]: ...
+
+
+def with_transactional_session[R](
+    func: Callable[..., Awaitable[R]] | None = None,
+    /,
+    *,
+    isolate: bool = False,
+    param: str = "session",
+) -> Callable[..., object]:
+    """The wrapper supplies `param` itself, so a caller omits it — which Python's
+    type system cannot express. The return type is preserved; the parameters are not."""
+
+    def decorate(fn: Callable[..., Awaitable[R]]) -> Callable[..., Awaitable[R]]:
         signature = inspect.signature(fn)
         target = signature.parameters.get(param)
         if target is None:
@@ -172,7 +195,7 @@ def with_transactional_session(
             )
 
         @functools.wraps(fn)
-        async def wrapper(*args: object, **kwargs: object) -> object:
+        async def wrapper(*args: object, **kwargs: object) -> R:
             bound = signature.bind_partial(*args, **kwargs)
             provided = bound.arguments.get(param)
             if provided is not None and not isinstance(provided, AsyncSession):

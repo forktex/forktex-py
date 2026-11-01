@@ -88,10 +88,8 @@ def start_minio(bucket: str = "test-bucket") -> tuple[Any, dict[str, str]]:
 
 
 async def ensure_minio_bucket(config: dict[str, str]) -> None:
-    try:
-        import aioboto3
-    except ImportError:
-        return
+    import aioboto3
+    from botocore.exceptions import ClientError
 
     session = aioboto3.Session(
         aws_access_key_id=config["access_key"],
@@ -100,56 +98,6 @@ async def ensure_minio_bucket(config: dict[str, str]) -> None:
     async with session.client("s3", endpoint_url=config["url"]) as s3:
         try:
             await s3.create_bucket(Bucket=config["bucket"])
-        except Exception:
-            pass
-
-
-def start_qdrant() -> tuple[Any, str]:
-    from testcontainers.core.container import DockerContainer
-    from testcontainers.core.waiting_utils import wait_for_logs
-
-    container = DockerContainer("qdrant/qdrant:v1.18.1").with_exposed_ports(6333, 6334)
-    container.start()
-    wait_for_logs(container, "Qdrant gRPC", timeout=30)
-    host = container.get_container_host_ip()
-    port = container.get_exposed_port(6333)
-    return container, f"http://{host}:{port}"
-
-
-def start_mongo() -> tuple[Any, str]:
-    import time
-
-    from pymongo import MongoClient
-    from testcontainers.mongodb import MongoDbContainer
-
-    container = MongoDbContainer("mongo:7", username=None, password=None).with_command(
-        "mongod --replSet rs0 --bind_ip_all"
-    )
-    container.username = ""
-    container.password = ""
-    container.start()
-
-    host = container.get_container_host_ip()
-    port = container.get_exposed_port(27017)
-    url = f"mongodb://{host}:{port}/?directConnection=true"
-
-    admin = MongoClient(url, serverSelectionTimeoutMS=10_000)
-    try:
-        admin.admin.command("ping")
-        admin.admin.command(
-            "replSetInitiate",
-            {"_id": "rs0", "members": [{"_id": 0, "host": "localhost:27017"}]},
-        )
-        for _ in range(30):
-            time.sleep(1)
-            try:
-                if admin.admin.command("replSetGetStatus").get("myState") == 1:
-                    break
-            except Exception:
-                continue
-        else:
-            raise RuntimeError("MongoDB replica set did not reach PRIMARY state in time")
-    finally:
-        admin.close()
-
-    return container, url
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] not in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
+                raise

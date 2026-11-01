@@ -22,8 +22,14 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
+import importlib
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
+from types import ModuleType
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from forktex import api, cache, database, error, iso, log, storage, types
 
 try:
     __version__ = _pkg_version("forktex")
@@ -31,4 +37,35 @@ except PackageNotFoundError:
     __version__ = "0.0.0+unknown"
 
 
-__all__ = ["__version__"]
+__all__ = [
+    "__version__",
+    "api",
+    "cache",
+    "database",
+    "error",
+    "iso",
+    "log",
+    "storage",
+    "types",
+]
+
+_MODULES = frozenset(__all__) - {"__version__"}
+
+
+def __getattr__(name: str) -> ModuleType:
+    """Resolve `forktex.<module>` on first access.
+
+    `import forktex` exposes all eight, but importing one must not drag in the
+    others: `forktex.iso` is stdlib-only and `forktex.error` is pure Pydantic,
+    while `api`, `cache`, `database` and `storage` pull FastAPI, redis,
+    SQLAlchemy and botocore between them.
+    """
+    if name not in _MODULES:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module = importlib.import_module(f"{__name__}.{name}")
+    globals()[name] = module
+    return module
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)

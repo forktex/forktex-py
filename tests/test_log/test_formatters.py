@@ -52,7 +52,7 @@ def test_json_trace_id_injected(capture_json: Callable[..., tuple[logging.Logger
 def test_json_no_trace_id_when_unset(capture_json: Callable[..., tuple[logging.Logger, list[dict]]]) -> None:
     log, captured = capture_json()
     log.info("no trace")
-    assert "trace_id" not in captured[0] or captured[0].get("trace_id") is None
+    assert captured[0].get("trace_id") is None
 
 
 def test_json_exception_formatting(capture_json: Callable[..., tuple[logging.Logger, list[dict]]]) -> None:
@@ -93,12 +93,6 @@ def test_json_extra_field_collision_core_wins(capture_json: Callable[..., tuple[
     rec = captured[0]
     assert rec["level"] == "INFO"
     assert rec["logger"] != "spoofed-logger"
-
-
-def test_human_formatter_fmt_override() -> None:
-    formatter = HumanFormatter(fmt="%(message)s", datefmt="%H:%M")
-    record = logging.LogRecord("x", logging.INFO, "path", 1, "hi", None, None)
-    assert formatter.format(record) == "hi"
 
 
 def test_human_formatter_prefixes_trace_id() -> None:

@@ -26,16 +26,16 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from forktex.api.middleware import ExceptionEnvelopeMiddleware, SecurityHeadersMiddleware
 from forktex.log import TraceIDMiddleware, get_logger
 from forktex.types import BaseAppModel
-
-if TYPE_CHECKING:
-    from fastapi import FastAPI
 
 logger = get_logger(__name__)
 
@@ -90,12 +90,6 @@ class AppConfig(BaseModel):
 
 
 def create_app(config: AppConfig | None = None) -> FastAPI:
-    try:
-        from fastapi import FastAPI
-        from fastapi.responses import JSONResponse
-    except ImportError as exc:
-        raise ImportError("Install 'forktex[api]' (fastapi) to use forktex.api") from exc
-
     cfg = config or AppConfig()
 
     prefix = cfg.api_prefix
@@ -117,8 +111,6 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     if cfg.enable_trace_id:
         app.add_middleware(TraceIDMiddleware)
     if cfg.cors_origins is not None:
-        from fastapi.middleware.cors import CORSMiddleware
-
         app.add_middleware(
             CORSMiddleware,
             allow_origins=cfg.cors_origins,

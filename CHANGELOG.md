@@ -2,65 +2,89 @@
 
 `forktex` follows [Semantic Versioning](https://semver.org/). Pre-1.0, minor versions may break.
 
-Each entry says what to change. The reasoning lives in `docs/<module>.md`.
+Each entry says what to change.
 
 ## [Unreleased]
 
 ## [0.13.0] — 2026-11-01
 
+`forktex` is eight modules and one install. The modules with no consumer, or one consumer using a
+handful of names, are set aside in `backlog/facades/` with their tests and docs.
+
 ### Removed
 
-- **`forktex.worker` is gone**, with the `[worker]` extra. Use `forktex-flow` for scheduled and
-  durable work, and host a consumer in a process you own.
+- **`forktex.worker`**, **`forktex.graph`**, **`forktex.queue`**, **`forktex.store`**,
+  **`forktex.vault`** and **`forktex.vector`**.
+- Scheduled and durable work is `forktex-flow`'s job.
+- **Every extra.** `forktex[x]` no longer resolves; `fastapi` and `aioboto3` are required.
 
 ### Breaking
 
+**One install** — `import forktex` exposes `api`, `cache`, `database`, `error`, `iso`, `log`,
+`storage` and `types`, each resolved on first access so one module does not import the rest.
+
 **`forktex.database`** — [docs/database.md](docs/database.md#sessions-and-transactions)
 
-- `get_session()` → `transactional_session()`, `session_scope()` → `yield_transactional_session()`,
-  `unmanaged_session()` → `open_session()`, and the same three on `Database`.
+- `get_session()` → `transactional_session()`.
+- `session_scope()` → `yield_transactional_session()`.
+- `unmanaged_session()` → `open_session()`. The same three renames apply on `Database`.
 - `connection.engine` → `get_engine()`.
-- `init_engine()` returns `None`; use `open_session()` where you used its factory.
+- `init_engine()` returns `None`.
+- Use `open_session()` where you used `init_engine`'s factory.
 - `commit()`, `rollback()` and `begin()` raise `TransactionBoundaryError` inside
-  `transactional_session` and the decorator. To abort, raise. To own the boundary, `open_session()`.
-- `@with_transactional_session` joins the transaction of a session it is handed and never commits
-  it — hand it only a session something else commits, or writes are discarded at close.
+  `transactional_session` and the decorator. To abort, raise.
+- `@with_transactional_session` joins the transaction of a session it is handed and never commits it.
 - A decorated callee gets no `SAVEPOINT` of its own: wrap in `savepoint(session)`, or declare it
   `@with_transactional_session(isolate=True)`.
 - The decorator binds the session by parameter name (`param=` to rename); pass the rest by keyword.
   A decorated function without that parameter raises `TypeError` at import.
 - `within=` is gone: pass the session, or wrap in `savepoint(session)`.
+- `crud.get(key=)` with an unknown column raises `BadRequestError`, not `AttributeError`.
+- A cursor without its keyset raises `InvalidKeysetError`, not `ValueError`.
 
 **`forktex.storage`** — [docs/storage.md](docs/storage.md)
 
 - `ensure_bucket(public_read=True)` → `register(..., public_access="bucket-policy")`;
   `ensure_bucket(public_read=False)` → `ensure_bucket()`.
 - `direct_url()` raises `StorageError` unless the bucket declares `public_access`; use `presign()`.
+- `default()` returns `StorageClient | None` instead of raising; `require_default()` raises.
 
-**`forktex.queue`** — [docs/queue.md](docs/queue.md)
+**`forktex.cache`**
 
-- `inspect_job`, `list_jobs` and `worker_health` return `JobInfo` / `QueueHealth`, not dicts;
-  `list_jobs(status=...)` takes a `JobStatus`.
-- `make_worker()` raises `QueueError` for a `redis_url` that is not `redis://`, `rediss://` or
-  `unix://`, and for one arq cannot parse — where arq raised a bare `RuntimeError` that a
-  transport rendered as a masked 500.
-- `storage.init()` verifies the bucket is reachable before returning, so a wrong endpoint or
-  credential fails at boot instead of on the first upload. It can raise `StorageError`.
+- `key_for()` with a `None` part raises `InvalidCacheKeyError`, not `ValueError`.
 
 ### Added
 
 - `savepoint(session)`, `open_session()`, `get_engine()`, `TransactionBoundaryError`.
-- `default()` on `database`, `cache`, `storage`, `store` and `vector`, matching `queue.default()`:
-  one name on every facade for the process-wide handle. `database.require_default()` is public too,
-  retiring the reach into `_require_default()` a consumer had written.
+- `default()` and `require_default()` on `database`, `cache` and `storage` — one pair, one
+  contract, on every facade. `default()` returns `Handle | None`; `require_default()` raises.
+- `database` exports `crud`, `identifiers` and `integrity` as modules, beside `ddl`, `filters` and
+  `reflect`.
+- `InvalidKeysetError`, `InvalidAdvisoryKeyError`, `InvalidSchemaChangeError`, `MigrationError`,
+  `InvalidCacheKeyError`.
 - `StorageClient.verify()` — a `head_bucket` reachability check that creates nothing.
-- `make_worker(..., poll_delay=0.5)`.
-- `Cache(url)` and `Queue(url)` — explicit handles; the module functions are shims over one default.
+- `storage.init()` verifies before registering, so a bad endpoint or credential fails at boot and
+  a previously working default survives the failure.
+- `Cache(url)` — an explicit handle; the module functions are shims over one default.
 
 ### Fixed
 
-- `list_jobs` reported every job on a non-default queue as `not_found` and its `status` filter
-  matched nothing; `inspect_job` returned `"JobStatus.queued"` for `"queued"`.
+- An `AppError` whose `details` held a UUID or datetime crashed the envelope middleware, so a
+  deliberate 400 reached the client as a plain-text 500 with no `traceId`.
+- `storage.init()` left an unverified client registered when `verify()` failed, and `get_client()`
+  kept handing it out.
+- A non-positive `ttl` or `stale_ttl` now stores nothing instead of issuing the `SET … EX 0` Redis
+  rejects and swallowing the error.
+- `upload`, `delete`, `presign` and `presign_post` let raw botocore exceptions through, and
+  `verify()` caught only `ClientError`, so an unreachable endpoint escaped unwrapped.
+- A failed migration raised a raw asyncpg exception carrying driver text; it is now
+  `MigrationError`, and the script and its version row roll back together.
+- `eager_defaults` was dropped when `__mapper_args__` came from a mixin or a
+  `@declared_attr.directive`, which is what makes reading `updated_at` after an update raise
+  `MissingGreenlet`.
+- `@cached` and `@traced` erased the signatures of the functions they decorated, so no call site
+  was type-checked. `@with_transactional_session` now preserves the return type; it supplies the
+  session parameter itself, which Python's type system cannot express, so its parameters stay open.
 - A tampered cursor on a `Numeric` column raised 500 instead of `BadRequestError`.
 - `presign()` emitted SigV2, which Garage, R2 and current AWS regions reject with 403.
 

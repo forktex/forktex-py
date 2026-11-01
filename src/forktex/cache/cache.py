@@ -76,6 +76,8 @@ class Cache:
             return None
 
     async def set(self, key: str, value: str, ex: int) -> None:
+        if ex <= 0:
+            return
         try:
             await self._client.set(key, value, ex=ex)
         except Exception:
@@ -122,8 +124,9 @@ class Cache:
                 await self.invalidate_key(key)
 
         result = await fn(*args, **kwargs)
-        await self.set(key, serialize(result), ex=ttl)
-        return result
+        payload = serialize(result)
+        await self.set(key, payload, ex=ttl)
+        return deserialize(payload, response_model)
 
     async def fetch_swr(
         self,
@@ -154,9 +157,9 @@ class Cache:
                 return value
 
         result = await fn(*args, **kwargs)
-        payload = {"created_at": now, "value": serialize(result)}
-        await self.set(key, json.dumps(payload), ex=stale_ttl)
-        return result
+        value = serialize(result)
+        await self.set(key, json.dumps({"created_at": now, "value": value}), ex=stale_ttl)
+        return deserialize(value, response_model)
 
     async def _refresh_in_background(self, key: str, stale_ttl: int, fn: Callable, args: tuple, kwargs: dict) -> None:
         lock_key = f"lock:{key}"

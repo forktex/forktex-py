@@ -24,24 +24,35 @@
 
 from __future__ import annotations
 
-from contextlib import AbstractAsyncContextManager
-from typing import TYPE_CHECKING, Any, Literal, cast
+from collections.abc import AsyncIterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from typing import Any, Literal, cast
 from urllib.parse import quote
 
+import aioboto3
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import Field
 
+from forktex.error import AppError
 from forktex.log import get_logger
 from forktex.storage.errors import ObjectNotFoundError, StorageError
+from forktex.storage.policy import (
+    PostPolicy,
+    PresignedPost,
+    PresignMethod,
+    PresignParams,
+    public_read_policy,
+)
 from forktex.types import BaseValueObject
-
-if TYPE_CHECKING:
-    from types import ModuleType
-
-    from botocore.config import Config
 
 logger = get_logger(__name__)
 
 PublicAccess = Literal["none", "bucket-policy", "credentialed-proxy"]
+
+_MISSING_OBJECT = frozenset({"404", "NoSuchKey"})
+_MISSING_BUCKET = frozenset({"404", "NoSuchBucket"})
+_SIGNING = Config(signature_version="s3v4", s3={"addressing_style": "path"})
 
 
 class StorageConfig(BaseValueObject):
@@ -74,19 +85,20 @@ class StorageConfig(BaseValueObject):
 class StorageClient:
     def __init__(self, config: StorageConfig) -> None:
         self._config = config
-        self._aioboto3 = _get_aioboto3()
-        self._session = self._aioboto3.Session(
+        self._session = aioboto3.Session(
             aws_access_key_id=config.access_key,
             aws_secret_access_key=config.secret_key,
             region_name=config.region,
         )
 
+    def _endpoint(self, *, public: bool) -> str:
+        return (self._config.public_url or self._config.url) if public else self._config.url
+
     def _client(self, *, public: bool = False) -> AbstractAsyncContextManager[Any]:
-        public_endpoint = self._config.public_url or self._config.url
-        endpoint = public_endpoint if public else self._config.url
+        endpoint = self._endpoint(public=public)
         return cast(
             AbstractAsyncContextManager[Any],
-            self._session.client("s3", endpoint_url=endpoint, config=_signing_config()),
+            self._session.client("s3", endpoint_url=endpoint, config=_SIGNING),
         )
 
     def direct_url(self, key: str) -> str:
@@ -95,20 +107,16 @@ class StorageClient:
                 f"bucket {self._config.bucket!r} has no public access configured; "
                 "use presign() or set public_access on its StorageConfig"
             )
-        base = (self._config.public_url or self._config.url).rstrip("/")
+        base = self._endpoint(public=True).rstrip("/")
         return f"{base}/{self._config.bucket}/{quote(key)}"
 
     async def ensure_bucket(self) -> None:
-        import json
-
-        from botocore.exceptions import ClientError
-
-        async with self._client() as s3:
+        async with _driver_boundary("bucket setup", bucket=self._config.bucket), self._client() as s3:
             try:
                 await s3.head_bucket(Bucket=self._config.bucket)
             except ClientError as exc:
                 code = exc.response["Error"]["Code"]
-                if code not in ("404", "NoSuchBucket"):
+                if code not in _MISSING_BUCKET:
                     logger.error(
                         "storage: bucket check failed",
                         extra={"bucket": self._config.bucket, "aws_code": code},
@@ -118,33 +126,21 @@ class StorageClient:
                 await s3.create_bucket(Bucket=self._config.bucket)
 
             if self._config.public_access == "bucket-policy":
-                policy = json.dumps(
-                    {
-                        "Version": "2012-10-17",
-                        "Statement": [
-                            {
-                                "Effect": "Allow",
-                                "Principal": {"AWS": ["*"]},
-                                "Action": ["s3:GetObject"],
-                                "Resource": [f"arn:aws:s3:::{self._config.bucket}/*"],
-                            }
-                        ],
-                    }
-                )
                 logger.warning(
                     "storage: applying public-read bucket policy",
                     extra={"bucket": self._config.bucket},
                 )
-                await s3.put_bucket_policy(Bucket=self._config.bucket, Policy=policy)
+                await s3.put_bucket_policy(
+                    Bucket=self._config.bucket,
+                    Policy=public_read_policy(self._config.bucket).to_json(),
+                )
 
     async def verify(self) -> None:
-        from botocore.exceptions import ClientError
-
-        async with self._client() as s3:
-            try:
+        try:
+            async with self._client() as s3:
                 await s3.head_bucket(Bucket=self._config.bucket)
-            except ClientError as exc:
-                raise StorageError("storage bucket is not reachable") from exc
+        except (BotoCoreError, ClientError) as exc:
+            raise StorageError("storage bucket is not reachable") from exc
 
     async def upload(
         self,
@@ -157,7 +153,7 @@ class StorageClient:
             "storage: uploading object",
             extra={"bucket": self._config.bucket, "key": key, "bytes": len(data), "content_type": content_type},
         )
-        async with self._client() as s3:
+        async with _driver_boundary("upload", bucket=self._config.bucket, key=key), self._client() as s3:
             await s3.put_object(
                 Bucket=self._config.bucket,
                 Key=key,
@@ -166,71 +162,59 @@ class StorageClient:
             )
 
     async def download(self, key: str) -> bytes:
-        from botocore.exceptions import ClientError
-
-        try:
-            async with self._client() as s3:
+        async with _driver_boundary("download", bucket=self._config.bucket, key=key), self._client() as s3:
+            try:
                 response = await s3.get_object(Bucket=self._config.bucket, Key=key)
-                async with response["Body"] as stream:
-                    return await stream.read()
-        except ClientError as exc:
-            code = exc.response["Error"]["Code"]
-            if code in ("NoSuchKey", "404"):
+            except ClientError as exc:
+                if exc.response["Error"]["Code"] not in _MISSING_OBJECT:
+                    raise
                 logger.info("storage: object not found", extra={"bucket": self._config.bucket, "key": key})
                 raise ObjectNotFoundError(key) from exc
-            logger.error(
-                "storage: download failed",
-                extra={"bucket": self._config.bucket, "key": key, "aws_code": code},
-            )
-            raise StorageError("storage download failed") from exc
-        except Exception as exc:
-            logger.exception("storage: download failed", extra={"bucket": self._config.bucket, "key": key})
-            raise StorageError("storage download failed") from exc
+            async with response["Body"] as stream:
+                return await stream.read()
 
     async def delete(self, key: str) -> None:
         logger.info("storage: deleting object", extra={"bucket": self._config.bucket, "key": key})
-        async with self._client() as s3:
+        async with _driver_boundary("delete", bucket=self._config.bucket, key=key), self._client() as s3:
             await s3.delete_object(Bucket=self._config.bucket, Key=key)
 
     async def exists(self, key: str) -> bool:
-        from botocore.exceptions import ClientError
-
-        try:
-            async with self._client() as s3:
+        async with (
+            _driver_boundary("existence check", bucket=self._config.bucket, key=key),
+            self._client() as s3,
+        ):
+            try:
                 await s3.head_object(Bucket=self._config.bucket, Key=key)
-                return True
-        except ClientError as exc:
-            code = exc.response["Error"]["Code"]
-            if code in ("404", "NoSuchKey"):
-                return False
-            logger.error(
-                "storage: existence check failed",
-                extra={"bucket": self._config.bucket, "key": key, "aws_code": code},
-            )
-            raise StorageError("storage existence check failed") from exc
-        except Exception as exc:
-            logger.exception("storage: existence check failed", extra={"bucket": self._config.bucket, "key": key})
-            raise StorageError("storage existence check failed") from exc
+            except ClientError as exc:
+                if exc.response["Error"]["Code"] in _MISSING_OBJECT:
+                    return False
+                raise
+            return True
 
     async def presign(
         self,
         key: str,
         expires_in: int = 3600,
         *,
-        method: str = "get_object",
+        method: PresignMethod = "get_object",
         content_type: str | None = None,
         response_content_disposition: str | None = None,
     ) -> str:
-        params: dict[str, Any] = {"Bucket": self._config.bucket, "Key": key}
-        if content_type and method == "put_object":
-            params["ContentType"] = content_type
-        if response_content_disposition and method == "get_object":
-            params["ResponseContentDisposition"] = response_content_disposition
+        if content_type is not None and method != "put_object":
+            raise StorageError(f"content_type signs a put_object, not a {method}")
+        if response_content_disposition is not None and method != "get_object":
+            raise StorageError(f"response_content_disposition signs a get_object, not a {method}")
 
-        async with self._client(public=True) as s3:
+        params = PresignParams(
+            bucket=self._config.bucket,
+            key=key,
+            content_type=content_type,
+            response_content_disposition=response_content_disposition,
+        )
+        async with _driver_boundary("presign", bucket=self._config.bucket, key=key), self._client(public=True) as s3:
             return await s3.generate_presigned_url(
                 method,
-                Params=params,
+                Params=params.to_params(),
                 ExpiresIn=expires_in,
             )
 
@@ -241,40 +225,33 @@ class StorageClient:
         expires_in: int = 3600,
         content_type: str | None = None,
         max_size_bytes: int | None = None,
-    ) -> dict[str, Any]:
-        conditions: list[Any] = []
-        fields: dict[str, str] = {}
-
-        if content_type:
-            conditions.append({"Content-Type": content_type})
-            fields["Content-Type"] = content_type
-
-        if max_size_bytes is not None:
-            conditions.append(["content-length-range", 1, max_size_bytes])
-
-        async with self._client(public=True) as s3:
-            return await s3.generate_presigned_post(
+    ) -> PresignedPost:
+        policy = PostPolicy(content_type=content_type, max_size_bytes=max_size_bytes)
+        async with (
+            _driver_boundary("presigned post", bucket=self._config.bucket, key=key),
+            self._client(public=True) as s3,
+        ):
+            signed = await s3.generate_presigned_post(
                 Bucket=self._config.bucket,
                 Key=key,
-                Fields=fields or None,
-                Conditions=conditions or None,
+                Fields=policy.fields() or None,
+                Conditions=policy.conditions() or None,
                 ExpiresIn=expires_in,
             )
+            return PresignedPost.model_validate(signed)
 
 
-def _signing_config() -> Config:
-    from botocore.config import Config
-
-    return Config(signature_version="s3v4", s3={"addressing_style": "path"})
-
-
-def _get_aioboto3() -> ModuleType:
+@asynccontextmanager
+async def _driver_boundary(operation: str, **context: object) -> AsyncIterator[None]:
     try:
-        import aioboto3
-
-        return aioboto3
-    except ImportError as exc:
-        raise ImportError("Install 'forktex[storage]' (aioboto3) to use forktex.storage") from exc
+        yield
+    except AppError:
+        raise
+    except Exception as exc:
+        # Anything the driver's HTTP layer raises mid-stream too: a caller was
+        # told to catch StorageError, and aiohttp reaches us only via aiobotocore.
+        logger.error("storage: operation failed", extra={"operation": operation, **context})
+        raise StorageError(f"storage {operation} failed") from exc
 
 
 __all__ = [

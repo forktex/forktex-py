@@ -34,6 +34,7 @@ from sqlalchemy import ColumnElement, Select, SQLColumnExpression, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
+from forktex.database.errors import InvalidKeysetError
 from forktex.database.integrity import integrity_boundary
 from forktex.database.pagination import Page, decode_cursor, encode_cursor, keyset_predicate
 from forktex.error import BadRequestError
@@ -103,7 +104,7 @@ async def get[T](
     options: list | None = None,
 ) -> T | None:
     if not hasattr(model, key):
-        raise AttributeError(f"{model.__name__} has no attribute '{key}'")
+        raise BadRequestError(f"unknown column {key!r} on {model.__name__}")
 
     stmt = select(model).where(getattr(model, key) == value)
     if options:
@@ -148,6 +149,9 @@ async def create[T](
     return obj
 
 
+_DEFAULT_PAGE_SIZE = 100
+
+
 async def paginate[T](
     session: AsyncSession,
     model: type[T],
@@ -187,7 +191,9 @@ async def paginate_scroll[T](
     ascending: bool = True,
 ) -> ScrollResponse[T]:
     if cursor is not None and not keyset:
-        raise ValueError("a cursor needs the keyset it was built from")
+        raise InvalidKeysetError("a cursor needs the keyset it was built from")
+    if keyset and order_by:
+        raise InvalidKeysetError("the keyset is the ordering; pass one or the other, not both")
     stmt = select(model)
 
     if options:
@@ -211,12 +217,12 @@ async def _paginate_query[T](
     session: AsyncSession,
     query: Select[tuple[T]] | Select[Any],
     page: int = 1,
-    page_size: int = 100,
+    page_size: int = _DEFAULT_PAGE_SIZE,
 ) -> PageResponse[T]:
     if page < 1:
         page = 1
     if page_size < 1:
-        page_size = 10
+        page_size = _DEFAULT_PAGE_SIZE
 
     total_count_stmt = select(func.count()).select_from(query.subquery())
     total_count = (await session.execute(total_count_stmt)).scalar_one()
@@ -259,7 +265,13 @@ async def _paginate_scroll_query[T](
 
     next_cursor: str | None = None
     if has_more and keyset:
-        next_cursor = encode_cursor([_value_of(data[-1], expr) for expr in keyset])
+        boundary = [_value_of(data[-1], expr) for expr in keyset]
+        if boundary[-1] is None:
+            raise InvalidKeysetError(
+                "the last keyset level is the tiebreaker and must not be NULL — "
+                "end the keyset on a non-nullable column such as the primary key"
+            )
+        next_cursor = encode_cursor(boundary)
 
     return ScrollResponse(
         items=data,

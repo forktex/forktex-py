@@ -33,7 +33,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from forktex.database.crud import _typed_cursor_value
-from forktex.error import BadRequestError
 from forktex.database import (
     BaseDBModel,
     PageResponse,
@@ -46,6 +45,8 @@ from forktex.database import (
     paginate,
     paginate_scroll,
 )
+from forktex.database.errors import InvalidKeysetError
+from forktex.error import BadRequestError
 
 
 class _CrudItem(BaseDBModel, TimestampMixin):
@@ -72,8 +73,12 @@ async def test_get_missing_returns_none(models_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_unknown_key_raises_attribute_error(models_session: AsyncSession) -> None:
-    with pytest.raises(AttributeError, match="no attribute 'bogus_column'"):
+async def test_get_an_unknown_key_is_a_named_bad_request_not_an_attribute_error(
+    models_session: AsyncSession,
+) -> None:
+    """A bare AttributeError here reached a client as an opaque 500; `filters`
+    already answered the same condition with BadRequestError."""
+    with pytest.raises(BadRequestError, match="unknown column 'bogus_column'"):
         await get(models_session, _CrudItem, "x", key="bogus_column")
 
 
@@ -173,7 +178,7 @@ async def test_paginate_clamps_invalid_page_and_page_size(models_session: AsyncS
     conditions = [_CrudItem.name.like(f"clamp-%-{suffix}")]
     result: PageResponse = await paginate(models_session, _CrudItem, page=0, page_size=0, conditions=conditions)
     assert result.current_page == 1
-    assert result.limit == 10
+    assert result.limit == 100, "an unusable page_size clamps to the declared default, not a second magic number"
     assert len(result.data) == 3
 
 
@@ -205,7 +210,6 @@ async def test_paginate_scroll_can_actually_advance_past_page_one(models_session
         _CrudItem,
         limit=2,
         conditions=conditions,
-        order_by=keyset,
         keyset=keyset,
     )
     assert [i.name for i in p1.data] == [f"seek-0-{suffix}", f"seek-1-{suffix}"]
@@ -217,7 +221,6 @@ async def test_paginate_scroll_can_actually_advance_past_page_one(models_session
         _CrudItem,
         limit=2,
         conditions=conditions,
-        order_by=keyset,
         keyset=keyset,
         cursor=p1.next_cursor,
     )
@@ -228,7 +231,6 @@ async def test_paginate_scroll_can_actually_advance_past_page_one(models_session
         _CrudItem,
         limit=2,
         conditions=conditions,
-        order_by=keyset,
         keyset=keyset,
         cursor=p2.next_cursor,
     )
@@ -310,7 +312,6 @@ async def test_keyset_pagination_crosses_nulls_in_both_directions(
     await models_session.flush()
 
     keyset = [_NullableItem.rank, _NullableItem.id]
-    order_by = [k.asc() if ascending else k.desc() for k in keyset]
     seen: list[int] = []
     cursor = None
     for _ in range(len(ranks)):
@@ -318,7 +319,6 @@ async def test_keyset_pagination_crosses_nulls_in_both_directions(
             models_session,
             _NullableItem,
             limit=2,
-            order_by=order_by,
             keyset=keyset,
             cursor=cursor,
             ascending=ascending,
@@ -345,3 +345,32 @@ def test_a_tampered_cursor_value_is_a_bad_request_for_every_parsed_type(
 ) -> None:
     with pytest.raises(BadRequestError, match="invalid cursor"):
         _typed_cursor_value(sa.Column("sort_key", column_type), bad)
+
+
+@pytest.mark.asyncio
+async def test_paginate_scroll_refuses_a_keyset_and_an_order_by_together(models_session: AsyncSession) -> None:
+    """`order_by` won while the WHERE clause resumed on the keyset boundary, so a
+    disagreeing pair silently returned a page that skipped or repeated rows."""
+    with pytest.raises(InvalidKeysetError, match="one or the other"):
+        await paginate_scroll(
+            models_session,
+            _CrudItem,
+            limit=2,
+            keyset=[_CrudItem.id],
+            order_by=[_CrudItem.score.desc()],
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_nullable_tiebreaker_is_refused_rather_than_minting_a_cursor_it_rejects(
+    models_session: AsyncSession,
+) -> None:
+    """The last keyset level is the tiebreaker, and ascending order cannot
+    express "after NULL". `paginate_scroll` minted such a cursor anyway and then
+    answered the next request with `BadRequestError("invalid cursor")` — a 400 on
+    a cursor the API itself had handed out."""
+    models_session.add_all(_NullableItem(id=i, rank=None) for i in (1, 2, 3))
+    await models_session.flush()
+
+    with pytest.raises(InvalidKeysetError, match="tiebreaker"):
+        await paginate_scroll(models_session, _NullableItem, limit=2, keyset=[_NullableItem.rank])

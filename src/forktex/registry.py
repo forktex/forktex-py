@@ -51,6 +51,9 @@ class ClientRegistry[T]:
                 f"Call {self._facade}.register({name!r}, ...) at startup."
             ) from None
 
+    def find(self, name: str = "default") -> T | None:
+        return self._clients.get(name)
+
     def pop(self, name: str = "default") -> T | None:
         dropped = self._clients.pop(name, None)
         if dropped is not None:

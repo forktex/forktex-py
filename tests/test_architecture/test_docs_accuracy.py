@@ -34,7 +34,7 @@ import pytest
 
 from tests.test_architecture.test_public_surface import PACKAGES
 
-HOUSE_SECTIONS = ("Install", "Wiring", "Public surface", "Errors", "Gotchas")
+HOUSE_SECTIONS = ("Wiring", "Public surface", "Errors", "Gotchas")
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC_PATHS = [
@@ -107,8 +107,12 @@ def test_no_doc_references_the_old_distribution(doc: Path) -> None:
 def test_every_exported_name_is_documented_on_its_page(package: str) -> None:
     module = importlib.import_module(f"forktex.{package}")
     page = (ROOT / "docs" / f"{package}.md").read_text(encoding="utf-8")
-    mentioned = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", page))
-    missing = sorted(name for name in getattr(module, "__all__", ()) if name not in mentioned)
+    # A code span, not a bare word: `get`, `set`, `delete` and `default` are
+    # ordinary English, so a prose match certifies names that are undocumented.
+    mentioned = set(re.findall(r"`([A-Za-z_][A-Za-z0-9_]*)", page))
+    exported = list(getattr(module, "__all__", ()))
+    missing = sorted(name for name in exported if name not in mentioned)
+    assert exported, f"forktex.{package} exports nothing, so this gate checked nothing"
     assert missing == [], (
         f"docs/{package}.md documents no name for {missing} — a consumer cannot "
         f"discover an export that appears on no page"

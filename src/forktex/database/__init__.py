@@ -22,7 +22,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-from forktex.database import ddl, filters, reflect
+from forktex.database import crud, ddl, filters, identifiers, integrity, reflect
 from forktex.database.connection import (
     Database,
     close_engine,
@@ -46,7 +46,14 @@ from forktex.database.crud import (
     paginate,
     paginate_scroll,
 )
-from forktex.database.errors import DatabaseNotInitializedError, TransactionBoundaryError
+from forktex.database.errors import (
+    DatabaseNotInitializedError,
+    InvalidAdvisoryKeyError,
+    InvalidKeysetError,
+    InvalidSchemaChangeError,
+    MigrationError,
+    TransactionBoundaryError,
+)
 from forktex.database.identifiers import (
     is_identifier,
     validate_identifier,
@@ -70,7 +77,7 @@ from forktex.database.models import (
     NamespacedMixin,
     ReprMixin,
     TimestampMixin,
-    UtcDateTime,
+    UtcTimestamp,
     substrate_base,
 )
 from forktex.database.pagination import (
@@ -85,7 +92,11 @@ __all__ = [
     "BaseDBModel",
     "Database",
     "DatabaseNotInitializedError",
+    "InvalidAdvisoryKeyError",
+    "InvalidKeysetError",
+    "InvalidSchemaChangeError",
     "JsonModelColumn",
+    "MigrationError",
     "NamespacedMixin",
     "Page",
     "PageResponse",
@@ -94,11 +105,12 @@ __all__ = [
     "ScrollResponse",
     "TimestampMixin",
     "TransactionBoundaryError",
-    "UtcDateTime",
+    "UtcTimestamp",
     "advisory_key",
     "advisory_lock",
     "close_engine",
     "create",
+    "crud",
     "ddl",
     "decode_cursor",
     "default",
@@ -107,7 +119,9 @@ __all__ = [
     "find_one_by",
     "get",
     "get_engine",
+    "identifiers",
     "init_engine",
+    "integrity",
     "integrity_boundary",
     "is_identifier",
     "key_from_uuid",

@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 import sqlalchemy as sa
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
 from forktex.database.models import AuditMixin, BaseDBModel, substrate_base
 
@@ -83,5 +83,4 @@ def test_audit_mixin_accepts_a_substrate_base() -> None:
         __tablename__ = "audited"
         id: Mapped[int] = mapped_column(sa.Integer, primary_key=True)
 
-    assert issubclass(Audited, DeclarativeBase)
     assert "archived_at" in Audited.__table__.c

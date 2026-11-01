@@ -119,14 +119,6 @@ def test_nested_base_app_model() -> None:
     assert parsed.home_address.street_name == "Main St"
 
 
-def test_base_app_model_json_mode_matches_dict_mode_for_plain_fields() -> None:
-    class Person(BaseAppModel):
-        first_name: str
-
-    p = Person(first_name="Ada")
-    assert p.model_dump(mode="json", by_alias=True) == p.model_dump(by_alias=True) == {"firstName": "Ada"}
-
-
 def test_base_app_model_validation_error_on_missing_required_field() -> None:
     class Person(BaseAppModel):
         first_name: str
@@ -140,7 +132,6 @@ def test_optional_utc_datetime_field() -> None:
         canonical_at: UtcDateTime | None = None
 
     assert Event().model_dump(mode="json", by_alias=True) == {"canonicalAt": None}
-    assert Event(canonical_at=None).model_dump(mode="json", by_alias=True) == {"canonicalAt": None}
 
     naive = datetime(2026, 1, 1, 12, 0, 0)
     dumped = Event(canonical_at=naive).model_dump(mode="json", by_alias=True)

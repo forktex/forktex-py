@@ -3,16 +3,8 @@
 A FastAPI factory: trace-id propagation, security headers, CORS, the `AppError` →
 `ErrorEnvelope` mapping, and liveness/readiness endpoints, assembled in order.
 
-## Install
-
-```bash
-pip install "forktex[api]"
-```
-
-Only `create_app` touches FastAPI, raising `ImportError: Install 'forktex[api]' (fastapi) to use
-forktex.api` if the extra is missing. Both middleware classes are pure ASGI and work without
-FastAPI installed; `ExceptionEnvelopeMiddleware` lives at `forktex.api.middleware` for an app you
-assemble yourself.
+Both middleware classes are pure ASGI and do not need FastAPI;
+`ExceptionEnvelopeMiddleware` lives at `forktex.api.middleware` for an app you assemble yourself.
 
 ## Wiring
 
@@ -113,6 +105,7 @@ a stack trace. Keep probes fast and side-effect-free — they run on every call.
 | `cors_allow_credentials` / `_methods` / `_headers` | `True` / `["*"]` / `["*"]` | CORS detail |
 | `readiness_probes` | `{}` | Name → async predicate, run by `/health/ready` |
 | `readiness_timeout` | `5.0` | Per-probe seconds before a probe counts as not-ready |
+| `api_prefix` | `""` | Mounts every route under it, `/docs`, `/redoc`, `/openapi.json` and both health paths included |
 
 ### Security headers
 
@@ -131,13 +124,9 @@ CSP and HSTS need per-service values and are not included; add your own middlewa
 
 Outermost first: **security headers · CORS · trace-id · envelope**.
 
-The envelope sits inside trace-id, so the contextvar is live when the error body is built and the
-response `traceId`, the `X-Request-ID` header and the log records agree. Security headers are
-outermost, stamping errors and CORS preflights too.
-
 ## Errors
 
-The package raises nothing of its own beyond the `ImportError` for a missing extra; it converts
+The package raises nothing of its own; it converts
 your `AppError`s into responses ([error.md](error.md)). The `AppErrorCode` → status mapping:
 
 | Code | Status | | Code | Status |
@@ -155,6 +144,8 @@ still yields FastAPI's standard 422.
 
 ## Gotchas
 
+- `AppConfig` rejects unknown fields, so a misspelled setting raises at construction instead of
+  being dropped. `api_prefix` must start with `/` and must not end with one.
 - `cors_origins=None` means the CORS middleware is **not added at all**, which is not the same as an
   empty allow-list.
 - A custom `AppError` subclass whose `code` is outside `AppErrorCode` maps to HTTP 500. See the

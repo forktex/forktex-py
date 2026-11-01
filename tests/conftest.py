@@ -42,9 +42,7 @@ from sqlalchemy.ext.asyncio import (
 from tests._containers import (
     ensure_minio_bucket,
     start_minio,
-    start_mongo,
     start_postgres,
-    start_qdrant,
     start_redis,
 )
 
@@ -120,13 +118,3 @@ async def minio_config() -> AsyncIterator[dict]:
     await ensure_minio_bucket(config)
     yield config
     container.stop()
-
-
-@pytest.fixture(scope="session")
-def qdrant_url() -> Iterator[str]:
-    yield from _container_url(start_qdrant)
-
-
-@pytest.fixture(scope="session")
-def mongo_url() -> Iterator[str]:
-    yield from _container_url(start_mongo)

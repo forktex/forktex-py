@@ -24,12 +24,15 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
+
 import pytest
 import pytest_asyncio
 from pydantic import BaseModel
 
 from forktex.cache import (
+    Cache,
     available,
     cached,
     delete,
@@ -47,7 +50,7 @@ from forktex.cache import (
     shutdown_background_tasks,
 )
 from forktex.cache.connection import close
-from forktex.cache.errors import CacheInitializationError, CacheNotInitializedError
+from forktex.cache.errors import CacheInitializationError, CacheNotInitializedError, InvalidCacheKeyError
 from forktex.error import AppError
 
 
@@ -162,7 +165,7 @@ async def test_key_for() -> None:
 
 
 def test_key_for_none_part_raises_instead_of_collapsing_to_bare_prefix() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidCacheKeyError):
         key_for("user", None)
 
 
@@ -338,3 +341,81 @@ async def test_cached_decorator_round_trips_a_response_model() -> None:
     assert first == second == _CachedUser(id=7, name="ada")
     assert isinstance(second, _CachedUser), "a cache hit must rebuild the model, not return a dict"
     assert calls == 1, "the second call must be served from cache"
+
+
+@pytest.mark.asyncio
+async def test_a_value_is_gone_once_its_ttl_elapses() -> None:
+    """Nothing in this suite observed time, so expiry -- the whole point of a
+    cache -- was never proven against a real Redis."""
+    await set("ttl:probe", "still here", ex=1)
+    assert await get("ttl:probe") == "still here"
+
+    await asyncio.sleep(1.2)
+
+    assert await get("ttl:probe") is None
+
+
+@pytest.mark.asyncio
+async def test_a_non_positive_ttl_stores_nothing_instead_of_failing_silently(caplog) -> None:
+    """`SET ... EX 0` is rejected by Redis and the error was swallowed, so a
+    zero ttl logged an exception on every write and stored nothing anyway."""
+    with caplog.at_level("ERROR"):
+        await set("ttl:zero", "never stored", ex=0)
+
+    assert await get("ttl:zero") is None
+    assert [r for r in caplog.records if r.levelname == "ERROR"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_cached_value_has_the_same_type_on_a_hit_as_on_a_miss() -> None:
+    """A miss returned the function's own value and a hit returned what came
+    back through JSON, so a `datetime` became a `str` on the second call and
+    `.isoformat()` crashed on every request after the first."""
+    from datetime import datetime
+
+    from forktex import iso
+
+    @cached(ttl=60)
+    async def when() -> datetime:
+        return iso.now()
+
+    miss = await when()
+    hit = await when()
+
+    assert type(miss) is type(hit)
+    assert miss == hit
+
+
+@pytest.mark.asyncio
+async def test_a_swr_cached_value_has_the_same_type_on_a_hit_as_on_a_miss() -> None:
+    from datetime import datetime
+
+    from forktex import iso
+
+    @cached(ttl=60, stale_ttl=300)
+    async def when_swr() -> datetime:
+        return iso.now()
+
+    miss = await when_swr()
+    hit = await when_swr()
+    await shutdown_background_tasks()
+
+    assert type(miss) is type(hit)
+    assert miss == hit
+
+
+@pytest.mark.asyncio
+async def test_a_dead_redis_degrades_to_neutral_values_instead_of_raising(caplog) -> None:
+    """`docs/cache.md` promises `get`→None, `set`/`delete` no-op and
+    `invalidate_prefix`→0 when Redis dies mid-request. Every one of those paths
+    was an uncovered `except` block — the documented contract was unproven."""
+    handle = Cache("redis://127.0.0.1:1")
+
+    with caplog.at_level("ERROR"):
+        assert await handle.get("dead:probe") is None
+        await handle.set("dead:probe", "after", ex=60)
+        await handle.delete("dead:probe")
+        assert await handle.invalidate_prefix("dead") == 0
+        assert await handle.invalidate_key("dead:probe") is None
+
+    assert caplog.records, "the degradation is swallowed, so it must at least be logged"

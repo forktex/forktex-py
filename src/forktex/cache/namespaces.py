@@ -24,6 +24,8 @@
 
 from enum import StrEnum
 
+from forktex.cache.errors import InvalidCacheKeyError
+
 
 class CachePrefix(StrEnum):
     pass
@@ -31,7 +33,7 @@ class CachePrefix(StrEnum):
 
 def key_for(prefix: str | CachePrefix, *parts: object) -> str:
     if any(p is None for p in parts):
-        raise ValueError(f"key_for({prefix!r}, ...): None part in {parts!r}")
+        raise InvalidCacheKeyError(f"key_for({prefix!r}, ...): None part in {parts!r}")
     parts_str = ":".join(str(p) for p in parts if p != "")
     return f"{prefix}:{parts_str}" if parts_str else str(prefix)
 

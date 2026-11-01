@@ -25,8 +25,6 @@
 from __future__ import annotations
 
 import importlib
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -38,25 +36,11 @@ PACKAGES = [
     "cache",
     "database",
     "error",
-    "graph",
     "iso",
     "log",
-    "queue",
     "storage",
-    "store",
     "types",
-    "vault",
-    "vector",
 ]
-
-_EXTRA_BACKED = {
-    "api": ("fastapi", "starlette"),
-    "vault": ("cryptography",),
-    "storage": ("aioboto3", "botocore"),
-    "queue": ("arq",),
-    "vector": ("qdrant_client",),
-    "store": ("pymongo",),
-}
 
 
 @pytest.mark.parametrize("package", PACKAGES)
@@ -80,45 +64,12 @@ def test_every_exported_name_resolves(package: str) -> None:
     assert missing == [], f"forktex.{package}.__all__ names unimportable attributes: {missing}"
 
 
-def test_optional_dependencies_are_imported_lazily_or_name_their_extra() -> None:
-    blocker = (
-        "import builtins\n"
-        "_blocked_names = {deps!r}\n"
-        "_real = builtins.__import__\n"
-        "def _blocked(name, *a, **k):\n"
-        "    root = name.split('.')[0]\n"
-        "    if root in _blocked_names:\n"
-        "        raise ModuleNotFoundError(f'No module named {{root!r}}')\n"
-        "    return _real(name, *a, **k)\n"
-        "builtins.__import__ = _blocked\n"
-        "try:\n"
-        "    import forktex.{pkg}\n"
-        "except ImportError as exc:\n"
-        "    print('IMPORTERROR:' + str(exc))\n"
-        "else:\n"
-        "    print('LAZY')\n"
-    )
-    failures: list[str] = []
-    for package, deps in sorted(_EXTRA_BACKED.items()):
-        result = subprocess.run(
-            [sys.executable, "-c", blocker.format(deps=set(deps), pkg=package)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        out = result.stdout.strip()
-        if out == "LAZY":
-            continue
-        if out.startswith("IMPORTERROR:"):
-            message = out.removeprefix("IMPORTERROR:")
-            if f"forktex[{package}]" not in message:
-                failures.append(
-                    f"forktex.{package}: import fails without {deps} and the error does not "
-                    f"name the extra — got {message!r}"
-                )
-            continue
-        failures.append(f"forktex.{package}: unexpected probe output {out!r}\n{result.stderr}")
-    assert failures == [], "\n".join(failures)
+@pytest.mark.parametrize("package", PACKAGES)
+def test_the_package_root_exposes_every_module(package: str) -> None:
+    import forktex
+
+    assert package in forktex.__all__, f"import forktex does not expose forktex.{package}"
+    assert getattr(forktex, package, None) is importlib.import_module(f"forktex.{package}")
 
 
 @pytest.mark.parametrize("package", PACKAGES)
@@ -142,7 +93,9 @@ def test_database_exports_everything_the_standards_tell_consumers_to_use() -> No
         "TransactionBoundaryError",
         "BaseDBModel",
         "substrate_base",
-        "UtcDateTime",
+        # `UtcTimestamp` upstream: the standard still names it `UtcDateTime`, which
+        # collided with `forktex.types.UtcDateTime`, a Pydantic annotation.
+        "UtcTimestamp",
         "AuditMixin",
         "TimestampMixin",
         "NamespacedMixin",

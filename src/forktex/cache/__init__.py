@@ -25,7 +25,12 @@
 from forktex.cache.cache import Cache
 from forktex.cache.connection import available, close, default, get_client, init, require_default
 from forktex.cache.decorators import cached
-from forktex.cache.errors import CacheError, CacheInitializationError, CacheNotInitializedError
+from forktex.cache.errors import (
+    CacheError,
+    CacheInitializationError,
+    CacheNotInitializedError,
+    InvalidCacheKeyError,
+)
 from forktex.cache.namespaces import CachePrefix, key_for
 from forktex.cache.ops import (
     delete,
@@ -45,6 +50,7 @@ __all__ = [
     "CacheInitializationError",
     "CacheNotInitializedError",
     "CachePrefix",
+    "InvalidCacheKeyError",
     "available",
     "cached",
     "close",

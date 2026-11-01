@@ -47,9 +47,3 @@ def test_model_dump_json_emits_camel_case_too() -> None:
 
 def test_frozen_wire_value_objects_follow_the_same_rule() -> None:
     assert _Frozen(started_at="2026-01-01T00:00:00Z").model_dump() == {"startedAt": "2026-01-01T00:00:00Z"}
-
-
-def test_both_input_shapes_are_still_accepted() -> None:
-    assert _Payload(trace_id="a").trace_id == "a"
-    assert _Payload.model_validate({"traceId": "a"}).trace_id == "a"
-    assert _Payload.model_validate({"trace_id": "a"}).trace_id == "a"

@@ -45,7 +45,6 @@ class _Tag(BaseModel):
 def test_serialize_pydantic_models_to_json_ready_dicts() -> None:
     out = JsonModelColumn.serialize([_Tag(name="a", weight=1), _Tag(name="b", weight=2)])
     assert out == [{"name": "a", "weight": 1}, {"name": "b", "weight": 2}]
-    assert all(isinstance(d, dict) for d in out)
 
 
 def test_serialize_accepts_plain_dicts_and_unwraps_enums() -> None:
@@ -67,7 +66,6 @@ def test_serialize_passes_other_values_through_untouched() -> None:
 def test_deserialize_rebuilds_models() -> None:
     tags = JsonModelColumn.deserialize([{"name": "a", "weight": 1}], _Tag)
     assert tags == [_Tag(name="a", weight=1)]
-    assert isinstance(tags[0], _Tag)
 
 
 def test_deserialize_treats_none_as_empty() -> None:
