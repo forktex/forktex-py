@@ -91,7 +91,13 @@ clean: ## Build artifacts and caches removable from project tree
 	find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null; true
 	find . -type f -name .coverage -delete 2>/dev/null; true
 
+lock-check: ## The lock file resolves the current pyproject.toml
+	@# `make ci` runs against the installed venv, so only this catches a
+	@# pyproject.toml edit that was never locked — which CI fails on first.
+	poetry check --lock
+
 ci: ## Aggregate quality gate before publish
+	@$(MAKE) lock-check
 	@$(MAKE) format-check
 	@$(MAKE) lint
 	@$(MAKE) license-check
@@ -103,5 +109,5 @@ ci: ## Aggregate quality gate before publish
 	@echo ''
 	@echo 'CI passed for $(PROJECT_NAME) — safe to: make publish-test  /  make publish'
 
-.PHONY: help format format-check lint lint-fix typecheck test audit license-check \
+.PHONY: help format format-check lint lint-fix typecheck test audit license-check lock-check \
 	license-fix install build smoke publish-test publish clean ci
