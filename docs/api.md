@@ -65,11 +65,11 @@ reports them individually; any failing probe makes the response a **503**.
 import sqlalchemy as sa
 
 from forktex.api import AppConfig, create_app
-from forktex.database import transactional_session
+from forktex.database import transaction
 
 
 async def db_ready() -> bool:
-    async with transactional_session() as session:
+    async with transaction() as session:
         await session.execute(sa.text("SELECT 1"))
     return True
 

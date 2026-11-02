@@ -85,12 +85,11 @@ def test_database_exports_everything_the_standards_tell_consumers_to_use() -> No
 
     documented = {
         "Database",
-        "transactional_session",
-        "yield_transactional_session",
+        "transaction",
+        "session",
         "init_engine",
         "close_engine",
         "savepoint",
-        "open_session",
         "get_engine",
         "TransactionBoundaryError",
         "BaseDBModel",

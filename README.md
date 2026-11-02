@@ -51,7 +51,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from forktex.database import close_engine, init_engine, yield_transactional_session
+from forktex.database import close_engine, init_engine, transaction
 from forktex.log import setup_logging
 
 setup_logging(service="my-api")
@@ -68,7 +68,7 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/projects")
-async def list_projects(session: AsyncSession = Depends(yield_transactional_session)):
+async def list_projects(session: AsyncSession = Depends(transaction.dependency)):
     ...
 ```
 
@@ -78,14 +78,14 @@ The outermost caller owns the transaction: whoever opens it commits it once, and
 any exception.
 
 ```python
-@with_transactional_session
+@transaction
 async def place_order(session: AsyncSession, *, reference: str) -> Order:
     return await create(session, Order, reference=reference)
 
 
 await place_order(reference="A-1")                       # opens a session, commits it
 
-async with transactional_session() as session:
+async with transaction() as session:
     order = await place_order(session, reference="A-2")   # joins this transaction
     await add_line(session, order=order, sku="X")         # the same one
     raise PaymentFailed                                   # both roll back
@@ -93,9 +93,10 @@ async with transactional_session() as session:
 
 | | |
 |:---|:---|
-| `transactional_session()` | `async with` — the library commits |
-| `yield_transactional_session` | the same unit of work as a generator, for `Depends` |
-| `open_session()` | no boundary — you commit |
+| `transaction()` | `async with` — the library commits |
+| `@transaction` | the same unit of work as a decorator |
+| `transaction.dependency` | the same unit of work as a generator, for `Depends` |
+| `session()` | no boundary — you commit, or leaving the block raises |
 | `savepoint(session)` | a part allowed to fail without the rest |
 
 Inside the first two, `commit()`, `rollback()` and `begin()` raise `TransactionBoundaryError`.

@@ -5,7 +5,7 @@
 # backlog/ with the generator. Reviving `fsd/` means re-authoring it.
 .DEFAULT_GOAL := help
 PROJECT_NAME := forktex
-COVERAGE_FLOOR := 96
+COVERAGE_FLOOR := 97
 
 help: ## Self-documenting target listing
 	@grep -E '^[a-zA-Z_@-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -27,10 +27,10 @@ typecheck: ## Static type system verifies interface correctness (pyright)
 	poetry run python3 -m pyright src/
 
 test: ## Automated tests verify behaviour, with a coverage floor
-	@# The floor ratchets: it is the measured figure (97.00%) floored, so coverage
-	@# cannot silently drop. Raise it when a pass adds real coverage; never lower
-	@# it to make a change pass. A global floor cannot see one module going thin:
-	@# the primitives sit at 100% and carry it, so read the per-module column too.
+	@# The floor ratchets: it is the measured figure floored, so coverage cannot
+	@# silently drop. Raise it when a pass adds real coverage; never lower it to
+	@# make a change pass. A global floor cannot see one module going thin: the
+	@# primitives sit at 100% and carry it, so read the per-module column too.
 	@# --cov-precision=2: pytest-cov otherwise compares the ROUNDED percentage, so
 	@# 93.6% satisfied --cov-fail-under=94 while printing "FAIL ... not reached".
 	poetry run python3 -m pytest tests/ -q --cov=src/forktex \

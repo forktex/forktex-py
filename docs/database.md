@@ -21,8 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from forktex.database import (
-    BaseDBModel, TimestampMixin, close_engine, create, init_engine, paginate_scroll,
-    yield_transactional_session,
+    BaseDBModel, TimestampMixin, close_engine, create, init_engine, paginate_scroll, transaction,
 )
 
 
@@ -43,55 +42,59 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.post("/orders")
-async def place_order(reference: str, session: AsyncSession = Depends(yield_transactional_session)):
+async def place_order(reference: str, session: AsyncSession = Depends(transaction.dependency)):
     return await create(session, Order, reference=reference)
 
 
 @app.get("/orders")
-async def list_orders(cursor: str | None = None, session: AsyncSession = Depends(yield_transactional_session)):
+async def list_orders(cursor: str | None = None, session: AsyncSession = Depends(transaction.dependency)):
     return await paginate_scroll(
         session, Order, limit=20, keyset=[Order.created_at, Order.id], cursor=cursor, ascending=False
     )
 ```
 
 Call `init_engine` in the lifespan, not at import time — at import it binds the pool to whichever
-event loop is current. Extra keywords go to `create_async_engine`. Re-initialising without
-`close_engine()` leaks the previous pool.
+event loop is current. Extra keywords go to `create_async_engine`. Re-initialising disposes the
+pool it replaces.
 
 ## Sessions and transactions
 
 | You need | Use | Who commits |
 |:---|:---|:---|
-| a unit of work in a route | `Depends(yield_transactional_session)` | the library, when the request succeeds |
-| a unit of work anywhere else | `async with transactional_session() as session:` | the library, when the block exits cleanly |
-| a step inside a caller's transaction | pass the session, or `@with_transactional_session` | the caller it joined |
+| a unit of work in a route | `Depends(transaction.dependency)` | the library, when the request succeeds |
+| a unit of work anywhere else | `async with transaction() as session:` | the library, when the block exits cleanly |
+| a step inside a caller's transaction | pass the session, or `@transaction` | the caller it joined |
 | a part that may fail alone | `async with savepoint(session):` | the caller; only this block rolls back |
-| many commits, an isolation level, read-only | `async with open_session() as session:` | you |
+| many commits, an isolation level, read-only | `async with session() as opened:` | you |
 
-Inside `transactional_session` and the decorator, `commit()`, `rollback()` and `begin()` raise
-`TransactionBoundaryError`. To abort, raise — the library rolls back and returns the connection.
+`transaction` is one name in four shapes: a context manager, a decorator, a parameterised
+decorator, and `.dependency` for `Depends`. A scope opens one unit of work — entering it twice
+raises.
+
+Inside any of them `commit()`, `rollback()` and `begin()` raise `TransactionBoundaryError`. To
+abort, raise — the library rolls back and returns the connection.
 
 ```python
-@with_transactional_session
+@transaction
 async def add_line(session: AsyncSession, *, order: Order, sku: str) -> None:
     session.add(OrderLine(order=order, sku=sku))
 
 
 await add_line(order=order, sku="A1")                # no session: opens one, commits it
 
-async with transactional_session() as session:
+async with transaction() as session:
     session.add(order)
     await add_line(session, order=order, sku="A1")    # joins this transaction
     raise RuntimeError("payment failed")              # order and line both roll back
 ```
 
 The decorator binds by parameter name, defaulting to `session`; pass the other arguments by
-keyword. `@with_transactional_session(param="db")` binds a differently-named one. A decorated
-function with no such parameter raises `TypeError` at import.
+keyword. `@transaction(param="db")` binds a differently-named one. A decorated function with no
+such parameter raises `TypeError` at import.
 
 **Hand the decorator only a session something else commits.** It joins and never commits a session
-it was given, so an uncommitted `open_session()` or bare `sessionmaker()` discards the writes at
-close, with no error.
+it was given; a bare `sessionmaker()` then discards the writes at close with no error. A `session()`
+block raises instead.
 
 ### Letting one part fail
 
@@ -107,22 +110,26 @@ for item in batch:
         log.exception("skipped %s", item.id)
 ```
 
-`@with_transactional_session(isolate=True)` takes the savepoint on every caller's behalf.
+`@transaction(isolate=True)` takes the savepoint on every caller's behalf. It is a decorator-only
+form — `async with transaction(isolate=True)` has no caller's session to nest in and raises.
 
 ### Owning the boundary
 
-`open_session()` has no boundary — for work that is deliberately many transactions, and for
-fixtures that seed committed rows. Inside it the session is plain SQLAlchemy, so `session.begin()`
-and per-transaction execution options work as usual.
+`session()` has no boundary — for work that is deliberately many transactions, and for fixtures
+that seed committed rows. Inside it the session is plain SQLAlchemy, so `.begin()` and
+per-transaction execution options work as usual.
+
+Leaving the block with writes the ORM knows about and no commit raises `TransactionBoundaryError`,
+and the writes are discarded. Writes issued as raw `text()` SQL are opaque and not tracked.
 
 Don't share one session between concurrent tasks; give each its own.
 
 ### More than one pool
 
 `Database(url, **engine_kwargs)` owns its engine and holds no global state. Its
-`.transactional_session()`, `.yield_transactional_session()` and `.open_session()` are the three
-module functions as methods; `await db.dispose()` on shutdown. `with_transactional_session` only
-knows the module-level default, so a component owning a `Database` uses `db.transactional_session()`.
+`.transaction()` and `.session()` are the two module functions as methods; `await db.dispose()` on
+shutdown. The decorator and `transaction.dependency` only know the module-level default, so a
+component owning a `Database` uses `db.transaction()`.
 
 ## Public surface
 
@@ -134,12 +141,12 @@ knows the module-level default, so a component owning a `Database` uses `db.tran
 | `require_default()` | The same, raising `DatabaseNotInitializedError` instead of returning `None`. |
 | `verify()` | Async. Opens one connection and discards it. Raises `DatabaseUnreachableError`. |
 | `get_engine()` | The default `AsyncEngine` — what `advisory_lock` and DDL take. |
-| `Database(url, *, echo=False, schema_translate_map=None, **engine_kwargs)` | An engine and sessionmaker owned explicitly. `.engine`, `.sessionmaker`, `.dispose()`, plus the three session methods. |
-| `transactional_session()` | `async with` — one unit of work. |
-| `yield_transactional_session()` | The same as an async generator, for `Depends`. |
-| `open_session()` | A session with no boundary: you commit. |
+| `Database(url, *, echo=False, schema_translate_map=None, **engine_kwargs)` | An engine and sessionmaker owned explicitly. `.engine`, `.sessionmaker`, `.dispose()`, plus `.transaction()` and `.session()`. |
+| `transaction()` | `async with` — one unit of work. |
+| `transaction` / `transaction(*, isolate=False, param="session")` | Decorator: joins `param`'s transaction, or opens and commits its own. |
+| `transaction.dependency` | The same unit of work as an async generator, for `Depends`. |
+| `session()` | A session with no boundary: you commit, or leaving the block raises. |
 | `savepoint(session)` | `async with` — an inner transaction. |
-| `with_transactional_session(func=None, /, *, isolate=False, param="session")` | Decorator: joins `param`'s transaction, or opens and commits its own. |
 | `BaseDBModel` | The declarative base every model inherits. |
 | `substrate_base(schema)` | A base on its own `MetaData`, bound to a named schema. |
 | `TimestampMixin` | `created_at`, `updated_at`, set by the database. |

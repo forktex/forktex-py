@@ -6,6 +6,37 @@ Each entry says what to change.
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-11-02
+
+### Breaking
+
+**Two session entry points, named for who owns the commit.** `transactional_session`,
+`yield_transactional_session`, `open_session` and `with_transactional_session` are replaced by
+`transaction` and `session`. No aliases.
+
+| Was | Is |
+|:---|:---|
+| `async with transactional_session() as s:` | `async with transaction() as s:` |
+| `@with_transactional_session` | `@transaction` |
+| `@with_transactional_session(isolate=True, param="db")` | `@transaction(isolate=True, param="db")` |
+| `Depends(yield_transactional_session)` | `Depends(transaction.dependency)` |
+| `async with open_session() as s:` | `async with session() as s:` |
+| `db.transactional_session()` / `db.open_session()` | `db.transaction()` / `db.session()` |
+
+- `transaction` is one name in four shapes: context manager, decorator, parameterised decorator,
+  and `.dependency` for `Depends`. The field names the managed side after the transaction and the
+  unmanaged side after the session; forktex now does both.
+- A `transaction()` scope opens one unit of work and raises `TransactionBoundaryError` if entered
+  twice.
+- `transaction(isolate=True)` is decorator-only: an `async with` block has no caller's session to
+  nest in, so it raises instead of silently ignoring the flag.
+
+**A `session()` block that ends with uncommitted writes raises.** Previously the writes were
+discarded at close with no error — the one failure in this module with no symptom. Writes the ORM
+knows about are tracked: pending unit-of-work state, a flush, and `insert`/`update`/`delete`
+executed through the session. Raw `text()` SQL exposes neither and is not tracked.
+
+
 ## [0.14.0] — 2026-11-01
 
 ### Breaking
