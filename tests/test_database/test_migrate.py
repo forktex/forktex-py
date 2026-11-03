@@ -293,10 +293,7 @@ async def test_an_edited_applied_migration_is_refused(postgres_url_str: str, fre
 async def test_a_migration_numbered_below_the_highest_applied_is_refused(
     postgres_url_str: str, fresh_schema: str, tmp_path: Path
 ) -> None:
-    """Two branches merging produce this: the runner compared version numbers
-    for membership only, so a late-arriving v0002 was applied after v0003 and
-    the version table read as though nothing had happened.
-    """
+    """Two branches merging produce this."""
     from forktex.database.errors import MigrationError
     from forktex.database.migrate import SchemaMigrationRunner
 
@@ -313,12 +310,10 @@ async def test_a_migration_numbered_below_the_highest_applied_is_refused(
     await engine.dispose()
 
 
-async def test_a_version_table_predating_checksums_still_applies(
+async def test_a_version_table_without_a_checksum_column_gains_one_and_still_applies(
     postgres_url_str: str, fresh_schema: str, tmp_path: Path
 ) -> None:
-    """The column is added to an existing table, and a row written before it
-    existed records no checksum — so it cannot be verified and must not be
-    rejected for that."""
+    """A row recorded without a checksum cannot be verified, so it is not rejected."""
     from forktex.database.migrate import SchemaMigrationRunner
 
     mdir = tmp_path / "migrations"

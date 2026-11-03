@@ -3,49 +3,75 @@
 Async Redis cache: connection lifecycle, plain get/set/delete, a `@cached` decorator with
 optional stale-while-revalidate, namespaced keys, and Pydantic-aware JSON serialisation.
 
-The only startup failure is `init()` being unable to reach Redis.
-
 ## Wiring
 
-`init` performs no I/O: it installs the default and releases whatever it replaced. `verify()` is
-the explicit boot probe — call it in your lifespan, or wire it into `create_app`'s
-`readiness_probes`, if you want a bad configuration to fail fast rather than on first use.
-
-One Redis client per process, created by `init(url)` and torn down by `close()`. `Cache(url)` is
-the same handle built directly; the module-level functions are shims over one default instance.
+```bash
+export REDIS_URL=redis://localhost:6379/0
+```
 
 ```python
-from contextlib import asynccontextmanager
+# rates.py
+import asyncio
+import os
+from enum import StrEnum
 
-from fastapi import FastAPI
+from pydantic import BaseModel
 
 import forktex.cache as cache
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await cache.init(settings.redis_url)
-    yield
+class Prefix(StrEnum):
+    RATE = "rate"
+
+
+class Rate(BaseModel):
+    currency: str
+    value: float
+
+
+@cache.cached(ttl=60, response_model=Rate, key_builder=lambda currency: cache.key_for(Prefix.RATE, currency))
+async def rate(currency: str) -> Rate:
+    print("fetching", currency)  # an expensive call; runs once per minute per currency
+    return Rate(currency=currency, value=1.08)
+
+
+async def main() -> None:
+    await cache.init(os.environ["REDIS_URL"])  # performs no I/O
+    await cache.verify()  # PING, so a bad URL fails here rather than on first use
+
+    print(await rate("EUR"))  # fetching EUR, then the value
+    print(await rate("EUR"))  # from Redis
+    await cache.set("greeting", "hello", ex=30)
+    print(await cache.get("greeting"))
+
+    await cache.invalidate_prefix(Prefix.RATE)  # drops "rate" and every "rate:*" key
+    print(await cache.get(cache.key_for(Prefix.RATE, "EUR")))  # None
+
     await cache.shutdown_background_tasks()
     await cache.close()
 
 
-app = FastAPI(lifespan=lifespan)
+asyncio.run(main())
 ```
 
-The default is **per-process**: a worker must call `init()` in its own startup hook. Without it the
-helpers degrade to no-ops rather than raising, so a missing worker-side `init()` is silent.
+In a web app, call `init()` in the lifespan and `close()` on the way out, after
+`shutdown_background_tasks()`, which waits for in-flight stale-while-revalidate
+refreshes.
 
-`shutdown_background_tasks()` awaits in-flight stale-while-revalidate refreshes; call it before
-`close()`.
+The default is **per-process**: a worker calls `init()` in its own startup.
+Without it every helper silently does nothing (see Gotchas), so call `verify()`
+at startup, or wire it into `create_app`'s `readiness_probes`.
+
+`Cache(url)` is the same handle built directly; the module-level functions use
+the process-wide one.
 
 ## Public surface
 
 | Name | Description |
 |---|---|
-| `init(url)` | Async. Create the client from a Redis URL and `PING` it. |
+| `init(url)` | Async. Install the process-wide client for a Redis URL, closing any it replaces. No I/O. |
 | `close()` | Async. Close the client and clear the global. Idempotent. |
-| `available()` | `True` if the client global is set. |
+| `available()` | `True` once `init()` has run. It does not check that Redis is reachable; `verify()` does. |
 | `default()` | The process-wide `Cache`, or `None` before `init()`. |
 | `require_default()` | The same, raising `CacheNotInitializedError` instead of returning `None`. |
 | `verify()` | Async. `PING`. Raises `CacheUnreachableError`. |
@@ -64,32 +90,14 @@ helpers degrade to no-ops rather than raising, so a missing worker-side `init()`
 | `serialize(value)` | JSON string; `BaseModel` uses `model_dump_json()`, everything else `json.dumps(default=str)`. |
 | `deserialize(data, model)` | Parse JSON; validates into `model` when one is given. |
 
-`cached` signature:
+### `@cached(*, ttl=60, stale_ttl=None, key_builder=None, response_model=None)`
 
-```python
-@cached(                          # keyword-only
-    ttl=60,                       # seconds; with stale_ttl set, the refresh threshold instead
-    stale_ttl=None,               # set → stale-while-revalidate
-    key_builder=None,             # callable(*args, **kwargs) -> str
-    response_model=None,          # pydantic model for deserialisation
-)
-async def get_org(org_id: str) -> OrgResponse: ...
-```
-
-Namespaced keys:
-
-```python
-from enum import StrEnum
-
-from forktex.cache import invalidate_prefix, key_for
-
-
-class Prefix(StrEnum):
-    ORG = "org"
-
-
-await invalidate_prefix(key_for(Prefix.ORG, org_id))
-```
+| Option | Effect |
+|---|---|
+| `ttl` | Seconds a value is kept. With `stale_ttl`, the age after which a read refreshes it in the background. |
+| `stale_ttl` | Turns on stale-while-revalidate: a value older than `ttl` is still served for this many seconds while one process refreshes it. |
+| `key_builder` | `(*args, **kwargs) -> str`. Use it with `key_for` so `invalidate_prefix` can find the keys. |
+| `response_model` | A pydantic model the cached JSON is validated into. |
 
 ## Errors
 
@@ -111,7 +119,7 @@ All three derive from `CacheError`, which subclasses `AppError` ([error.md](erro
 
 - **Failures are swallowed.** Without `init()`, or if Redis dies mid-request, `get` returns `None`,
   `set`/`delete` no-op and `invalidate_prefix` returns `0` — a misconfigured cache looks like a 100%
-  miss rate. Check `available()` at startup.
+  miss rate. Call `verify()` at startup.
 - **`invalidate_prefix("")` scans every key** in the database and deletes all of them. Non-empty
   prefixes match on the `:` delimiter, so `invalidate_prefix("user")` hits `"user"` and `"user:123"`
   but never `"username:foo"`.

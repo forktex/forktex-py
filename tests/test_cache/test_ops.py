@@ -315,8 +315,6 @@ async def test_cached_decorator_round_trips_a_response_model() -> None:
 
 @pytest.mark.asyncio
 async def test_a_value_is_gone_once_its_ttl_elapses() -> None:
-    """Nothing in this suite observed time, so expiry -- the whole point of a
-    cache -- was never proven against a real Redis."""
     await set("ttl:probe", "still here", ex=1)
     assert await get("ttl:probe") == "still here"
 
@@ -327,8 +325,6 @@ async def test_a_value_is_gone_once_its_ttl_elapses() -> None:
 
 @pytest.mark.asyncio
 async def test_a_non_positive_ttl_stores_nothing_instead_of_failing_silently(caplog) -> None:
-    """`SET ... EX 0` is rejected by Redis and the error was swallowed, so a
-    zero ttl logged an exception on every write and stored nothing anyway."""
     with caplog.at_level("ERROR"):
         await set("ttl:zero", "never stored", ex=0)
 
@@ -376,9 +372,6 @@ async def test_a_swr_cached_value_has_the_same_type_on_a_hit_as_on_a_miss() -> N
 
 @pytest.mark.asyncio
 async def test_a_dead_redis_degrades_to_neutral_values_instead_of_raising(caplog) -> None:
-    """`docs/cache.md` promises `get`→None, `set`/`delete` no-op and
-    `invalidate_prefix`→0 when Redis dies mid-request. Every one of those paths
-    was an uncovered `except` block — the documented contract was unproven."""
     handle = Cache("redis://127.0.0.1:1")
 
     with caplog.at_level("ERROR"):

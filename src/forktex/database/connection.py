@@ -45,6 +45,7 @@ from forktex.database.errors import (
     DatabaseUnreachableError,
     TransactionBoundaryError,
 )
+from forktex.database.integrity import integrity_boundary
 from forktex.log import get_logger
 
 logger = get_logger(__name__)
@@ -295,7 +296,8 @@ async def _managed_session(
         except Exception:
             await AsyncSession.rollback(opened)
             raise
-        await AsyncSession.commit(opened)
+        async with integrity_boundary():
+            await AsyncSession.commit(opened)
 
 
 @asynccontextmanager

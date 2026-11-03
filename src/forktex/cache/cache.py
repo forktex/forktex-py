@@ -68,10 +68,12 @@ class Cache:
 
     async def get(self, key: str) -> str | None:
         try:
-            return await self._client.get(key)
+            value = await self._client.get(key)
         except Exception:
             logger.exception("Cache GET failed")
             return None
+        # The client decodes responses, so this is a str; the driver's types also allow bytes.
+        return value.decode() if isinstance(value, bytes) else value
 
     async def set(self, key: str, value: str, ex: int) -> None:
         if ex <= 0:

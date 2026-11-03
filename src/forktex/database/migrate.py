@@ -95,8 +95,7 @@ class SchemaMigrationRunner:
                 nullable=False,
                 server_default=sa.func.now(),
             ),
-            # Nullable: a table created before checksums existed carries rows
-            # that cannot be verified, and must not be rejected for it.
+            # Nullable: a row recorded without a checksum is not verified, and not rejected.
             sa.Column("checksum", sa.Text, nullable=True),
             schema=self._target,
         )
@@ -106,9 +105,7 @@ class SchemaMigrationRunner:
         async with self._engine.begin() as conn:
             await conn.execute(CreateSchema(self._target, if_not_exists=True))
             await conn.execute(CreateTable(table, if_not_exists=True))
-            # `if_not_exists` leaves an existing table alone, so a database
-            # whose version table predates the checksum column has to be given
-            # it here rather than at creation.
+            # `if_not_exists` leaves an existing table alone, so a table without the column gets it here.
             await conn.execute(AddColumn(table.c.checksum, if_not_exists=True))
 
     async def _read_applied(self) -> dict[int, str | None]:

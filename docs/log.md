@@ -11,17 +11,24 @@ Stdlib only.
 plain function, context manager or middleware class you own.
 
 ```python
-from forktex.log import setup_logging, get_logger
+# logging_basics.py
+from forktex.log import get_logger, log_context, setup_logging
 
-setup_logging(service="my-service")   # JSON, INFO, stdout
-log = get_logger(__name__)
+setup_logging(service="my-service")  # JSON, INFO, stdout
+log = get_logger("my.module")
 log.info("ready")
-# {"timestamp":"2026-05-02T14:30:00+00:00","level":"INFO","logger":"my.module",
-#  "service":"my-service","message":"ready"}
 
-setup_logging(service="my-service", debug=True)
-# 2026-05-02 14:30:00 | INFO     | my.module | ready
+with log_context(order_id="A-1"):
+    log.info("order received")  # carries order_id
 ```
+
+```
+{"timestamp": "2026-11-03T18:00:00.000000+00:00", "level": "INFO", "logger": "my.module", "service": "my-service", "message": "ready", "run_id": "01a1…"}
+{"timestamp": "2026-11-03T18:00:00.000100+00:00", "level": "INFO", "logger": "my.module", "service": "my-service", "message": "order received", "run_id": "01a1…", "order_id": "A-1"}
+```
+
+`setup_logging(service="my-service", debug=True)` prints human-readable lines
+instead: `2026-11-03 18:00:00 | INFO     | my.module | ready`.
 
 `setup_logging` is idempotent — it clears `root.handlers` first. Call it once, before serving.
 
@@ -33,37 +40,45 @@ streaming body, background tasks — and echoes it on the response. An inbound h
 line.
 
 ```python
-from contextlib import asynccontextmanager
-
+# web.py
 from fastapi import FastAPI
-from forktex.log import TraceIDMiddleware, setup_logging
+
+from forktex.log import TraceIDMiddleware, get_logger, setup_logging
+
+setup_logging(service="my-service")
+log = get_logger("my.web")
+app = FastAPI()
+app.add_middleware(TraceIDMiddleware)  # or TraceIDMiddleware, header="X-Trace-ID"
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    setup_logging(service="my-service")
-    yield
-
-
-app = FastAPI(lifespan=lifespan)
-app.add_middleware(TraceIDMiddleware)                      # X-Request-ID
-app.add_middleware(TraceIDMiddleware, header="X-Trace-ID")  # or another header
+@app.get("/")
+async def root() -> dict[str, str]:
+    log.info("handling")  # carries the request's trace_id
+    return {"ok": "yes"}
 ```
 
-Add it before other middleware so the trace id is set first.
+`forktex.api.create_app` adds it for you. In an app you assemble yourself, add
+it before other middleware so the trace id is set first.
 
 Outside HTTP, use `trace_context()` / `async_trace_context()`:
 
 ```python
-from forktex.log import async_trace_context, get_logger
+# jobs.py
+import asyncio
 
-log = get_logger(__name__)
+from forktex.log import async_trace_context, get_logger, get_trace_id, setup_logging
+
+setup_logging(service="worker")
+log = get_logger("worker")
 
 
 async def process_job(job_id: str) -> None:
     async with async_trace_context(f"job-{job_id}"):
-        log.info("processing")   # {..."trace_id": "job-abc"}
-    # restored on exit, including when the block raises
+        log.info("processing")  # "trace_id": "job-abc"
+    print(get_trace_id())  # None: restored on exit, also when the block raises
+
+
+asyncio.run(process_job("abc"))
 ```
 
 ## Two identities: `run_id` and `trace_id`
@@ -102,12 +117,19 @@ boundary copies the context:
 For the thread boundaries, wrap the callable with `bind_current_context`:
 
 ```python
+# threads.py
 from concurrent.futures import ThreadPoolExecutor
 
-from forktex.log import bind_current_context
+from forktex.log import bind_current_context, get_trace_id, trace_context
 
-with ThreadPoolExecutor(4) as pool:
-    pool.submit(bind_current_context(work), payload)
+
+def work(n: int) -> str:
+    return f"{n}: {get_trace_id()}"
+
+
+with trace_context("batch-7"), ThreadPoolExecutor(4) as pool:
+    print(pool.submit(work, 1).result())  # 1: None, the thread has a fresh context
+    print(pool.submit(bind_current_context(work), 2).result())  # 2: batch-7
 ```
 
 It captures the context at **wrap** time, so wrap it where the trace is live — wrapping inside the
@@ -154,9 +176,18 @@ The library attaches a `NullHandler` to the `forktex` logger at import; importin
 root logger. An application that owns its logging attaches `ContextFilter` instead:
 
 ```python
-from forktex.log import ContextFilter
+# own_handlers.py
+import logging
 
+from forktex.log import ContextFilter, trace_context
+
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter("%(levelname)s %(trace_id)s %(message)s"))
 handler.addFilter(ContextFilter(service="orders"))
+logging.basicConfig(level=logging.INFO, handlers=[handler])
+
+with trace_context("req-9"):
+    logging.getLogger("orders").info("paid")  # INFO req-9 paid
 ```
 
 Without it the fields are absent, so a formatter referencing `%(trace_id)s` raises

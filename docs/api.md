@@ -3,82 +3,70 @@
 A FastAPI factory: trace-id propagation, security headers, CORS, the `AppError` →
 `ErrorEnvelope` mapping, and liveness/readiness endpoints, assembled in order.
 
-Both middleware classes are pure ASGI and do not need FastAPI;
-`ExceptionEnvelopeMiddleware` lives at `forktex.api.middleware` for an app you assemble yourself.
-
 ## Wiring
 
 ```python
+# service.py
+import os
+from contextlib import asynccontextmanager
+
+from fastapi import APIRouter, FastAPI
+
+import forktex.database as database
 from forktex.api import AppConfig, create_app
+from forktex.error import NotFoundError
+from forktex.log import setup_logging
+
+projects = APIRouter(prefix="/projects")
+
+
+@projects.get("/{project_id}")
+async def get_project(project_id: str) -> dict[str, str]:
+    raise NotFoundError(f"project {project_id} not found")  # 404 with an error envelope
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    setup_logging(service="projects")
+    await database.init_engine(os.environ["DATABASE_URL"])
+    yield
+    await database.close_engine()
+
+
+async def database_ready() -> bool:
+    await database.verify()  # raises when the database cannot be reached: not ready
+    return True
+
 
 app = create_app(
     AppConfig(
         title="Projects API",
         version="1.4.0",
+        lifespan=lifespan,
         cors_origins=["https://app.example.com"],
+        readiness_probes={"database": database_ready},
     )
 )
-
-app.include_router(projects_router)
+app.include_router(projects)
 ```
 
-The envelope, trace-id and security-header middleware are already wired. Raise an `AppError`
-subclass anywhere and it becomes the right status plus an `ErrorEnvelope` body:
-
-```python
-from forktex.error import NotFoundError
-
-@app.get("/projects/{project_id}")
-async def get_project(project_id: str) -> dict[str, str]:
-    raise NotFoundError(f"project {project_id}")     # → 404 + envelope
+```bash
+uvicorn service:app
+curl -i localhost:8000/projects/7
+# HTTP/1.1 404 Not Found … x-request-id: 01a1… x-content-type-options: nosniff …
+# {"code": "not_found", "message": "project 7 not found", "details": {}, "traceId": "01a1…"}
+curl localhost:8000/health/ready
+# {"status":"ready","checks":{"database":true}}
 ```
 
-### Startup and shutdown
-
-Pass your lifespan through `AppConfig`.
-
-```python
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
-
-from forktex.api import AppConfig, create_app
-from forktex.database import close_engine, init_engine
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await init_engine(settings.db_url)
-    yield
-    await close_engine()
-
-
-app = create_app(AppConfig(title="Projects API", lifespan=lifespan))
-```
-
-### Readiness probes
-
-`/health` always returns `{"status": "ok"}`. `/health/ready` runs each registered probe and
-reports them individually; any failing probe makes the response a **503**.
-
-```python
-import sqlalchemy as sa
-
-from forktex.api import AppConfig, create_app
-from forktex.database import transaction
-
-
-async def db_ready() -> bool:
-    async with transaction() as session:
-        await session.execute(sa.text("SELECT 1"))
-    return True
-
-
-app = create_app(AppConfig(readiness_probes={"database": db_ready}))
-```
-
-A probe that raises and one that returns `False` are both not-ready; the raising one is logged with
-a stack trace. Keep probes fast and side-effect-free — they run on every call.
+- Raise an `AppError` subclass anywhere: it becomes its status and an
+  `ErrorEnvelope` body. Any other exception becomes a generic 500 envelope.
+- `/health` always answers `{"status": "ok"}`. `/health/ready` runs every probe
+  and answers 503, naming each failing check, if any probe returns `False`,
+  raises, or exceeds `readiness_timeout`. Probes run on every call, so keep them
+  fast and free of side effects.
+- Both middleware classes are plain ASGI. `ExceptionEnvelopeMiddleware` is in
+  `forktex.api.middleware` for an app you assemble yourself.
 
 ## Public surface
 

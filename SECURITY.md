@@ -10,43 +10,41 @@ not open a public issue for an unfixed vulnerability.
 | Version | Supported |
 | --- | --- |
 | 1.0.x | ✅ |
-| 0.8.x and earlier | ❌ — a different package (the agentic CLI); see [CHANGELOG](CHANGELOG.md) |
 
 ## Scope
 
-`forktex` is a library. It has no CLI, no daemon, no network listener, and no ambient
-filesystem access — it runs entirely inside the consuming service's process, under that
-service's privileges. The security-relevant surface is therefore narrow:
+`forktex` is a library. It has no CLI, no daemon, no network listener and no
+filesystem access of its own; it runs inside the consuming service's process,
+under that service's privileges. The security-relevant surface:
 
-- **`vault`** — Fernet symmetric encryption at rest and the `EncryptedJSON` column type.
-- **`database`** — SQL construction. Everything is SQLAlchemy Core/ORM; no module in
-  this library builds a SQL string by interpolation. Identifiers that reach DDL are
-  validated (`database.identifiers`) and quoted by the dialect's preparer.
-- **`storage` / `store` / `vector` / `cache` / `queue`** — clients for external
-  infrastructure. Credentials are supplied by the caller and never persisted by the
-  library.
-- **`log`** — structured output. It does not redact; see below.
+- **`database`**: SQL construction. Every statement is a SQLAlchemy construct;
+  nothing builds SQL by interpolating a value. Identifiers that reach DDL are
+  validated (`database.identifiers`) and quoted. Client-supplied filters only
+  reach the columns listed in `ColumnSource(allowed=...)`.
+- **`storage`**: presigned URLs and upload forms grant access without other
+  credentials until they expire; choose `expires_in`, `content_type` and
+  `max_size_bytes` accordingly. `public_access="bucket-policy"` makes a bucket
+  world-readable.
+- **`api`**: an inbound `X-Request-ID` is accepted only if it matches
+  `^[A-Za-z0-9._-]{1,128}$`, so a client cannot inject lines into the logs.
+  Error envelopes never carry driver text.
+- **`storage`, `cache`, `database`** connect to infrastructure you configure.
+  Credentials are passed in by you and held in memory only.
 
 ## What this library does not do
 
-- **No phone-home.** Nothing here contacts a ForkTex service. The only network traffic
-  is to the infrastructure *you* configure (your Postgres, your Redis, your S3).
-- **No credential storage.** Connection strings and keys are passed in by the consumer
-  and held in memory for the process lifetime only.
-- **No authentication or authorization.** These are the consuming service's concern.
+- **No phone-home.** The only network traffic is to the infrastructure you
+  configure.
+- **No authentication or authorization.** These are the consuming service's
+  concern.
+- **No log redaction.** `log` emits the fields you give it; do not put
+  credentials, tokens or personal data into log context.
 
 ## Operator responsibilities
 
-- **`vault` key management.** The KEK is derived with a single SHA-256 over the value
-  you supply, which is *not* a password-stretching KDF. Supply a high-entropy key
-  (e.g. 32 random bytes), not a passphrase. Length alone is not sufficient.
-- **Log redaction.** `log` emits the fields you give it. It does not scan for secrets;
-  do not pass credentials, tokens, or personal data into log context.
-- **Transport security.** Use TLS-enabled connection URLs for every backing service.
-  The library does not downgrade or override your transport settings.
-- **Dependency currency.** Optional extras pull real clients (`cryptography`,
-  `aioboto3`, `qdrant-client`, `pymongo`, `arq`). `make audit` runs `pip-audit` against
-  the resolved environment and is part of `make ci`.
+- **Transport security.** Use TLS-enabled URLs for every backing service.
+- **Dependency currency.** `make audit` runs `pip-audit` against the resolved
+  environment and is part of `make ci`.
 
 ## Licensing
 

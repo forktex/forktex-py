@@ -1,28 +1,25 @@
 # forktex.iso
 
-The one module that decides how a datetime becomes text and back: always UTC, always `datetime.isoformat()`'s default shape. `log`, `types` and `database` all delegate here rather than each hand-rolling the same normalisation.
+How a datetime becomes text and back: always UTC, always `datetime.isoformat()`'s default shape. `log`, `types` and `database` all format datetimes through it, so every timestamp the library writes has one shape.
 
-Stdlib only, and the one module that imports nothing else from `forktex`.
+Standard library only.
 
 ## Wiring
 
 ```python
+# times.py
 from datetime import date, datetime, timedelta, timezone
 
 from forktex.iso import from_date_iso, from_iso, now, to_date_iso, to_iso
 
-now()                                          # datetime.now(UTC)
+print(now())  # the current time, UTC-aware
 
-to_iso(now())                                  # "2026-08-12T10:30:00.123456+00:00"
-to_iso(datetime(2026, 1, 1, 12, 0))            # naive assumed UTC: "2026-01-01T12:00:00+00:00"
-to_iso(datetime(2026, 1, 1, 12, 0, tzinfo=timezone(timedelta(hours=5))))
-                                               # "2026-01-01T07:00:00+00:00"
+print(to_iso(datetime(2026, 1, 1, 12, 0)))  # naive is taken as UTC: 2026-01-01T12:00:00+00:00
+print(to_iso(datetime(2026, 1, 1, 12, 0, tzinfo=timezone(timedelta(hours=5)))))  # 2026-01-01T07:00:00+00:00
 
-from_iso("2026-01-01T12:00:00+00:00")          # UTC-aware datetime
-from_iso("2026-01-01T12:00:00Z")               # same result
+print(from_iso("2026-01-01T12:00:00Z") == from_iso("2026-01-01T12:00:00+00:00"))  # True, both UTC-aware
 
-to_date_iso(date(2026, 1, 1))                  # "2026-01-01"
-from_date_iso("2026-01-01")                    # date(2026, 1, 1)
+print(to_date_iso(date(2026, 1, 1)), repr(from_date_iso("2026-01-01")))  # 2026-01-01 datetime.date(2026, 1, 1)
 ```
 
 ## Public surface
@@ -49,12 +46,10 @@ No custom exception type. Three stdlib ones:
 
 Catch `ValueError` at a parse boundary; there is nothing else to catch.
 
-`iso` is the one module that raises stdlib errors rather than `forktex.error` leaves: `error`
-imports `types` imports `iso`, so a leaf would close a cycle.
 
 ## Gotchas
 
-- **Naive means UTC by default.** `to_iso`/`from_iso` assume it rather than raising, because every existing caller relied on that before this module existed. Pass `strict=True` if you have no such assumption to preserve — the default stays `False`.
+- **Naive means UTC by default.** `to_iso`/`from_iso` assume it rather than raising. Pass `strict=True` to refuse a datetime without an offset.
 - **`strict` is keyword-only and exists only on `to_iso`/`from_iso`.** The date functions have no strict mode; there is no offset to be ambiguous about.
 - **Precision follows `isoformat()`.** Microseconds appear only when nonzero — do not assume a fixed-width string.
 - **`to_iso(a_date)` raises.** `date` is not a `datetime`, and passing one is a `TypeError`, not a silent coercion. It is the `to_date_iso()` direction that is lenient: it accepts a full `datetime` and truncates.

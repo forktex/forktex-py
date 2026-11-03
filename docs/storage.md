@@ -6,57 +6,71 @@ content negotiation, no image processing — those belong in the consuming servi
 
 ## Wiring
 
-`register(name, ...)` builds a `StorageClient` and keeps it under that name; `get_client(name)`
-fetches it, `deregister(name)` drops it. Every module-level operation runs against `get_client()`.
-
-`init` performs no I/O: it installs the default and releases whatever it replaced. `verify()` is
-the explicit boot probe — call it in your lifespan, or wire it into `create_app`'s
-`readiness_probes`, if you want a bad configuration to fail fast rather than on first use.
-
-`init(...)` takes no `public_access` — use `register` for that.
-
-```python
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
-
-from forktex.storage import deregister, register
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    register(
-        "media",
-        url=settings.s3_endpoint,
-        bucket=settings.s3_bucket_media,
-        access_key=settings.s3_access_key,
-        secret_key=settings.s3_secret_key,
-        public_url=settings.s3_public_endpoint,
-    )
-    yield
-    deregister("media")
-
-
-app = FastAPI(lifespan=lifespan)
+```bash
+export S3_URL=http://localhost:9000 S3_BUCKET=media S3_ACCESS_KEY=forktex S3_SECRET_KEY=forktex-secret
 ```
 
-The registry is a plain module-level dict and therefore **per-process**. A worker process must run
-its own `register()` calls at startup; it does not inherit the API process's clients. The symptom
-of forgetting is `ClientNotRegisteredError` on the first job, not at boot.
+```python
+# media.py
+import asyncio
+import os
 
-`register()` is idempotent by name — registering the same name again replaces the previous client.
+import forktex.storage as storage
+
+
+async def main() -> None:
+    media = storage.register(  # performs no I/O
+        "media",
+        url=os.environ["S3_URL"],
+        bucket=os.environ["S3_BUCKET"],
+        access_key=os.environ["S3_ACCESS_KEY"],
+        secret_key=os.environ["S3_SECRET_KEY"],
+        public_url=os.environ.get("S3_PUBLIC_URL"),  # the address browsers reach, when it differs
+    )
+    await media.ensure_bucket()  # creates it if missing
+    await media.verify()  # fails fast on a wrong endpoint, credential or bucket
+
+    await media.upload("reports/today.txt", b"all good", content_type="text/plain")
+    print(await media.download("reports/today.txt"), await media.exists("reports/nope.txt"))
+
+    # A browser downloads with this URL, for 10 minutes, with no other credential.
+    print(await media.presign("reports/today.txt", expires_in=600))
+
+    # An untrusted client uploads with this one; the content type is enforced during the PUT.
+    print(await media.presign("uploads/photo.jpg", expires_in=900, method="put_object", content_type="image/jpeg"))
+
+    # A browser <form> posts the file with these fields, limited to 10 MB of PDF.
+    form = await media.presign_post(
+        "uploads/doc.pdf", expires_in=600, content_type="application/pdf", max_size_bytes=10 * 1024 * 1024
+    )
+    print(form.url, sorted(form.fields))
+
+    storage.deregister("media")
+
+
+asyncio.run(main())
+```
+
+`storage.init(url, bucket, access_key, secret_key)` registers the client named
+`"default"`, which the module-level `upload`, `download`, `delete`, `exists`,
+`presign` and `presign_post` use. Any other name is reached with
+`get_client(name)`.
+
+The registry is **per-process**: a worker registers its own clients at startup.
+Forgetting shows up as `ClientNotRegisteredError` on first use, not at boot.
+Registering a name again replaces its client.
 
 ## Public surface
 
 | Name | Description |
 |---|---|
-| `register(name, url, bucket, access_key, secret_key, *, region="us-east-1", public_url=None)` | Build and store a named client; returns it. |
+| `register(name, url, bucket, access_key, secret_key, *, region="us-east-1", public_url=None, public_access="none")` | Build and store a named client; returns it. |
 | `default()` | The `"default"` client — what the module-level operations use. |
 | `require_default()` | The same, raising `ClientNotRegisteredError` instead of returning `None`. |
 | `verify()` / `StorageClient.verify()` | Async. `head_bucket`; creates nothing. Raises `StorageUnreachableError`. |
 | `get_client(name="default")` | Look up a registered client. |
 | `deregister(name="default")` | Drop a name; returns the dropped client or `None`. Idempotent. |
-| `init(...)` | Async. `register("default", ...)` with the same arguments. |
+| `init(url, bucket, access_key, secret_key, *, region="us-east-1", public_url=None)` | Async. `register("default", ...)`. For `public_access`, use `register`. |
 | `close(name="default")` | Async. Delegates to `deregister`; nothing is actually closed. |
 | `upload(key, data, *, content_type=...)` | Async. `put_object` on the default client. Overwrites. |
 | `download(key)` | Async. Returns `bytes`. |
@@ -70,30 +84,6 @@ of forgetting is `ClientNotRegisteredError` on the first job, not at boot.
 | `ObjectNotFoundError` | `AppErrorCode.NOT_FOUND`. |
 | `ClientNotRegisteredError` | `AppErrorCode.INTERNAL`. |
 | `PublicAccess` | `Literal["none", "bucket-policy", "credentialed-proxy"]` — the type of `register(..., public_access=...)`. |
-
-Presigned PUT for an untrusted uploader — the S3 signature *is* the token, no extra auth header:
-
-```python
-put_url = await get_client("media").presign(
-    f"uploads/org-{org_id}/photo.jpg",
-    expires_in=900,
-    method="put_object",
-    content_type="image/jpeg",   # enforced by the server during the PUT
-)
-```
-
-Browser form upload. The `multipart/form-data` here is the HTTP encoding of an ordinary `<form>`
-POST — unrelated to S3's chunked Multipart Upload API, which this module does not implement:
-
-```python
-policy = await get_client("media").presign_post(
-    f"uploads/org-{org_id}/doc.pdf",
-    expires_in=600,
-    content_type="application/pdf",
-    max_size_bytes=10 * 1024 * 1024,
-)
-# policy.url + policy.fields → browser posts them alongside the file
-```
 
 ### Bucket policy
 
@@ -124,9 +114,8 @@ Fields are snake_case in Python and serialise to AWS's own casing.
 | `StorageError("storage <operation> failed")` | any other failure in `upload`, `download`, `delete`, `exists`, `presign`, `presign_post` or `ensure_bucket`. | Yes, at a request boundary. |
 | `StorageError` | `direct_url()` on a bucket with `public_access="none"`; `presign()` given `content_type` for a `get_object` or `response_content_disposition` for a `put_object`. | No — a wiring bug. |
 
-`_driver_boundary` wraps every method, so nothing the driver raises escapes as a botocore type.
-The message is the operation name only; the detail is logged with the AWS code and reaches the
-caller as `__cause__`.
+Nothing the S3 driver raises escapes as a botocore type. The message names only the operation;
+the detail is logged with the AWS error code and reaches the caller as `__cause__`.
 
 ## Gotchas
 
@@ -140,9 +129,8 @@ caller as `__cause__`.
   `public_url or url`; ordinary uploads/downloads always use `url`. If the internal Docker endpoint
   differs from the browser-reachable one and you leave `public_url` unset, the URLs you hand out
   will not resolve from outside the network.
-- **`content_type` only enters the signature for `method="put_object"`**, and
-  `response_content_disposition` only for `method="get_object"`; the other combination is dropped
-  without warning.
+- **`content_type` only applies to `method="put_object"`**, and `response_content_disposition` only
+  to `method="get_object"`; the other combination raises `StorageError`.
 - **`direct_url()` raises unless the bucket declares `public_access`.** It performs no auth check
   otherwise. The key is URL-encoded with `urllib.parse.quote`.
 - **`public_access="bucket-policy"` makes the bucket world-readable.** `ensure_bucket()` applies the

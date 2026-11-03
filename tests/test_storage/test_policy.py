@@ -39,8 +39,6 @@ from forktex.storage import (
 
 
 def test_the_public_read_policy_is_the_document_s3_expects() -> None:
-    """The policy used to be a dict literal inlined in `ensure_bucket` and
-    `json.dumps`-ed, so nothing pinned the document actually sent to S3."""
     document = json.loads(public_read_policy("media").to_json())
 
     assert document == {
@@ -101,7 +99,6 @@ def test_a_post_policy_declares_only_what_it_was_given(
 
 
 def test_presign_params_omit_what_is_unset() -> None:
-    """They were a dict mutated by two `if`s, so an unset value could reach S3."""
     assert PresignParams(bucket="b", key="k").to_params() == {"Bucket": "b", "Key": "k"}
     assert PresignParams(bucket="b", key="k", content_type="text/plain").to_params() == {
         "Bucket": "b",

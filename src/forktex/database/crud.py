@@ -215,7 +215,7 @@ async def paginate_scroll[T](
 
 async def _paginate_query[T](
     session: AsyncSession,
-    query: Select[tuple[T]] | Select[Any],
+    query: Select[T] | Select[Any],
     page: int = 1,
     page_size: int = _DEFAULT_PAGE_SIZE,
 ) -> PageResponse[T]:
@@ -247,7 +247,7 @@ async def _paginate_query[T](
 
 async def _paginate_scroll_query[T](
     session: AsyncSession,
-    query: Select[tuple[T]] | Select[Any],
+    query: Select[T] | Select[Any],
     limit: int = 20,
     *,
     keyset: list[ColumnElement] | None = None,

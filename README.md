@@ -6,121 +6,52 @@
 
 <p align="center"><em>The shared Python substrate for ForkTex services.</em></p>
 
-One install, no extras: `import forktex` resolves every module.
+Logging, errors, typed models, PostgreSQL, Redis, S3 and a FastAPI app factory.
+Use one module or all of them: each works on its own, and importing one does
+not load the others.
 
 ```bash
 pip install forktex
 ```
 
-> **This is not the 0.8.x `forktex`**, which was an agentic CLI — for that, pin
-> `forktex==0.8.1`. Pre-1.0, minor versions may break; see [CHANGELOG.md](CHANGELOG.md).
+Python 3.14. One install, no extras.
 
 ## Modules
 
-**Primitives**
+| | Module | What you get | Needs |
+|---|---|---|---|
+| **Basics** | [`log`](docs/log.md) | Structured JSON logs, with a trace id that follows each request, job and thread | — |
+| | [`error`](docs/error.md) | One error hierarchy with stable codes, and the JSON envelope clients receive | — |
+| | [`types`](docs/types.md) | Pydantic base models: camelCase on the wire, frozen value objects, UTC datetimes | — |
+| | [`iso`](docs/iso.md) | Datetimes to and from text, always in UTC | — |
+| **Infrastructure** | [`database`](docs/database.md) | Transactions, ORM models, CRUD, pagination, safe client filters, advisory locks, SQL migrations | PostgreSQL |
+| | [`cache`](docs/cache.md) | `get`/`set`, a `@cached` decorator with stale-while-revalidate, key invalidation | Redis |
+| | [`storage`](docs/storage.md) | Upload, download, presigned download and upload links, browser upload forms | Any S3-compatible server |
+| **App factory** | [`api`](docs/api.md) | A FastAPI app with error envelopes, trace ids, security headers, CORS and health checks | FastAPI (included) |
 
-| Module | What it is |
-| --- | --- |
-| [`log`](docs/log.md) | Structured JSON logging (Loki-ready), `trace_id` contextvar, `setup_logging` |
-| [`error`](docs/error.md) | `AppError` hierarchy, `AppErrorCode`, `ErrorEnvelope`, `to_envelope` |
-| [`types`](docs/types.md) | Base Pydantic models, frozen value objects, camelCase wire shapes |
-| [`iso`](docs/iso.md) | Canonical ISO-8601 date/time — every datetime it returns is UTC-aware |
+Every module page starts with a complete example you can copy and run, then
+lists the module's functions, its errors and the things to know.
 
-**Role facades** — one per piece of infrastructure:
+## Where to start
 
-| Module | What it is |
-| --- | --- |
-| [`database`](docs/database.md) | Async Postgres/SQLAlchemy: sessions, ORM bases, CRUD, advisory locks, migrations |
-| [`cache`](docs/cache.md) | Async Redis: `@cached`, namespaced keys, invalidation |
-| [`storage`](docs/storage.md) | S3/MinIO objects: presigned URLs, bucket lifecycle |
+| You want to | Read |
+|---|---|
+| Use one module | Its page, linked above |
+| Build a web service, adding modules as you need them | [The guide](docs/guide.md): an app first, then a database, a cache, file uploads |
+| Run something outside a web app (a worker, a script) | The module's page: every module except `api` works without FastAPI |
 
-**Bootstrap** — process-level wiring:
+## Stability
 
-| Module | What it is |
-| --- | --- |
-| [`api`](docs/api.md) | FastAPI app factory: middleware stack, error envelope, health probes |
+From 1.0.0, semantic versioning covers every name in each module's `__all__`.
+Anything else is internal and may change in any release. Changes are listed in
+the [CHANGELOG](CHANGELOG.md).
 
-`graph`, `queue`, `store`, `vault` and `vector` are set aside in
-`backlog/facades/` until a consumer needs them.
+## Contributing
 
-## Quick start
+Working on `forktex` itself? Start with
+[`docs/development.md`](docs/development.md).
 
-```python
-from contextlib import asynccontextmanager
+## Licence
 
-from fastapi import Depends, FastAPI
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from forktex.database import close_engine, init_engine, transaction
-from forktex.log import setup_logging
-
-setup_logging(service="my-api")
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await init_engine(settings.db_url, pool_pre_ping=True, pool_recycle=1800)
-    yield
-    await close_engine()
-
-
-app = FastAPI(lifespan=lifespan)
-
-
-@app.get("/projects")
-async def list_projects(session: AsyncSession = Depends(transaction.dependency)):
-    ...
-```
-
-### Transactions
-
-The outermost caller owns the transaction: whoever opens it commits it once, and rolls it back on
-any exception.
-
-```python
-@transaction
-async def place_order(session: AsyncSession, *, reference: str) -> Order:
-    return await create(session, Order, reference=reference)
-
-
-await place_order(reference="A-1")                       # opens a session, commits it
-
-async with transaction() as session:
-    order = await place_order(session, reference="A-2")   # joins this transaction
-    await add_line(session, order=order, sku="X")         # the same one
-    raise PaymentFailed                                   # both roll back
-```
-
-| | |
-|:---|:---|
-| `transaction()` | `async with` — the library commits |
-| `@transaction` | the same unit of work as a decorator |
-| `transaction.dependency` | the same unit of work as a generator, for `Depends` |
-| `session()` | no boundary — you commit, or leaving the block raises |
-| `savepoint(session)` | a part allowed to fail without the rest |
-
-Inside the first two, `commit()`, `rollback()` and `begin()` raise `TransactionBoundaryError`.
-To abort, raise. Full contract in [docs/database.md](docs/database.md).
-
-`init_engine` / `cache.init` / `storage.init` configure one process-wide default; `Database(url)`,
-`Cache(url)` and `StorageClient(config)` build handles directly, so a process can hold several.
-
-## Documentation
-
-One page per module under [`docs/`](docs/): wiring, the public surface, the error contract,
-the gotchas. [`docs/development.md`](docs/development.md) is the contributor guide.
-
-## Development
-
-```bash
-make install     # poetry install --with dev
-make test        # pytest with the coverage floor
-make ci          # format-check · lint · license-check · typecheck · audit · test · build · smoke
-```
-
-Integration tests use testcontainers, so Docker must be available.
-
-## License
-
-Dual-licensed: AGPL-3.0-or-later, or a commercial license from FORKTEX S.R.L.
+AGPL-3.0-or-later, or a commercial licence from FORKTEX S.R.L.
 (info@forktex.com). See [LICENSE](LICENSE) and [NOTICE](NOTICE).

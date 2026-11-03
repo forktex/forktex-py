@@ -7,28 +7,34 @@ The shared error vocabulary: an `AppError` hierarchy, a stable `AppErrorCode` en
 
 ## Wiring
 
-Raise the typed error from anywhere in your service:
-
 ```python
-from forktex.error import NotFoundError
+# errors.py
+from forktex.error import AppError, BadRequestError, NotFoundError, to_envelope
 
-async def get_project(session, project_id):
-    project = await session.get(Project, project_id)
-    if project is None:
-        raise NotFoundError(f"project {project_id} not found")
-    return project
+
+def find_invoice(invoice_id: str) -> dict[str, str]:
+    if not invoice_id.startswith("INV-"):
+        raise BadRequestError("invoice ids start with INV-", details={"invoice_id": invoice_id})
+    raise NotFoundError(f"invoice {invoice_id} not found")
+
+
+for invoice_id in ("INV-2", "7"):
+    try:
+        find_invoice(invoice_id)
+    except AppError as error:  # one handler covers every forktex error, and your own
+        print(error.code, to_envelope(error, trace_id="req-1").model_dump(mode="json"))
 ```
 
-`to_envelope` builds the wire shape. `forktex.api.create_app` already maps the code to a status
-([api.md](api.md#errors) has the table); for a transport you assemble yourself:
-
-```python
-envelope = to_envelope(exc, trace_id=get_trace_id())
-body = envelope.model_dump(mode="json")
+```
+not_found {'code': 'not_found', 'message': 'invoice INV-2 not found', 'details': {}, 'traceId': 'req-1'}
+bad_request {'code': 'bad_request', 'message': 'invoice ids start with INV-', 'details': {'invoice_id': '7'}, 'traceId': 'req-1'}
 ```
 
-`mode="json"` matters: `details` is coerced with a `str` fallback only in JSON mode, so a UUID or
-datetime in there fails to serialise otherwise.
+`forktex.api.create_app` does this for every request, and maps each code to an
+HTTP status ([api.md](api.md#errors) has the table). For a transport you
+assemble yourself, build the body with `to_envelope(error, trace_id=get_trace_id())`
+and `.model_dump(mode="json")`: `details` is turned into JSON, with `str` as the
+fallback, only in JSON mode.
 
 ## Public surface
 
@@ -66,11 +72,19 @@ trace id. `to_envelope(error)` builds one from any `AppError`.
 and keep the envelope:
 
 ```python
-from forktex.error import AppError
+# custom_error.py
+from forktex.error import AppError, ConflictError
 
 
-class InsufficientCreditError(AppError):
+class InsufficientCreditError(AppError):  # its own code; an HTTP edge maps it to 500 unless you extend the map
     code = "insufficient_credit"
+
+
+class SeatLimitReachedError(ConflictError):  # keeps the "conflict" code, so it maps to 409
+    pass
+
+
+print(InsufficientCreditError("not enough credit").code, SeatLimitReachedError("no seats left").code)
 ```
 
 > **A custom code falls through to 500**, because a status map keyed on `AppErrorCode` has no entry

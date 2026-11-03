@@ -8,11 +8,13 @@ PostgreSQL over `asyncpg` (`postgresql+asyncpg://…`).
 
 ## Wiring
 
-`init` performs no I/O: it installs the default and releases whatever it replaced. `verify()` is
-the explicit boot probe — call it in your lifespan, or wire it into `create_app`'s
-`readiness_probes`, if you want a bad configuration to fail fast rather than on first use.
+```bash
+export DATABASE_URL=postgresql+asyncpg://postgres:forktex@localhost:5432/postgres
+```
 
 ```python
+# orders.py
+import os
 import uuid
 from contextlib import asynccontextmanager
 
@@ -20,9 +22,19 @@ from fastapi import Depends, FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
+from forktex.api import AppConfig, create_app
 from forktex.database import (
-    BaseDBModel, TimestampMixin, close_engine, create, init_engine, paginate_scroll, transaction,
+    BaseDBModel,
+    ScrollResponse,
+    TimestampMixin,
+    close_engine,
+    create,
+    get_engine,
+    init_engine,
+    paginate_scroll,
+    transaction,
 )
+from forktex.types import BaseAppModel
 
 
 class Order(BaseDBModel, TimestampMixin):
@@ -31,37 +43,64 @@ class Order(BaseDBModel, TimestampMixin):
     reference: Mapped[str] = mapped_column(unique=True)
 
 
+class OrderOut(BaseAppModel):
+    id: uuid.UUID
+    reference: str
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_engine("postgresql+asyncpg://user:pass@localhost/db", pool_size=10, pool_pre_ping=True)
+    await init_engine(os.environ["DATABASE_URL"], pool_size=10, pool_pre_ping=True)
+    async with get_engine().begin() as conn:  # for this example only: use migrations in a real service
+        await conn.run_sync(BaseDBModel.metadata.create_all)
     yield
     await close_engine()
 
 
-app = FastAPI(lifespan=lifespan)
+app = create_app(AppConfig(title="Orders", lifespan=lifespan))
+Session = Depends(transaction.dependency, scope="function")
 
 
-@app.post("/orders")
-async def place_order(reference: str, session: AsyncSession = Depends(transaction.dependency)):
-    return await create(session, Order, reference=reference)
+@app.post("/orders", status_code=201)
+async def place_order(reference: str, session: AsyncSession = Session) -> OrderOut:
+    order = await create(session, Order, reference=reference)
+    return OrderOut(id=order.id, reference=order.reference)
 
 
 @app.get("/orders")
-async def list_orders(cursor: str | None = None, session: AsyncSession = Depends(transaction.dependency)):
-    return await paginate_scroll(
+async def list_orders(cursor: str | None = None, session: AsyncSession = Session) -> ScrollResponse[OrderOut]:
+    page = await paginate_scroll(
         session, Order, limit=20, keyset=[Order.created_at, Order.id], cursor=cursor, ascending=False
     )
+    return page.apply_to_scroll_data(lambda order: OrderOut(id=order.id, reference=order.reference))
 ```
 
-Call `init_engine` in the lifespan, not at import time — at import it binds the pool to whichever
-event loop is current. Extra keywords go to `create_async_engine`. Re-initialising disposes the
-pool it replaces.
+```bash
+uvicorn orders:app
+curl -X POST 'localhost:8000/orders?reference=A-1'
+curl localhost:8000/orders
+# {"data":[{"id":"…","reference":"A-1"}],"hasMore":false,"nextCursor":null,"total":null,"limit":20}
+curl -X POST 'localhost:8000/orders?reference=A-1'
+# 409 {"code": "already_exists", "message": "resource already exists", …}
+```
+
+- `Depends(transaction.dependency, scope="function")` commits when the route
+  returns, before the response is sent. Without `scope="function"` FastAPI sends
+  the response first, so a client could be told a write succeeded that then
+  fails to commit.
+
+- `init_engine` performs no I/O. Call `verify()` (or wire it into
+  `create_app`'s `readiness_probes`) to fail fast on a bad configuration.
+- Call `init_engine` in the lifespan, not at import time: at import it binds the
+  pool to whichever event loop is current.
+- Extra keywords go to SQLAlchemy's `create_async_engine`. Calling `init_engine`
+  again disposes the pool it replaces.
 
 ## Sessions and transactions
 
 | You need | Use | Who commits |
 |:---|:---|:---|
-| a unit of work in a route | `Depends(transaction.dependency)` | the library, when the request succeeds |
+| a unit of work in a route | `Depends(transaction.dependency, scope="function")` | the library, before the response is sent |
 | a unit of work anywhere else | `async with transaction() as session:` | the library, when the block exits cleanly |
 | a step inside a caller's transaction | pass the session, or `@transaction` | the caller it joined |
 | a part that may fail alone | `async with savepoint(session):` | the caller; only this block rolls back |
@@ -75,17 +114,50 @@ Inside any of them `commit()`, `rollback()` and `begin()` raise `TransactionBoun
 abort, raise — the library rolls back and returns the connection.
 
 ```python
+# transactions.py
+import asyncio
+import os
+import uuid
+
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
+
+from forktex.database import BaseDBModel, close_engine, get_engine, init_engine, transaction
+
+
+class Line(BaseDBModel):
+    __tablename__ = "line"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
+    sku: Mapped[str]
+
+
 @transaction
-async def add_line(session: AsyncSession, *, order: Order, sku: str) -> None:
-    session.add(OrderLine(order=order, sku=sku))
+async def add_line(session: AsyncSession, *, sku: str) -> None:
+    session.add(Line(sku=sku))
 
 
-await add_line(order=order, sku="A1")                # no session: opens one, commits it
+async def main() -> None:
+    await init_engine(os.environ["DATABASE_URL"])
+    async with get_engine().begin() as conn:
+        await conn.run_sync(BaseDBModel.metadata.create_all)
 
-async with transaction() as session:
-    session.add(order)
-    await add_line(session, order=order, sku="A1")    # joins this transaction
-    raise RuntimeError("payment failed")              # order and line both roll back
+    await add_line(sku="A1")  # no session given: opens one and commits it
+
+    try:
+        async with transaction() as session:
+            await add_line(session, sku="B1")  # joins this transaction
+            await add_line(session, sku="B2")
+            raise RuntimeError("payment failed")  # both lines roll back
+    except RuntimeError:
+        pass
+
+    async with transaction() as session:
+        print(list(await session.scalars(sa.select(Line.sku))))  # ['A1']
+    await close_engine()
+
+
+asyncio.run(main())
 ```
 
 The decorator binds by parameter name, defaulting to `session`; pass the other arguments by
@@ -102,12 +174,30 @@ A failed statement aborts the whole PostgreSQL transaction, so every later state
 `current transaction is aborted`. `savepoint()` scopes the damage:
 
 ```python
-for item in batch:
-    try:
-        async with savepoint(session):
-            await upsert(session, item)
-    except Exception:
-        log.exception("skipped %s", item.id)
+# savepoints.py
+import asyncio
+import os
+
+import sqlalchemy as sa
+
+from forktex.database import close_engine, init_engine, savepoint, transaction
+
+
+async def main() -> None:
+    await init_engine(os.environ["DATABASE_URL"])
+    async with transaction() as session:
+        await session.execute(sa.text("CREATE TEMP TABLE item (id int PRIMARY KEY)"))
+        for item_id in (1, 2, 2, 3):
+            try:
+                async with savepoint(session):
+                    await session.execute(sa.text("INSERT INTO item VALUES (:id)"), {"id": item_id})
+            except sa.exc.IntegrityError:
+                print("skipped", item_id)  # only this insert rolled back
+        print(list(await session.scalars(sa.text("SELECT id FROM item ORDER BY id"))))  # [1, 2, 3]
+    await close_engine()
+
+
+asyncio.run(main())
 ```
 
 `@transaction(isolate=True)` takes the savepoint on every caller's behalf. It is a decorator-only
@@ -162,7 +252,7 @@ component owning a `Database` uses `db.transaction()`.
 | `paginate(session, model, page=1, page_size=100, ...)` | Offset pagination → `PageResponse`. |
 | `paginate_scroll(session, model, limit=20, *, keyset, cursor, ascending, ...)` | Keyset pagination → `ScrollResponse`. |
 | `Page` | `items`, `hasMore`, `nextCursor`, `total`. |
-| `PageResponse` / `ScrollResponse` | `Page` plus `limit`, and `currentPage` / `totalPages` for offset. |
+| `PageResponse` / `ScrollResponse` | `Page` plus `limit`, and `currentPage` / `totalPages` for offset. On the wire their items are `data`, and `PageResponse`'s total is `totalCount`. `apply_to_page_data(fn)` / `apply_to_scroll_data(fn)` map the items, e.g. ORM rows to response models. |
 | `encode_cursor(values)` / `decode_cursor(cursor, *, expected_length=None)` | The opaque cursor codec. |
 | `keyset_predicate(levels, *, ascending)` | The WHERE clause behind keyset pagination. |
 | `crud` | Module: `crud.get`, `crud.create`, `crud.find_one_by`, `crud.paginate`, `crud.paginate_scroll`. |
@@ -201,14 +291,43 @@ one raises `BadRequestError`. For a custom query, build a `Page` with `keyset_pr
 ## Filters
 
 ```python
-from forktex.database import filters
+# filtering.py
+import asyncio
+import os
+import uuid
 
-node = filters.parse_filter({"and": [
-    {"column": "status", "op": "eq", "value": "open"},
-    {"column": "total", "op": "gte", "value": 100},
-]})
-source = filters.ColumnSource(Order, allowed={"status", "total"})
-stmt = select(Order).where(filters.compile_filter(node, source))
+import sqlalchemy as sa
+from sqlalchemy.orm import Mapped, mapped_column
+
+from forktex.database import BaseDBModel, close_engine, filters, get_engine, init_engine, transaction
+
+
+class Invoice(BaseDBModel):
+    __tablename__ = "invoice"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
+    status: Mapped[str]
+    total: Mapped[int]
+
+
+async def main() -> None:
+    await init_engine(os.environ["DATABASE_URL"])
+    async with get_engine().begin() as conn:
+        await conn.run_sync(BaseDBModel.metadata.create_all)
+
+    # What a client sends, e.g. as JSON in a query parameter.
+    requested = {"and": [{"column": "status", "op": "eq", "value": "open"}, {"column": "total", "op": "gte", "value": 100}]}
+    condition = filters.compile_filter(
+        filters.parse_filter(requested), filters.ColumnSource(Invoice, allowed={"status", "total"})
+    )
+
+    async with transaction() as session:
+        session.add_all([Invoice(status="open", total=150), Invoice(status="open", total=20), Invoice(status="paid", total=500)])
+        await session.flush()
+        print([(i.status, i.total) for i in await session.scalars(sa.select(Invoice).where(condition))])
+    await close_engine()
+
+
+asyncio.run(main())
 ```
 
 Operators: `eq ne lt lte gt gte in not_in between is_null contains icontains startswith endswith
@@ -225,8 +344,28 @@ uncommitted is rolled back on release.
 
 ## Migrations
 
+```sql
+-- migrations/v0001__create_events.sql
+CREATE TABLE "{schema}".event (id bigserial PRIMARY KEY, name text NOT NULL);
+```
+
 ```python
-await SchemaMigrationRunner(engine, schema="my_lib", migrations_dir=Path(__file__).parent / "sql").apply()
+# migrate.py
+import asyncio
+import os
+from pathlib import Path
+
+from forktex.database import SchemaMigrationRunner, close_engine, get_engine, init_engine
+
+
+async def main() -> None:
+    await init_engine(os.environ["DATABASE_URL"])
+    runner = SchemaMigrationRunner(get_engine(), schema="events", migrations_dir=Path(__file__).parent / "migrations")
+    await runner.apply()  # safe to call from every process at startup
+    await close_engine()
+
+
+asyncio.run(main())
 ```
 
 - Files are `v{NNNN}__{description}.sql`, applied in version order. A misnamed or duplicated
@@ -241,8 +380,8 @@ await SchemaMigrationRunner(engine, schema="my_lib", migrations_dir=Path(__file_
   not re-run one, so an edit never reaches the schema. Write the next migration instead.
 - A pending migration numbered below the highest applied version raises `MigrationError`, rather
   than being applied out of order. Renumber it above that version.
-- Both checks read a `checksum` column added to the version table on the next `apply()`. Rows
-  written before it existed record none and are not verified.
+- Both checks read the version table's `checksum` column. A version table without that column
+  gets it on `apply()`; rows recorded without a checksum are not verified.
 - Concurrent callers serialise on an advisory lock; safe to call from every worker on startup.
 - `target_schema=` runs the DDL elsewhere; `version_table=` renames the tracking table. Runners
   sharing a target schema need distinct version tables.
@@ -261,7 +400,8 @@ await SchemaMigrationRunner(engine, schema="my_lib", migrations_dir=Path(__file_
 | `InvalidSchemaChangeError` | `AddColumn` on a column not attached to a `Table` |
 | `MigrationError` | a migration script failed; it and its version row rolled back together |
 
-Wrap hand-written writes in `async with integrity_boundary():`, flushing inside it, for the
+A constraint that fails when `transaction()` commits, such as a deferred one, is translated the same
+way. Wrap hand-written writes in `async with integrity_boundary():`, flushing inside it, for the
 translation `create` applies. Driver text never reaches the error; the original is the `__cause__`.
 
 ## Gotchas

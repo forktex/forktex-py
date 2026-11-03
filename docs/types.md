@@ -9,30 +9,38 @@ Builds on `pydantic` and `forktex.iso`.
 Import a base and subclass it.
 
 ```python
+# models.py
 from forktex.types import BaseAppModel, BaseValueObject, BaseWireValueObject, UtcDate, UtcDateTime
 
 
-class CreateUserRequest(BaseAppModel):
+class CreateUser(BaseAppModel):  # for anything that crosses a boundary
     first_name: str
     created_at: UtcDateTime
     birth_date: UtcDate
 
 
-# Accepts either input shape
-CreateUserRequest.model_validate({"firstName": "Ada", "createdAt": "2026-01-01T00:00:00Z", "birthDate": "1990-01-01"})
-CreateUserRequest.model_validate({"first_name": "Ada", "created_at": "2026-01-01T00:00:00Z", "birth_date": "1990-01-01"})
+# Accepts camelCase and snake_case input.
+user = CreateUser.model_validate({"firstName": "Ada", "createdAt": "2026-01-01T12:00:00+02:00", "birthDate": "1990-01-01"})
+CreateUser.model_validate({"first_name": "Ada", "created_at": "2026-01-01T10:00:00Z", "birth_date": "1990-01-01"})
 
-# Emits camelCase without anyone passing by_alias=True
-request.model_dump()   # {"firstName": "Ada", "createdAt": ..., "birthDate": ...}
+print(user.model_dump())  # camelCase out, with no by_alias=True; datetimes in UTC
 
 
-class Percentage(BaseValueObject):     # frozen + hashable, plain field names
+class Percentage(BaseValueObject):  # frozen and hashable, plain field names
     basis_points: int
 
 
-class Money(BaseWireValueObject):      # frozen + hashable + camel aliases
+class Money(BaseWireValueObject):  # frozen and hashable, camelCase on the wire
     amount_cents: int
     currency_code: str
+
+
+print({Percentage(basis_points=250): "fee"}, Money(amount_cents=995, currency_code="EUR").model_dump())
+```
+
+```
+{'firstName': 'Ada', 'createdAt': '2026-01-01T10:00:00+00:00', 'birthDate': '1990-01-01'}
+{Percentage(basis_points=250): 'fee'} {'amountCents': 995, 'currencyCode': 'EUR'}
 ```
 
 ## Public surface

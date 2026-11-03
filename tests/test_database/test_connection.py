@@ -631,3 +631,45 @@ async def test_re_initialising_disposes_the_pool_it_replaces(postgres_url_str: s
         assert replaced.engine.pool is not pool
     finally:
         await close_engine()
+
+
+@pytest.mark.asyncio
+async def test_a_route_s_transaction_commits_before_its_response_is_sent(
+    postgres_url_str: str, fresh_schema: str
+) -> None:
+    """With `scope="function"`, a commit that fails reaches the client as its error envelope, and a write the
+    client was told succeeded is visible to its next request."""
+    import httpx
+    from fastapi import Depends
+
+    from forktex.api import AppConfig, create_app
+
+    table = f'"{fresh_schema}".deferred'
+    await init_engine(postgres_url_str)
+    try:
+        async with transaction() as session:
+            await session.execute(
+                sa.text(f"CREATE TABLE {table} (v int, CONSTRAINT one_v UNIQUE (v) DEFERRABLE INITIALLY DEFERRED)")
+            )
+        app = create_app(AppConfig())
+
+        @app.post("/rows/{v}", status_code=201)
+        async def _add(
+            v: int, twice: bool = False, session: AsyncSession = Depends(transaction.dependency, scope="function")
+        ) -> dict[str, int]:
+            for _ in range(2 if twice else 1):
+                await session.execute(sa.text(f"INSERT INTO {table} VALUES (:v)"), {"v": v})
+            return {"v": v}
+
+        @app.get("/rows")
+        async def _rows(session: AsyncSession = Depends(transaction.dependency, scope="function")) -> list[int]:
+            return list((await session.execute(sa.text(f"SELECT v FROM {table} ORDER BY v"))).scalars())
+
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            assert (await client.post("/rows/1")).status_code == 201
+            assert (await client.get("/rows")).json() == [1]
+            refused = await client.post("/rows/2", params={"twice": True})
+            assert (refused.status_code, refused.json()["code"]) == (409, "already_exists")
+            assert (await client.get("/rows")).json() == [1]
+    finally:
+        await close_engine()

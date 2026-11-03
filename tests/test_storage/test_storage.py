@@ -294,8 +294,7 @@ async def test_a_write_to_a_missing_bucket_raises_storage_error_not_a_driver_err
 
 @pytest.mark.asyncio
 async def test_a_presigned_get_is_actually_fetchable(minio_config: dict) -> None:
-    """The SigV4 fix was only ever asserted by parsing the query string. This
-    retrieves the bytes, so a signature that is well-formed but wrong fails."""
+    """Fetches the bytes, so a signature that is well-formed but wrong fails."""
     import httpx
 
     client = StorageClient(StorageConfig(**minio_config))
@@ -325,9 +324,6 @@ async def test_a_presigned_put_actually_accepts_an_upload(minio_config: dict) ->
 
 @pytest.mark.asyncio
 async def test_presign_refuses_an_argument_that_does_not_apply_to_its_method(client: StorageClient) -> None:
-    """`content_type` was applied only when method was put_object and dropped in
-    silence otherwise, so a caller signing a GET got a URL missing the header
-    they asked for and no indication of it."""
     with pytest.raises(StorageError, match="put_object"):
         await client.presign("k", method="get_object", content_type="text/plain")
 
@@ -365,8 +361,6 @@ async def test_a_public_read_bucket_gets_the_policy_and_serves_anonymously(minio
 async def test_a_failure_that_is_not_a_driver_error_still_reaches_the_caller_as_storage_error(
     minio_config: dict,
 ) -> None:
-    """The boundary caught only botocore types, so a stream failure mid-download
-    escaped raw to a caller that was told to catch StorageError."""
     client = StorageClient(StorageConfig(**minio_config))
     await client.upload("stream/x.bin", b"payload")
 
